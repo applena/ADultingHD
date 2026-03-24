@@ -25,8 +25,7 @@ struct ScheduleView: View {
                 // Date Picker
                 DatePicker("Week starting", selection: $selectedDate, displayedComponents: .date)
                     .datePickerStyle(.graphical)
-                    .padding(Theme.cardPadding)
-                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: Theme.cornerRadius))
+                    .card()
 
                 // Summary stats
                 let overdue = dataStore.overdueTasks.count
@@ -45,8 +44,7 @@ struct ScheduleView: View {
                         }
                     }
                     .frame(maxWidth: .infinity)
-                    .padding(Theme.cardPadding)
-                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: Theme.cornerRadius))
+                    .card()
                 }
 
                 // Week View

@@ -156,7 +156,7 @@ struct FilterChip: View {
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
-            .background(isSelected ? Color.accentColor : Color.secondary.opacity(0.15), in: Capsule())
+            .background(isSelected ? Theme.accent : Color.secondary.opacity(0.12), in: Capsule())
             .foregroundStyle(isSelected ? .white : .primary)
         }
         .buttonStyle(.plain)
