@@ -64,12 +64,12 @@ xcodegen generate
 if ! $SKIP_TESTS; then
     echo "🧪 Running tests..."
     DESTINATION=$(
-        if xcrun simctl list devices available | grep -q "iPhone 17 Pro"; then
-            echo "platform=iOS Simulator,name=iPhone 17 Pro"
-        elif xcrun simctl list devices available | grep -q "iPhone 16"; then
-            echo "platform=iOS Simulator,name=iPhone 16"
-        else
+        if xcrun simctl list devices available | grep -q "iPhone 16"; then
+            echo "platform=iOS Simulator,name=iPhone 16,OS=18.6"
+        elif xcrun simctl list devices available | grep -q "iPhone 15"; then
             echo "platform=iOS Simulator,name=iPhone 15"
+        else
+            echo "platform=iOS Simulator,name=iPhone 14"
         fi
     )
     xcodebuild test \
