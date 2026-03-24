@@ -39,6 +39,8 @@
 		B719C8440B8AA15C2D29DE11 /* StorageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC655FB6ECD683EFB08D9D2A /* StorageTests.swift */; };
 		C19DB4BB11AB785EE04F0097 /* SuppliesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4625924B07ADFBF1008BB9A7 /* SuppliesView.swift */; };
 		D34A296E21D0680E7FD36A53 /* ScheduleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1404A4A0405FEE3627DCF6ED /* ScheduleView.swift */; };
+		D5ED0D8A6525358B05C0F0B6 /* WelcomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 124C98670AF61F31F83E9446 /* WelcomeView.swift */; };
+		DCBFC7323C498C4BCACA07F2 /* WelcomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 124C98670AF61F31F83E9446 /* WelcomeView.swift */; };
 		E6A654229380129922988B89 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F0201C1F9CC0080AB9AE3DF /* SettingsView.swift */; };
 		EF2F578B0B23F18F8F82CBB8 /* DashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5396E4C1C4C3ECF26BB2EAFA /* DashboardView.swift */; };
 		F98B81C6A4D7E11C87DE2424 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81CDE793214D211A1B6C4124 /* ContentView.swift */; };
@@ -64,6 +66,7 @@
 
 /* Begin PBXFileReference section */
 		04D1D6ED759D2E2C16961F3F /* DefaultTasks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DefaultTasks.swift; sourceTree = "<group>"; };
+		124C98670AF61F31F83E9446 /* WelcomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WelcomeView.swift; sourceTree = "<group>"; };
 		12E42443B93064A0049A2DE8 /* ModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelTests.swift; sourceTree = "<group>"; };
 		1404A4A0405FEE3627DCF6ED /* ScheduleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScheduleView.swift; sourceTree = "<group>"; };
 		2F5B0036B4BFEAB2320CF8F3 /* ADultingHD.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ADultingHD.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -163,6 +166,14 @@
 			path = Dashboard;
 			sourceTree = "<group>";
 		};
+		79C1E09957FB5E6A13FDA0BE /* Welcome */ = {
+			isa = PBXGroup;
+			children = (
+				124C98670AF61F31F83E9446 /* WelcomeView.swift */,
+			);
+			path = Welcome;
+			sourceTree = "<group>";
+		};
 		8E439030822775F35198C774 /* Data */ = {
 			isa = PBXGroup;
 			children = (
@@ -205,6 +216,7 @@
 				96E67A683C80AE14B75B15B6 /* Settings */,
 				924E109A538455E09A1A8056 /* Supplies */,
 				2F865DB87EFC9126498F6EF9 /* Tasks */,
+				79C1E09957FB5E6A13FDA0BE /* Welcome */,
 				81CDE793214D211A1B6C4124 /* ContentView.swift */,
 			);
 			path = Views;
@@ -410,6 +422,7 @@
 				32B2A2B1C0D0C060D199A5F0 /* TaskListView.swift in Sources */,
 				4BFE807B0EA0A3A6DE64775E /* TaskStore.swift in Sources */,
 				0A1DFB68D9B5E5EF8D71D9B7 /* Theme.swift in Sources */,
+				D5ED0D8A6525358B05C0F0B6 /* WelcomeView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -432,6 +445,7 @@
 				76E0314219EACDB96AD1BAA5 /* TaskListView.swift in Sources */,
 				1A414DB4EF6A72C1C2BB593C /* TaskStore.swift in Sources */,
 				39B3C852206DB89E94730D9B /* Theme.swift in Sources */,
+				DCBFC7323C498C4BCACA07F2 /* WelcomeView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

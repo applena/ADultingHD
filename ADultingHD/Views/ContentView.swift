@@ -2,11 +2,24 @@ import SwiftUI
 
 struct ContentView: View {
     @Environment(DataStore.self) private var dataStore
+    @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
 
     var body: some View {
         Group {
             if !dataStore.isLoaded {
-                ProgressView("Loading...")
+                VStack(spacing: 12) {
+                    ProgressView()
+                        .scaleEffect(1.5)
+                    Text("Loading your adventure...")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+            } else if !hasCompletedOnboarding {
+                WelcomeView {
+                    withAnimation(.spring(response: 0.5)) {
+                        hasCompletedOnboarding = true
+                    }
+                }
             } else {
                 #if os(macOS)
                 MacContentView()
@@ -22,10 +35,10 @@ struct ContentView: View {
 
 #if os(macOS)
 struct MacContentView: View {
-    @State private var selectedTab: SidebarTab = .dashboard
+    @State private var selectedTab: SidebarTab = .home
 
     enum SidebarTab: String, CaseIterable, Identifiable {
-        case dashboard = "Dashboard"
+        case home = "Home"
         case tasks = "Tasks"
         case schedule = "Schedule"
         case supplies = "Supplies"
@@ -36,11 +49,11 @@ struct MacContentView: View {
 
         var icon: String {
             switch self {
-            case .dashboard: "gauge.with.dots.needle.33percent"
+            case .home: "house.fill"
             case .tasks: "checklist"
             case .schedule: "calendar"
-            case .supplies: "cart"
-            case .profile: "person.crop.circle"
+            case .supplies: "bag.fill"
+            case .profile: "person.crop.circle.fill"
             case .settings: "gear"
             }
         }
@@ -55,7 +68,7 @@ struct MacContentView: View {
             .navigationTitle("ADultingHD")
         } detail: {
             switch selectedTab {
-            case .dashboard: DashboardView()
+            case .home: DashboardView()
             case .tasks: TaskListView()
             case .schedule: ScheduleView()
             case .supplies: SuppliesView()
@@ -74,7 +87,7 @@ struct IOSContentView: View {
     var body: some View {
         TabView {
             NavigationStack { DashboardView() }
-                .tabItem { Label("Dashboard", systemImage: "gauge.with.dots.needle.33percent") }
+                .tabItem { Label("Home", systemImage: "house.fill") }
 
             NavigationStack { TaskListView() }
                 .tabItem { Label("Tasks", systemImage: "checklist") }
@@ -83,10 +96,10 @@ struct IOSContentView: View {
                 .tabItem { Label("Schedule", systemImage: "calendar") }
 
             NavigationStack { SuppliesView() }
-                .tabItem { Label("Supplies", systemImage: "cart") }
+                .tabItem { Label("Supplies", systemImage: "bag.fill") }
 
             NavigationStack { ProfileView() }
-                .tabItem { Label("Profile", systemImage: "person.crop.circle") }
+                .tabItem { Label("Profile", systemImage: "person.crop.circle.fill") }
         }
     }
 }

@@ -3,133 +3,99 @@ import SwiftUI
 struct DashboardView: View {
     @Environment(DataStore.self) private var dataStore
 
+    private var greeting: String {
+        let hour = Calendar.current.component(.hour, from: Date())
+        switch hour {
+        case 5..<12: return "Good morning!"
+        case 12..<17: return "Good afternoon!"
+        case 17..<21: return "Good evening!"
+        default: return "Night owl mode!"
+        }
+    }
+
+    private var subtitle: String {
+        let due = dataStore.dueTasks.count
+        let streak = dataStore.profile.currentStreak
+        if due == 0 { return "All caught up — you're crushing it!" }
+        if streak >= 7 { return "\(streak)-day streak! Keep it going." }
+        if due > 5 { return "\(due) quests ready to conquer." }
+        return "You've got \(due) tasks to tackle. You got this!"
+    }
+
     var body: some View {
         ScrollView {
             VStack(spacing: Theme.sectionSpacing) {
-                // Level & XP Header
-                levelHeader
+                heroSection
+                statsRow
 
-                // Streak
-                streakCard
-
-                // Today's Stats
-                todayStats
-
-                // Due Tasks
                 if !dataStore.dueTasks.isEmpty {
                     dueTasksSection
                 }
 
-                // Recent Completions
                 if !dataStore.todayCompletions.isEmpty {
                     recentCompletionsSection
                 }
             }
             .padding()
         }
-        .navigationTitle("Dashboard")
+        .navigationTitle("Home")
     }
 
-    // MARK: - Level Header
+    // MARK: - Hero Section
 
-    private var levelHeader: some View {
-        VStack(spacing: 12) {
-            HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Level \(dataStore.profile.level)")
-                        .font(.title.bold())
-                    Text(dataStore.profile.levelTitle)
-                        .font(.headline)
-                        .foregroundStyle(.secondary)
+    private var heroSection: some View {
+        VStack(spacing: 16) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(greeting)
+                    .font(.system(size: 28, weight: .bold, design: .rounded))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Text(subtitle)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+            HStack(spacing: 12) {
+                ZStack {
+                    Circle()
+                        .fill(Theme.levelPurple.opacity(0.15))
+                        .frame(width: 44, height: 44)
+                    Text("\(dataStore.profile.level)")
+                        .font(.system(size: 20, weight: .bold, design: .rounded))
+                        .foregroundStyle(Theme.levelPurple)
                 }
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(dataStore.profile.levelTitle)
+                        .font(.subheadline.weight(.medium))
+                    ProgressView(value: dataStore.profile.xpProgress)
+                        .tint(Theme.levelPurple)
+                }
+
                 Spacer()
-                VStack(alignment: .trailing, spacing: 4) {
-                    Text("\(dataStore.profile.totalXP) XP")
-                        .font(.title2.bold())
+
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text("\(dataStore.profile.totalXP)")
+                        .font(.title3.bold())
                         .foregroundStyle(Theme.xpGold)
-                    Text("Total earned")
+                    Text("Total XP")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
             }
-
-            // XP Progress Bar
-            VStack(alignment: .leading, spacing: 4) {
-                ProgressView(value: dataStore.profile.xpProgress)
-                    .tint(Theme.levelPurple)
-                HStack {
-                    Text("Lv \(dataStore.profile.level)")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    let xpNeeded = dataStore.profile.xpForNextLevel - dataStore.profile.totalXP
-                    Text("\(xpNeeded) XP to Lv \(dataStore.profile.level + 1)")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-            }
         }
-        .padding(Theme.cardPadding)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: Theme.cornerRadius))
+        .card()
     }
 
-    // MARK: - Streak Card
+    // MARK: - Stats Row
 
-    private var streakCard: some View {
-        HStack(spacing: 20) {
-            VStack(spacing: 4) {
-                Image(systemName: "flame.fill")
-                    .font(.title)
-                    .foregroundStyle(dataStore.profile.currentStreak > 0 ? Theme.streakOrange : .gray)
-                Text("\(dataStore.profile.currentStreak)")
-                    .font(.title2.bold())
-                Text("Current Streak")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            .frame(maxWidth: .infinity)
-
-            Divider()
-
-            VStack(spacing: 4) {
-                Image(systemName: "trophy.fill")
-                    .font(.title)
-                    .foregroundStyle(Theme.xpGold)
-                Text("\(dataStore.profile.longestStreak)")
-                    .font(.title2.bold())
-                Text("Best Streak")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            .frame(maxWidth: .infinity)
-
-            Divider()
-
-            VStack(spacing: 4) {
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.title)
-                    .foregroundStyle(Theme.successGreen)
-                Text("\(dataStore.profile.totalTasksCompleted)")
-                    .font(.title2.bold())
-                Text("All Time")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            .frame(maxWidth: .infinity)
-        }
-        .padding(Theme.cardPadding)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: Theme.cornerRadius))
-    }
-
-    // MARK: - Today Stats
-
-    private var todayStats: some View {
+    private var statsRow: some View {
         HStack(spacing: 12) {
             StatCard(
-                title: "Due Today",
-                value: "\(dataStore.dueTasks.count)",
-                icon: "exclamationmark.circle",
-                color: dataStore.dueTasks.isEmpty ? Theme.successGreen : Theme.streakOrange
+                title: "Streak",
+                value: "\(dataStore.profile.currentStreak)d",
+                icon: "flame.fill",
+                color: dataStore.profile.currentStreak > 0 ? Theme.streakOrange : .secondary
             )
             StatCard(
                 title: "Done Today",
@@ -149,13 +115,13 @@ struct DashboardView: View {
     // MARK: - Due Tasks
 
     private var dueTasksSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Label("Due Tasks", systemImage: "exclamationmark.triangle.fill")
+                Label("Up Next", systemImage: "arrow.right.circle.fill")
                     .font(.headline)
                 Spacer()
-                Text("\(dataStore.dueTasks.count)")
-                    .font(.subheadline)
+                Text("\(dataStore.dueTasks.count) tasks")
+                    .font(.caption)
                     .foregroundStyle(.secondary)
             }
 
@@ -170,14 +136,13 @@ struct DashboardView: View {
                     .padding(.leading, 4)
             }
         }
-        .padding(Theme.cardPadding)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: Theme.cornerRadius))
+        .card()
     }
 
     // MARK: - Recent Completions
 
     private var recentCompletionsSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 10) {
             Label("Completed Today", systemImage: "checkmark.seal.fill")
                 .font(.headline)
                 .foregroundStyle(Theme.successGreen)
@@ -196,8 +161,7 @@ struct DashboardView: View {
                 }
             }
         }
-        .padding(Theme.cardPadding)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: Theme.cornerRadius))
+        .card()
     }
 }
 
@@ -275,7 +239,6 @@ struct StatCard: View {
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity)
-        .padding(Theme.cardPadding)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: Theme.cornerRadius))
+        .card()
     }
 }

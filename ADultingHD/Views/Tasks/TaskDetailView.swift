@@ -84,8 +84,7 @@ struct TaskDetailView: View {
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(Theme.cardPadding)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: Theme.cornerRadius))
+        .card()
     }
 
     // MARK: - Details
@@ -102,8 +101,7 @@ struct TaskDetailView: View {
                 DetailItem(label: "Last Done", value: "Never", icon: "calendar.badge.clock")
             }
         }
-        .padding(Theme.cardPadding)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: Theme.cornerRadius))
+        .card()
     }
 
     // MARK: - Supplies
@@ -124,8 +122,7 @@ struct TaskDetailView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(Theme.cardPadding)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: Theme.cornerRadius))
+        .card()
     }
 
     // MARK: - Complete Button
@@ -170,8 +167,7 @@ struct TaskDetailView: View {
                 }
             }
         }
-        .padding(Theme.cardPadding)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: Theme.cornerRadius))
+        .card()
     }
 }
 

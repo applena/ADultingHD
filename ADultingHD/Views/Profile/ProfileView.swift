@@ -44,11 +44,11 @@ struct ProfileView: View {
             // Avatar area
             ZStack {
                 Circle()
-                    .fill(Theme.levelPurple.gradient)
+                    .fill(Theme.levelPurple.opacity(0.15))
                     .frame(width: 80, height: 80)
                 Text("\(dataStore.profile.level)")
                     .font(.system(size: 32, weight: .bold, design: .rounded))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(Theme.levelPurple)
             }
 
             Text(dataStore.profile.levelTitle)
@@ -73,7 +73,7 @@ struct ProfileView: View {
         }
         .padding(Theme.cardPadding)
         .padding(.vertical, 8)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: Theme.cornerRadius))
+        .cardBackground()
     }
 
     // MARK: - Stats Grid
@@ -107,8 +107,7 @@ struct ProfileView: View {
                 }
             }
         }
-        .padding(Theme.cardPadding)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: Theme.cornerRadius))
+        .card()
     }
 
     // MARK: - Category Breakdown
@@ -139,8 +138,7 @@ struct ProfileView: View {
                 }
             }
         }
-        .padding(Theme.cardPadding)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: Theme.cornerRadius))
+        .card()
     }
 }
 
