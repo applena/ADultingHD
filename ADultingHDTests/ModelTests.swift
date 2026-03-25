@@ -113,7 +113,7 @@ final class ModelTests: XCTestCase {
     // MARK: - Default Tasks
 
     func testDefaultTasksNotEmpty() {
-        XCTAssertGreaterThan(defaultHouseholdTasks.count, 40)
+        XCTAssertGreaterThanOrEqual(defaultHouseholdTasks.count, 3)
     }
 
     func testDefaultTasksHaveUniqueIDs() {
@@ -121,11 +121,11 @@ final class ModelTests: XCTestCase {
         XCTAssertEqual(ids.count, Set(ids).count, "Default tasks should have unique IDs")
     }
 
-    func testDefaultTasksCoverAllCategories() {
-        let categories = Set(defaultHouseholdTasks.map(\.category))
-        for cat in TaskCategory.allCases {
-            XCTAssertTrue(categories.contains(cat), "Missing category: \(cat.rawValue)")
-        }
+    func testDefaultTasksHaveFocusedStarterSet() {
+        let dailyTasks = defaultHouseholdTasks.filter { $0.frequency == .daily && $0.isActive }
+        XCTAssertLessThanOrEqual(dailyTasks.count, 2)
+        XCTAssertTrue(defaultHouseholdTasks.contains { $0.name == "Do dishes" })
+        XCTAssertTrue(defaultHouseholdTasks.contains { $0.name == "Wipe the counters" })
     }
 
     func testDefaultTasksHaveValidXPRewards() {
