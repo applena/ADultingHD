@@ -61,7 +61,7 @@ final class StorageTests: XCTestCase {
 
     func testBackupRoundTrip() async {
         let store = TaskStore()
-        let tasks = defaultHouseholdTasks.prefix(5).map { $0 }
+        let tasks = Array(defaultHouseholdTasks.prefix(5))
         var profile = UserProfile()
         profile.totalXP = 250
         profile.totalTasksCompleted = 10
@@ -81,7 +81,7 @@ final class StorageTests: XCTestCase {
         XCTAssertTrue(success)
         let loadedTasks = await store.loadTasks()
         let loadedProfile = await store.loadProfile()
-        XCTAssertEqual(loadedTasks.count, 5)
+        XCTAssertEqual(loadedTasks.count, tasks.count)
         XCTAssertEqual(loadedProfile.totalXP, 250)
     }
 }
