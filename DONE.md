@@ -1,6 +1,6 @@
-# IDEAS
+# DONE
 
-Improvement ideas for ADultingHD.
+Completed improvement ideas for ADultingHD.
 
 ## 1. Push Notification Reminders
 
@@ -48,14 +48,6 @@ The `TaskCompletion` model has an optional `notes` field but there's no UI to wr
 - Ability to browse past notes in the task detail history
 
 This adds texture to the completion history beyond just timestamps.
-
-## 7. Smart Scheduling & Task Batching
-
-The schedule view shows tasks by due date but doesn't help users plan their time. Add:
-- Estimated time totals per day ("45 min of tasks due today")
-- Suggested task batching by room/category ("Kitchen block: 3 tasks, ~25 min")
-- Drag-to-reschedule for flexible tasks
-- A "power hour" mode that queues up tasks and walks you through them with a timer
 
 ## 8. Seasonal & Contextual Tasks
 
