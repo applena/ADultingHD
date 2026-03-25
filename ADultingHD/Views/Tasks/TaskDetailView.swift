@@ -139,10 +139,8 @@ struct TaskDetailView: View {
                 .foregroundStyle(.white)
         }
         .buttonStyle(.plain)
-        .confirmationDialog("Complete \(currentTask.name)?", isPresented: $showComplete) {
-            Button("Complete (+\(currentTask.xpReward) XP)") {
-                Task { await dataStore.completeTask(currentTask) }
-            }
+        .sheet(isPresented: $showComplete) {
+            CompleteTaskSheet(task: currentTask)
         }
     }
 
@@ -154,16 +152,29 @@ struct TaskDetailView: View {
                 .font(.headline)
 
             ForEach(recentCompletions) { completion in
-                HStack {
-                    Text(completion.completedAt, style: .date)
-                        .font(.subheadline)
-                    Text(completion.completedAt, style: .time)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    Text("+\(completion.xpEarned + completion.streakBonus) XP")
-                        .font(.caption.bold())
-                        .foregroundStyle(Theme.xpGold)
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Text(completion.completedAt, style: .date)
+                            .font(.subheadline)
+                        Text(completion.completedAt, style: .time)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        if let quality = completion.quality {
+                            Label(quality.label, systemImage: quality.icon)
+                                .font(.caption2)
+                                .foregroundStyle(quality == .deep ? Theme.levelPurple : .secondary)
+                        }
+                        Spacer()
+                        Text("+\(completion.xpEarned + completion.streakBonus) XP")
+                            .font(.caption.bold())
+                            .foregroundStyle(Theme.xpGold)
+                    }
+                    if let notes = completion.notes, !notes.isEmpty {
+                        Text(notes)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .italic()
+                    }
                 }
             }
         }

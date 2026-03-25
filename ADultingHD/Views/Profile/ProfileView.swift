@@ -18,6 +18,11 @@ struct ProfileView: View {
                 // Achievements
                 achievementsSection
 
+                // Household
+                if dataStore.householdProfiles.count > 1 {
+                    leaderboardPreview
+                }
+
                 // Category Breakdown
                 categoryBreakdown
             }
@@ -103,11 +108,40 @@ struct ProfileView: View {
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
                 ForEach(allAchievements) { achievement in
                     let unlocked = dataStore.profile.unlockedAchievements.contains(achievement.id)
-                    AchievementCard(achievement: achievement, unlocked: unlocked)
+                    let progress = achievement.progressFraction(dataStore.profile, dataStore.completions)
+                    AchievementCard(achievement: achievement, unlocked: unlocked, progress: progress)
                 }
             }
         }
         .card()
+    }
+
+    // MARK: - Leaderboard Preview
+
+    private var leaderboardPreview: some View {
+        NavigationLink {
+            HouseholdView()
+        } label: {
+            VStack(alignment: .leading, spacing: 8) {
+                Label("Household", systemImage: "person.3.fill")
+                    .font(.headline)
+
+                ForEach(dataStore.leaderboard.prefix(3)) { member in
+                    HStack {
+                        Image(systemName: member.avatar)
+                            .foregroundStyle(member.id == dataStore.profile.id ? Theme.levelPurple : .secondary)
+                        Text(member.name)
+                            .font(.subheadline)
+                        Spacer()
+                        Text("\(member.totalXP) XP")
+                            .font(.caption.bold())
+                            .foregroundStyle(Theme.xpGold)
+                    }
+                }
+            }
+            .card()
+        }
+        .buttonStyle(.plain)
     }
 
     // MARK: - Category Breakdown
@@ -147,23 +181,100 @@ struct ProfileView: View {
 struct AchievementCard: View {
     let achievement: Achievement
     let unlocked: Bool
+    var progress: Double = 0
+
+    @State private var showDetail = false
 
     var body: some View {
-        VStack(spacing: 6) {
-            Image(systemName: achievement.icon)
-                .font(.title2)
-                .foregroundStyle(unlocked ? Theme.xpGold : .gray.opacity(0.4))
-            Text(achievement.name)
-                .font(.caption.bold())
-                .multilineTextAlignment(.center)
-            Text(achievement.requirement)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
+        Button {
+            showDetail = true
+        } label: {
+            VStack(spacing: 6) {
+                Image(systemName: achievement.icon)
+                    .font(.title2)
+                    .foregroundStyle(unlocked ? Theme.xpGold : .gray.opacity(0.4))
+                Text(achievement.name)
+                    .font(.caption.bold())
+                    .multilineTextAlignment(.center)
+
+                if unlocked {
+                    Text(achievement.requirement)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                } else {
+                    ProgressView(value: progress)
+                        .tint(Theme.xpGold)
+                        .scaleEffect(y: 0.8)
+                        .padding(.horizontal, 4)
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .padding(8)
+            .background(unlocked ? Theme.xpGold.opacity(0.1) : Color.gray.opacity(0.05), in: RoundedRectangle(cornerRadius: 8))
+            .opacity(unlocked ? 1.0 : 0.6)
         }
-        .frame(maxWidth: .infinity)
-        .padding(8)
-        .background(unlocked ? Theme.xpGold.opacity(0.1) : Color.gray.opacity(0.05), in: RoundedRectangle(cornerRadius: 8))
-        .opacity(unlocked ? 1.0 : 0.5)
+        .buttonStyle(.plain)
+        .sheet(isPresented: $showDetail) {
+            AchievementDetailView(achievement: achievement, unlocked: unlocked, progress: progress)
+        }
+    }
+}
+
+struct AchievementDetailView: View {
+    let achievement: Achievement
+    let unlocked: Bool
+    let progress: Double
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 24) {
+                Spacer()
+
+                Image(systemName: achievement.icon)
+                    .font(.system(size: 60))
+                    .foregroundStyle(unlocked ? Theme.xpGold : .gray.opacity(0.4))
+
+                Text(achievement.name)
+                    .font(.title.bold())
+
+                Text(achievement.description)
+                    .font(.body)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+
+                Text(achievement.flavorText)
+                    .font(.subheadline.italic())
+                    .foregroundStyle(.tertiary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 32)
+
+                VStack(spacing: 8) {
+                    ProgressView(value: unlocked ? 1.0 : progress)
+                        .tint(Theme.xpGold)
+                        .scaleEffect(y: 2)
+                        .padding(.horizontal, 40)
+
+                    if unlocked {
+                        Label("Unlocked", systemImage: "checkmark.seal.fill")
+                            .font(.headline)
+                            .foregroundStyle(Theme.successGreen)
+                    } else {
+                        Text("\(Int(progress * 100))% complete")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                Spacer()
+            }
+            .padding()
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }
+                }
+            }
+        }
     }
 }

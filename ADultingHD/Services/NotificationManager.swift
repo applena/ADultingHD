@@ -1,0 +1,106 @@
+import Foundation
+import UserNotifications
+import os
+
+private let logger = Logger(subsystem: "net.shadowpuppet.ADultingHD", category: "Notifications")
+
+@MainActor
+@Observable
+final class NotificationManager {
+    var isAuthorized = false
+    var dailyReminderEnabled: Bool = UserDefaults.standard.bool(forKey: "dailyReminderEnabled") {
+        didSet {
+            UserDefaults.standard.set(dailyReminderEnabled, forKey: "dailyReminderEnabled")
+            if dailyReminderEnabled {
+                scheduleDailyReminder()
+            } else {
+                cancelDailyReminder()
+            }
+        }
+    }
+    var reminderHour: Int = UserDefaults.standard.object(forKey: "reminderHour") as? Int ?? 9 {
+        didSet {
+            UserDefaults.standard.set(reminderHour, forKey: "reminderHour")
+            if dailyReminderEnabled { scheduleDailyReminder() }
+        }
+    }
+    var reminderMinute: Int = UserDefaults.standard.object(forKey: "reminderMinute") as? Int ?? 0 {
+        didSet {
+            UserDefaults.standard.set(reminderMinute, forKey: "reminderMinute")
+            if dailyReminderEnabled { scheduleDailyReminder() }
+        }
+    }
+
+    private let center = UNUserNotificationCenter.current()
+
+    func requestAuthorization() async {
+        do {
+            isAuthorized = try await center.requestAuthorization(options: [.alert, .badge, .sound])
+            logger.info("Notification authorization: \(self.isAuthorized)")
+        } catch {
+            logger.error("Notification auth error: \(error.localizedDescription)")
+        }
+    }
+
+    func checkAuthorizationStatus() async {
+        let settings = await center.notificationSettings()
+        isAuthorized = settings.authorizationStatus == .authorized
+    }
+
+    func scheduleDailyReminder() {
+        cancelDailyReminder()
+
+        let content = UNMutableNotificationContent()
+        content.title = "Time to adult!"
+        content.body = "Check your tasks for today and keep your streak alive."
+        content.sound = .default
+
+        var components = DateComponents()
+        components.hour = reminderHour
+        components.minute = reminderMinute
+
+        let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: true)
+        let request = UNNotificationRequest(identifier: "daily_reminder", content: content, trigger: trigger)
+
+        let hour = reminderHour
+        let minute = reminderMinute
+        center.add(request) { error in
+            if let error {
+                logger.error("Failed to schedule daily reminder: \(error.localizedDescription)")
+            } else {
+                logger.info("Daily reminder scheduled for \(hour):\(String(format: "%02d", minute))")
+            }
+        }
+    }
+
+    func cancelDailyReminder() {
+        center.removePendingNotificationRequests(withIdentifiers: ["daily_reminder"])
+    }
+
+    func scheduleTaskReminder(for task: HouseholdTask) {
+        guard let dueDate = task.dueDate else { return }
+
+        let content = UNMutableNotificationContent()
+        content.title = "\(task.name) is due!"
+        content.body = "\(task.category.rawValue) task — \(task.estimatedMinutes) min, +\(task.xpReward) XP"
+        content.sound = .default
+
+        let components = Calendar.current.dateComponents([.year, .month, .day, .hour], from: dueDate)
+        let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
+        let request = UNNotificationRequest(identifier: "task_\(task.id.uuidString)", content: content, trigger: trigger)
+
+        center.add(request) { error in
+            if let error {
+                logger.error("Failed to schedule task reminder: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    func cancelTaskReminder(for task: HouseholdTask) {
+        center.removePendingNotificationRequests(withIdentifiers: ["task_\(task.id.uuidString)"])
+    }
+
+    func cancelAll() {
+        center.removeAllPendingNotificationRequests()
+    }
+}

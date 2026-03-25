@@ -35,6 +35,8 @@ struct DashboardView: View {
                 if !dataStore.todayCompletions.isEmpty {
                     recentCompletionsSection
                 }
+
+                seasonalSection
             }
             .padding()
         }
@@ -139,6 +141,58 @@ struct DashboardView: View {
         .card()
     }
 
+    // MARK: - Seasonal Suggestions
+
+    private var seasonalSuggestions: [SeasonalSuggestion] {
+        let existingNames = Set(dataStore.tasks.map(\.name))
+        return currentSeasonSuggestions().filter { !existingNames.contains($0.name) }
+    }
+
+    private var seasonalSection: some View {
+        Group {
+            if !seasonalSuggestions.isEmpty {
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack {
+                        Label("\(Season.current.rawValue) Tasks", systemImage: Season.current.icon)
+                            .font(.headline)
+                        Spacer()
+                        Text("Seasonal")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    ForEach(seasonalSuggestions) { suggestion in
+                        HStack(spacing: 10) {
+                            Image(systemName: suggestion.category.icon)
+                                .foregroundStyle(Theme.categoryColor(suggestion.category))
+                                .frame(width: 24)
+
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(suggestion.name)
+                                    .font(.subheadline.weight(.medium))
+                                Text("\(suggestion.estimatedMinutes)m · \(suggestion.difficulty.label)")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+
+                            Spacer()
+
+                            Button {
+                                Task { await dataStore.addCustomTask(suggestion.toTask()) }
+                            } label: {
+                                Image(systemName: "plus.circle.fill")
+                                    .foregroundStyle(Theme.accent)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                        .padding(.vertical, 2)
+                    }
+                }
+                .card()
+            }
+        }
+    }
+
     // MARK: - Recent Completions
 
     private var recentCompletionsSection: some View {
@@ -209,13 +263,75 @@ struct DueTaskRow: View {
                     .foregroundStyle(Theme.successGreen)
             }
             .buttonStyle(.plain)
-            .confirmationDialog("Complete \(task.name)?", isPresented: $showComplete) {
-                Button("Complete (+\(task.xpReward) XP)") {
-                    Task { await dataStore.completeTask(task) }
-                }
+            .sheet(isPresented: $showComplete) {
+                CompleteTaskSheet(task: task)
             }
         }
         .padding(.vertical, 4)
+    }
+}
+
+// MARK: - Complete Task Sheet
+
+struct CompleteTaskSheet: View {
+    @Environment(DataStore.self) private var dataStore
+    @Environment(\.dismiss) private var dismiss
+    let task: HouseholdTask
+    @State private var quality: CompletionQuality = .normal
+    @State private var notes = ""
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    HStack {
+                        Image(systemName: task.category.icon)
+                            .foregroundStyle(Theme.categoryColor(task.category))
+                        Text(task.name)
+                            .font(.headline)
+                    }
+                }
+
+                Section("How thorough?") {
+                    Picker("Quality", selection: $quality) {
+                        ForEach(CompletionQuality.allCases) { q in
+                            Label(q.label, systemImage: q.icon).tag(q)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+
+                    HStack {
+                        Text("XP Reward")
+                        Spacer()
+                        Text("+\(Int(Double(task.xpReward) * quality.xpMultiplier)) XP")
+                            .bold()
+                            .foregroundStyle(Theme.xpGold)
+                    }
+                }
+
+                Section("Notes (optional)") {
+                    TextField("How did it go?", text: $notes, axis: .vertical)
+                        .lineLimit(2...4)
+                }
+            }
+            .navigationTitle("Complete Task")
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") {
+                        Task {
+                            await dataStore.completeTask(task, notes: notes.isEmpty ? nil : notes, quality: quality)
+                            dismiss()
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 

@@ -183,6 +183,38 @@ struct HouseholdTask: Codable, Identifiable, Hashable {
 
 // MARK: - Task Completion
 
+enum CompletionQuality: Int, Codable, CaseIterable, Identifiable {
+    case quick = 1
+    case normal = 2
+    case deep = 3
+
+    var id: Int { rawValue }
+
+    var label: String {
+        switch self {
+        case .quick: "Quick"
+        case .normal: "Normal"
+        case .deep: "Deep Clean"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .quick: "hare"
+        case .normal: "checkmark"
+        case .deep: "sparkles"
+        }
+    }
+
+    var xpMultiplier: Double {
+        switch self {
+        case .quick: 0.75
+        case .normal: 1.0
+        case .deep: 1.5
+        }
+    }
+}
+
 struct TaskCompletion: Codable, Identifiable {
     let id: UUID
     let taskId: UUID
@@ -191,11 +223,39 @@ struct TaskCompletion: Codable, Identifiable {
     let xpEarned: Int
     let streakBonus: Int
     let notes: String?
+    var quality: CompletionQuality?
+}
+
+// MARK: - Supply Stock
+
+enum SupplyStock: String, Codable, CaseIterable {
+    case inStock = "In Stock"
+    case low = "Low"
+    case out = "Out"
+
+    var icon: String {
+        switch self {
+        case .inStock: "checkmark.circle.fill"
+        case .low: "exclamationmark.triangle.fill"
+        case .out: "xmark.circle.fill"
+        }
+    }
+
+    var color: String {
+        switch self {
+        case .inStock: "green"
+        case .low: "orange"
+        case .out: "red"
+        }
+    }
 }
 
 // MARK: - User Profile
 
-struct UserProfile: Codable {
+struct UserProfile: Codable, Identifiable {
+    var id: UUID = UUID()
+    var name: String = "Player 1"
+    var avatar: String = "person.crop.circle.fill"
     var totalXP: Int = 0
     var currentStreak: Int = 0
     var longestStreak: Int = 0
@@ -257,6 +317,8 @@ struct Achievement: Identifiable, Hashable {
     let description: String
     let icon: String
     let requirement: String
+    let flavorText: String
+    let targetValue: Int
 
     func hash(into hasher: inout Hasher) {
         hasher.combine(id)
@@ -265,25 +327,56 @@ struct Achievement: Identifiable, Hashable {
     static func == (lhs: Achievement, rhs: Achievement) -> Bool {
         lhs.id == rhs.id
     }
+
+    func currentProgress(profile: UserProfile, completions: [TaskCompletion]) -> Int {
+        switch id {
+        case "first_task", "ten_tasks", "fifty_tasks", "hundred_tasks":
+            return profile.totalTasksCompleted
+        case "streak_3", "streak_7", "streak_14", "streak_30", "streak_100":
+            return max(profile.currentStreak, profile.longestStreak)
+        case "level_5", "level_10", "level_25":
+            return profile.level
+        case "xp_1000", "xp_10000":
+            return profile.totalXP
+        case "five_in_day":
+            let calendar = Calendar.current
+            let grouped = Dictionary(grouping: completions) { calendar.startOfDay(for: $0.completedAt) }
+            return grouped.values.map(\.count).max() ?? 0
+        case "early_bird":
+            return profile.unlockedAchievements.contains("early_bird") ? 1 : 0
+        case "all_kitchen", "all_bathroom":
+            return profile.unlockedAchievements.contains(id) ? 1 : 0
+        default:
+            return 0
+        }
+    }
+
+    var progressFraction: (UserProfile, [TaskCompletion]) -> Double {
+        { profile, completions in
+            let current = self.currentProgress(profile: profile, completions: completions)
+            guard targetValue > 0 else { return 0 }
+            return min(1.0, Double(current) / Double(targetValue))
+        }
+    }
 }
 
 let allAchievements: [Achievement] = [
-    Achievement(id: "first_task", name: "First Steps", description: "Complete your first task", icon: "star", requirement: "Complete 1 task"),
-    Achievement(id: "ten_tasks", name: "Getting Started", description: "Complete 10 tasks", icon: "star.fill", requirement: "Complete 10 tasks"),
-    Achievement(id: "fifty_tasks", name: "Half Century", description: "Complete 50 tasks", icon: "trophy", requirement: "Complete 50 tasks"),
-    Achievement(id: "hundred_tasks", name: "Centurion", description: "Complete 100 tasks", icon: "trophy.fill", requirement: "Complete 100 tasks"),
-    Achievement(id: "streak_3", name: "Three-peat", description: "Maintain a 3-day streak", icon: "flame", requirement: "3-day streak"),
-    Achievement(id: "streak_7", name: "Week Warrior", description: "Maintain a 7-day streak", icon: "flame.fill", requirement: "7-day streak"),
-    Achievement(id: "streak_14", name: "Fortnight Force", description: "Maintain a 14-day streak", icon: "bolt", requirement: "14-day streak"),
-    Achievement(id: "streak_30", name: "Monthly Master", description: "Maintain a 30-day streak", icon: "bolt.fill", requirement: "30-day streak"),
-    Achievement(id: "streak_100", name: "Unstoppable", description: "Maintain a 100-day streak", icon: "bolt.circle.fill", requirement: "100-day streak"),
-    Achievement(id: "level_5", name: "Leveling Up", description: "Reach level 5", icon: "arrow.up.circle", requirement: "Reach level 5"),
-    Achievement(id: "level_10", name: "Double Digits", description: "Reach level 10", icon: "arrow.up.circle.fill", requirement: "Reach level 10"),
-    Achievement(id: "level_25", name: "Quarter Century", description: "Reach level 25", icon: "crown", requirement: "Reach level 25"),
-    Achievement(id: "all_kitchen", name: "Kitchen King", description: "Complete all kitchen tasks in one day", icon: "fork.knife", requirement: "All kitchen tasks in a day"),
-    Achievement(id: "all_bathroom", name: "Bathroom Boss", description: "Complete all bathroom tasks in one day", icon: "shower", requirement: "All bathroom tasks in a day"),
-    Achievement(id: "early_bird", name: "Early Bird", description: "Complete a task before it's due", icon: "sunrise", requirement: "Complete a task early"),
-    Achievement(id: "five_in_day", name: "Productive Day", description: "Complete 5 tasks in one day", icon: "sparkles", requirement: "5 tasks in one day"),
-    Achievement(id: "xp_1000", name: "XP Collector", description: "Earn 1,000 total XP", icon: "bitcoinsign.circle", requirement: "1,000 total XP"),
-    Achievement(id: "xp_10000", name: "XP Hoarder", description: "Earn 10,000 total XP", icon: "bitcoinsign.circle.fill", requirement: "10,000 total XP"),
+    Achievement(id: "first_task", name: "First Steps", description: "Complete your first task", icon: "star", requirement: "Complete 1 task", flavorText: "Every journey begins with a single sweep.", targetValue: 1),
+    Achievement(id: "ten_tasks", name: "Getting Started", description: "Complete 10 tasks", icon: "star.fill", requirement: "Complete 10 tasks", flavorText: "You're building momentum. The house can feel it.", targetValue: 10),
+    Achievement(id: "fifty_tasks", name: "Half Century", description: "Complete 50 tasks", icon: "trophy", requirement: "Complete 50 tasks", flavorText: "Fifty down. Your home thanks you.", targetValue: 50),
+    Achievement(id: "hundred_tasks", name: "Centurion", description: "Complete 100 tasks", icon: "trophy.fill", requirement: "Complete 100 tasks", flavorText: "A hundred acts of adulting. Legendary.", targetValue: 100),
+    Achievement(id: "streak_3", name: "Three-peat", description: "Maintain a 3-day streak", icon: "flame", requirement: "3-day streak", flavorText: "Three days in a row — you're on fire!", targetValue: 3),
+    Achievement(id: "streak_7", name: "Week Warrior", description: "Maintain a 7-day streak", icon: "flame.fill", requirement: "7-day streak", flavorText: "A full week of consistency. That's real discipline.", targetValue: 7),
+    Achievement(id: "streak_14", name: "Fortnight Force", description: "Maintain a 14-day streak", icon: "bolt", requirement: "14-day streak", flavorText: "Two weeks strong. You're unstoppable.", targetValue: 14),
+    Achievement(id: "streak_30", name: "Monthly Master", description: "Maintain a 30-day streak", icon: "bolt.fill", requirement: "30-day streak", flavorText: "A whole month! Adulting is now a habit.", targetValue: 30),
+    Achievement(id: "streak_100", name: "Unstoppable", description: "Maintain a 100-day streak", icon: "bolt.circle.fill", requirement: "100-day streak", flavorText: "100 days. You've transcended mere adulting.", targetValue: 100),
+    Achievement(id: "level_5", name: "Leveling Up", description: "Reach level 5", icon: "arrow.up.circle", requirement: "Reach level 5", flavorText: "Level 5! You've graduated from 'figuring it out.'", targetValue: 5),
+    Achievement(id: "level_10", name: "Double Digits", description: "Reach level 10", icon: "arrow.up.circle.fill", requirement: "Reach level 10", flavorText: "Double digits. The neighbors are impressed.", targetValue: 10),
+    Achievement(id: "level_25", name: "Quarter Century", description: "Reach level 25", icon: "crown", requirement: "Reach level 25", flavorText: "Level 25. You practically run this house.", targetValue: 25),
+    Achievement(id: "all_kitchen", name: "Kitchen King", description: "Complete all kitchen tasks in one day", icon: "fork.knife", requirement: "All kitchen tasks in a day", flavorText: "The kitchen has never been this clean. Ever.", targetValue: 1),
+    Achievement(id: "all_bathroom", name: "Bathroom Boss", description: "Complete all bathroom tasks in one day", icon: "shower", requirement: "All bathroom tasks in a day", flavorText: "Sparkling from tile to toilet. Respect.", targetValue: 1),
+    Achievement(id: "early_bird", name: "Early Bird", description: "Complete a task before it's due", icon: "sunrise", requirement: "Complete a task early", flavorText: "Ahead of schedule? Who even are you?", targetValue: 1),
+    Achievement(id: "five_in_day", name: "Productive Day", description: "Complete 5 tasks in one day", icon: "sparkles", requirement: "5 tasks in one day", flavorText: "Five in a day! That's a power session.", targetValue: 5),
+    Achievement(id: "xp_1000", name: "XP Collector", description: "Earn 1,000 total XP", icon: "bitcoinsign.circle", requirement: "1,000 total XP", flavorText: "A thousand points of clean.", targetValue: 1000),
+    Achievement(id: "xp_10000", name: "XP Hoarder", description: "Earn 10,000 total XP", icon: "bitcoinsign.circle.fill", requirement: "10,000 total XP", flavorText: "Ten thousand XP. You're basically a chore wizard.", targetValue: 10000),
 ]

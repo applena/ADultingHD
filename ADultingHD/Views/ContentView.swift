@@ -23,8 +23,16 @@ struct ContentView: View {
             } else {
                 #if os(macOS)
                 MacContentView()
+                    .celebrationOverlay(type: dataStore.celebrationType, isShowing: Binding(
+                        get: { dataStore.showCelebration },
+                        set: { dataStore.showCelebration = $0 }
+                    ))
                 #else
                 IOSContentView()
+                    .celebrationOverlay(type: dataStore.celebrationType, isShowing: Binding(
+                        get: { dataStore.showCelebration },
+                        set: { dataStore.showCelebration = $0 }
+                    ))
                 #endif
             }
         }
@@ -42,6 +50,7 @@ struct MacContentView: View {
         case tasks = "Tasks"
         case schedule = "Schedule"
         case supplies = "Supplies"
+        case stats = "Stats"
         case profile = "Profile"
         case settings = "Settings"
 
@@ -53,6 +62,7 @@ struct MacContentView: View {
             case .tasks: "checklist"
             case .schedule: "calendar"
             case .supplies: "bag.fill"
+            case .stats: "chart.bar.fill"
             case .profile: "person.crop.circle.fill"
             case .settings: "gear"
             }
@@ -72,6 +82,7 @@ struct MacContentView: View {
             case .tasks: TaskListView()
             case .schedule: ScheduleView()
             case .supplies: SuppliesView()
+            case .stats: StatsView()
             case .profile: ProfileView()
             case .settings: SettingsView()
             }
@@ -95,8 +106,8 @@ struct IOSContentView: View {
             NavigationStack { ScheduleView() }
                 .tabItem { Label("Schedule", systemImage: "calendar") }
 
-            NavigationStack { SuppliesView() }
-                .tabItem { Label("Supplies", systemImage: "bag.fill") }
+            NavigationStack { StatsView() }
+                .tabItem { Label("Stats", systemImage: "chart.bar.fill") }
 
             NavigationStack { ProfileView() }
                 .tabItem { Label("Profile", systemImage: "person.crop.circle.fill") }

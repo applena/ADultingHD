@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import WidgetKit
 import os
 
 private let logger = Logger(subsystem: "net.shadowpuppet.ADultingHD", category: "DataStore")
@@ -10,7 +11,12 @@ final class DataStore {
     var tasks: [HouseholdTask] = []
     var profile: UserProfile = UserProfile()
     var completions: [TaskCompletion] = []
+    var supplyStock: [String: SupplyStock] = [:]
     var isLoaded = false
+
+    // Celebration state
+    var showCelebration = false
+    var celebrationType: CelebrationOverlay.CelebrationType?
 
     private let store = TaskStore()
 
@@ -46,21 +52,25 @@ final class DataStore {
         let loadedTasks = await store.loadTasks()
         let loadedProfile = await store.loadProfile()
         let loadedCompletions = await store.loadCompletions()
+        let loadedStock = await store.loadSupplyStock()
 
         tasks = loadedTasks
         profile = loadedProfile
         completions = loadedCompletions
+        supplyStock = loadedStock
         isLoaded = true
 
         updateStreak()
+        await loadHouseholdProfiles()
         logger.info("DataStore loaded: \(self.tasks.count) tasks, level \(self.profile.level)")
     }
 
     // MARK: - Complete Task
 
-    func completeTask(_ task: HouseholdTask, notes: String? = nil) async {
+    func completeTask(_ task: HouseholdTask, notes: String? = nil, quality: CompletionQuality = .normal) async {
         let streakBonus = profile.currentStreak > 0 ? min(profile.currentStreak * 2, 50) : 0
-        let xpEarned = task.xpReward
+        let baseXP = task.xpReward
+        let xpEarned = Int(Double(baseXP) * quality.xpMultiplier)
 
         let completion = TaskCompletion(
             id: UUID(),
@@ -69,7 +79,8 @@ final class DataStore {
             completedAt: Date(),
             xpEarned: xpEarned,
             streakBonus: streakBonus,
-            notes: notes
+            notes: notes,
+            quality: quality
         )
 
         completions.insert(completion, at: 0)
@@ -80,8 +91,33 @@ final class DataStore {
             tasks[idx].lastCompleted = Date()
         }
 
+        let previousLevel = profile.level
+        let previousAchievements = profile.unlockedAchievements
+
         updateStreak()
         checkAchievements()
+
+        // Trigger celebrations
+        let newLevel = profile.level
+        if newLevel > previousLevel {
+            celebrationType = .levelUp(newLevel)
+            showCelebration = true
+            FeedbackManager.levelUp()
+        } else if profile.unlockedAchievements.count > previousAchievements.count {
+            let newId = profile.unlockedAchievements.first { !previousAchievements.contains($0) }
+            let name = allAchievements.first { $0.id == newId }?.name ?? "Achievement"
+            celebrationType = .achievement(name)
+            showCelebration = true
+            FeedbackManager.achievementUnlocked()
+        } else if [3, 7, 14, 30, 100].contains(profile.currentStreak) {
+            celebrationType = .streakMilestone(profile.currentStreak)
+            showCelebration = true
+            FeedbackManager.streakMilestone()
+        } else {
+            celebrationType = .taskComplete
+            showCelebration = true
+            FeedbackManager.taskCompleted()
+        }
 
         await save()
         logger.info("Completed '\(task.name)' +\(xpEarned)XP +\(streakBonus) streak bonus")
@@ -111,6 +147,18 @@ final class DataStore {
             tasks[idx] = task
             await store.saveTasks(tasks)
         }
+    }
+
+    // MARK: - Supply Stock
+
+    var shoppingList: [String] {
+        supplyStock.filter { $0.value == .low || $0.value == .out }
+            .keys.sorted()
+    }
+
+    func setSupplyStock(_ supply: String, stock: SupplyStock) async {
+        supplyStock[supply] = stock
+        await store.saveSupplyStock(supplyStock)
     }
 
     // MARK: - Streak
@@ -193,6 +241,66 @@ final class DataStore {
         await store.saveTasks(tasks)
         await store.saveProfile(profile)
         await store.saveCompletions(completions)
+        updateWidgetData()
+    }
+
+    private func updateWidgetData() {
+        SharedDefaults.updateWidgetData(
+            dueTasks: dueTasks.count,
+            overdueTasks: overdueTasks.count,
+            streak: profile.currentStreak,
+            level: profile.level,
+            levelTitle: profile.levelTitle,
+            xpProgress: profile.xpProgress,
+            totalXP: profile.totalXP,
+            todayCompleted: todayCompletions.count,
+            nextTaskName: dueTasks.first?.name
+        )
+        WidgetCenter.shared.reloadAllTimelines()
+    }
+
+    // MARK: - Household Profiles
+
+    var householdProfiles: [UserProfile] = []
+
+    func loadHouseholdProfiles() async {
+        householdProfiles = await store.loadHouseholdProfiles()
+        // Ensure current profile is in the list
+        if !householdProfiles.contains(where: { $0.id == profile.id }) {
+            householdProfiles.append(profile)
+            await store.saveHouseholdProfiles(householdProfiles)
+        }
+    }
+
+    func addHouseholdMember(name: String, avatar: String) async {
+        var newProfile = UserProfile()
+        newProfile.name = name
+        newProfile.avatar = avatar
+        householdProfiles.append(newProfile)
+        await store.saveHouseholdProfiles(householdProfiles)
+    }
+
+    func switchProfile(to profileId: UUID) async {
+        // Save current profile back to household list
+        if let idx = householdProfiles.firstIndex(where: { $0.id == profile.id }) {
+            householdProfiles[idx] = profile
+        }
+        // Switch to new profile
+        if let newProfile = householdProfiles.first(where: { $0.id == profileId }) {
+            profile = newProfile
+            await store.saveProfile(profile)
+            await store.saveHouseholdProfiles(householdProfiles)
+        }
+    }
+
+    func removeHouseholdMember(_ profileId: UUID) async {
+        guard profileId != profile.id else { return } // Can't remove active profile
+        householdProfiles.removeAll { $0.id == profileId }
+        await store.saveHouseholdProfiles(householdProfiles)
+    }
+
+    var leaderboard: [UserProfile] {
+        householdProfiles.sorted { $0.totalXP > $1.totalXP }
     }
 
     // MARK: - Export/Import

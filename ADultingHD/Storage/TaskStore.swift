@@ -16,6 +16,8 @@ actor TaskStore {
     private var tasksURL: URL { documentsURL.appendingPathComponent("tasks.json") }
     private var profileURL: URL { documentsURL.appendingPathComponent("profile.json") }
     private var completionsURL: URL { documentsURL.appendingPathComponent("completions.json") }
+    private var supplyStockURL: URL { documentsURL.appendingPathComponent("supply_stock.json") }
+    private var householdURL: URL { documentsURL.appendingPathComponent("household.json") }
 
     private let encoder: JSONEncoder = {
         let e = JSONEncoder()
@@ -82,6 +84,36 @@ actor TaskStore {
     func saveCompletions(_ completions: [TaskCompletion]) {
         guard let data = try? encoder.encode(completions) else { return }
         try? data.write(to: completionsURL, options: .atomic)
+    }
+
+    // MARK: - Household Profiles
+
+    func loadHouseholdProfiles() -> [UserProfile] {
+        guard let data = try? Data(contentsOf: householdURL),
+              let profiles = try? decoder.decode([UserProfile].self, from: data) else {
+            return []
+        }
+        return profiles
+    }
+
+    func saveHouseholdProfiles(_ profiles: [UserProfile]) {
+        guard let data = try? encoder.encode(profiles) else { return }
+        try? data.write(to: householdURL, options: .atomic)
+    }
+
+    // MARK: - Supply Stock
+
+    func loadSupplyStock() -> [String: SupplyStock] {
+        guard let data = try? Data(contentsOf: supplyStockURL),
+              let stock = try? decoder.decode([String: SupplyStock].self, from: data) else {
+            return [:]
+        }
+        return stock
+    }
+
+    func saveSupplyStock(_ stock: [String: SupplyStock]) {
+        guard let data = try? encoder.encode(stock) else { return }
+        try? data.write(to: supplyStockURL, options: .atomic)
     }
 
     // MARK: - Export/Import

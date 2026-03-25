@@ -2,13 +2,50 @@ import SwiftUI
 
 struct SettingsView: View {
     @Environment(DataStore.self) private var dataStore
+    @Environment(NotificationManager.self) private var notificationManager
     @State private var showResetConfirm = false
     @State private var showExportShare = false
     @State private var showImportPicker = false
     @State private var importMessage: String?
 
+    private var reminderTime: Binding<Date> {
+        Binding(
+            get: {
+                var components = DateComponents()
+                components.hour = notificationManager.reminderHour
+                components.minute = notificationManager.reminderMinute
+                return Calendar.current.date(from: components) ?? Date()
+            },
+            set: { date in
+                let comps = Calendar.current.dateComponents([.hour, .minute], from: date)
+                notificationManager.reminderHour = comps.hour ?? 9
+                notificationManager.reminderMinute = comps.minute ?? 0
+            }
+        )
+    }
+
     var body: some View {
         List {
+            // Notifications
+            Section("Notifications") {
+                if notificationManager.isAuthorized {
+                    @Bindable var nm = notificationManager
+                    Toggle("Daily Reminder", isOn: $nm.dailyReminderEnabled)
+                    if notificationManager.dailyReminderEnabled {
+                        DatePicker("Reminder Time", selection: reminderTime, displayedComponents: .hourAndMinute)
+                    }
+                } else {
+                    Button {
+                        Task { await notificationManager.requestAuthorization() }
+                    } label: {
+                        Label("Enable Notifications", systemImage: "bell.badge")
+                    }
+                    Text("Get daily reminders about due tasks")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
             // App Info
             Section("About") {
                 HStack {
@@ -46,6 +83,16 @@ struct SettingsView: View {
                 } label: {
                     Label("Manage Active Tasks", systemImage: "checklist")
                 }
+            }
+
+            // Household
+            Section("Household") {
+                NavigationLink {
+                    HouseholdView()
+                } label: {
+                    Label("Manage Household", systemImage: "person.3.fill")
+                }
+                LabeledContent("Current Profile", value: dataStore.profile.name)
             }
 
             // Data
