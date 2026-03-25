@@ -64,15 +64,15 @@ struct ScheduleView: View {
                             Label("Today's Batches", systemImage: "tray.2.fill")
                                 .font(.headline)
                             Spacer()
-                            let totalMin = todayTasks.reduce(0) { $0 + $1.estimatedMinutes }
+                            let totalMin = todayTasks.totalMinutes
                             Text("\(totalMin) min total")
                                 .font(.caption.bold())
                                 .foregroundStyle(.secondary)
                         }
 
                         ForEach(todayByCategory, id: \.0) { category, tasks in
-                            let batchMinutes = tasks.reduce(0) { $0 + $1.estimatedMinutes }
-                            let batchXP = tasks.reduce(0) { $0 + $1.xpReward }
+                            let batchMinutes = tasks.totalMinutes
+                            let batchXP = tasks.totalXP
                             VStack(alignment: .leading, spacing: 4) {
                                 HStack {
                                     Image(systemName: category.icon)
@@ -166,8 +166,8 @@ struct ScheduleView: View {
                                 }
                             }
 
-                            let totalMinutes = tasks.reduce(0) { $0 + $1.estimatedMinutes }
-                            let totalXP = tasks.reduce(0) { $0 + $1.xpReward }
+                            let totalMinutes = tasks.totalMinutes
+                            let totalXP = tasks.totalXP
                             HStack {
                                 Text("Total: \(totalMinutes) min")
                                     .font(.caption)
@@ -200,7 +200,6 @@ struct PowerHourView: View {
     let tasks: [HouseholdTask]
     @State private var currentIndex = 0
     @State private var elapsedSeconds = 0
-    @State private var timerActive = false
     @State private var timer: Timer?
 
     private var currentTask: HouseholdTask? {
@@ -248,11 +247,7 @@ struct PowerHourView: View {
                     Button {
                         Task {
                             await dataStore.completeTask(task)
-                            if currentIndex < tasks.count - 1 {
-                                currentIndex += 1
-                            } else {
-                                dismiss()
-                            }
+                            advanceOrFinish()
                         }
                     } label: {
                         Label(currentIndex < tasks.count - 1 ? "Done — Next" : "Done — Finish!", systemImage: "checkmark.circle.fill")
@@ -264,13 +259,7 @@ struct PowerHourView: View {
                     }
                     .buttonStyle(.plain)
 
-                    Button("Skip") {
-                        if currentIndex < tasks.count - 1 {
-                            currentIndex += 1
-                        } else {
-                            dismiss()
-                        }
-                    }
+                    Button("Skip") { advanceOrFinish() }
                     .foregroundStyle(.secondary)
                 } else {
                     Spacer()
@@ -294,6 +283,14 @@ struct PowerHourView: View {
             }
             .onAppear { startTimer() }
             .onDisappear { stopTimer() }
+        }
+    }
+
+    private func advanceOrFinish() {
+        if currentIndex < tasks.count - 1 {
+            currentIndex += 1
+        } else {
+            dismiss()
         }
     }
 

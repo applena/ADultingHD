@@ -21,19 +21,16 @@ struct ContentView: View {
                     }
                 }
             } else {
-                #if os(macOS)
-                MacContentView()
-                    .celebrationOverlay(type: dataStore.celebrationType, isShowing: Binding(
-                        get: { dataStore.showCelebration },
-                        set: { dataStore.showCelebration = $0 }
-                    ))
-                #else
-                IOSContentView()
-                    .celebrationOverlay(type: dataStore.celebrationType, isShowing: Binding(
-                        get: { dataStore.showCelebration },
-                        set: { dataStore.showCelebration = $0 }
-                    ))
-                #endif
+                Group {
+                    #if os(macOS)
+                    MacContentView()
+                    #else
+                    IOSContentView()
+                    #endif
+                }
+                .celebrationOverlay(type: dataStore.celebrationType, onDismiss: {
+                    dataStore.celebrationType = nil
+                })
             }
         }
     }

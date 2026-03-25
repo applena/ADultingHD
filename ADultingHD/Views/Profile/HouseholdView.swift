@@ -4,20 +4,6 @@ struct HouseholdView: View {
     @Environment(DataStore.self) private var dataStore
     @State private var showAddMember = false
     @State private var newName = ""
-    @State private var newAvatar = "person.crop.circle.fill"
-
-    private let avatarOptions = [
-        "person.crop.circle.fill",
-        "figure.stand",
-        "figure.walk",
-        "figure.run",
-        "cat.fill",
-        "dog.fill",
-        "hare.fill",
-        "tortoise.fill",
-        "bird.fill",
-        "star.circle.fill",
-    ]
 
     var body: some View {
         List {
@@ -102,7 +88,7 @@ struct HouseholdView: View {
             Button("Add") {
                 guard !newName.trimmingCharacters(in: .whitespaces).isEmpty else { return }
                 Task {
-                    await dataStore.addHouseholdMember(name: newName, avatar: newAvatar)
+                    await dataStore.addHouseholdMember(name: newName, avatar: "person.crop.circle.fill")
                     newName = ""
                 }
             }

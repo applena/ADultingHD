@@ -5,43 +5,34 @@ import UIKit
 
 @MainActor
 enum FeedbackManager {
+    #if os(iOS)
+    private static let notificationGenerator = UINotificationFeedbackGenerator()
+    private static let heavyImpact = UIImpactFeedbackGenerator(style: .heavy)
+    private static let mediumImpact = UIImpactFeedbackGenerator(style: .medium)
+    #endif
+
     static func taskCompleted() {
         #if os(iOS)
-        let generator = UINotificationFeedbackGenerator()
-        generator.notificationOccurred(.success)
+        notificationGenerator.notificationOccurred(.success)
         #endif
     }
 
     static func levelUp() {
         #if os(iOS)
-        let generator = UINotificationFeedbackGenerator()
-        generator.notificationOccurred(.success)
-        // Double tap for emphasis
+        notificationGenerator.notificationOccurred(.success)
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-            let impact = UIImpactFeedbackGenerator(style: .heavy)
-            impact.impactOccurred()
+            heavyImpact.impactOccurred()
         }
         #endif
     }
 
     static func achievementUnlocked() {
-        #if os(iOS)
-        let generator = UINotificationFeedbackGenerator()
-        generator.notificationOccurred(.success)
-        #endif
+        taskCompleted()
     }
 
     static func streakMilestone() {
         #if os(iOS)
-        let impact = UIImpactFeedbackGenerator(style: .medium)
-        impact.impactOccurred()
-        #endif
-    }
-
-    static func buttonTap() {
-        #if os(iOS)
-        let impact = UIImpactFeedbackGenerator(style: .light)
-        impact.impactOccurred()
+        mediumImpact.impactOccurred()
         #endif
     }
 }

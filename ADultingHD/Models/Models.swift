@@ -228,6 +228,13 @@ struct TaskCompletion: Codable, Identifiable {
 
 // MARK: - Supply Stock
 
+// MARK: - Array Extensions
+
+extension Array where Element == HouseholdTask {
+    var totalMinutes: Int { reduce(0) { $0 + $1.estimatedMinutes } }
+    var totalXP: Int { reduce(0) { $0 + $1.xpReward } }
+}
+
 enum SupplyStock: String, Codable, CaseIterable {
     case inStock = "In Stock"
     case low = "Low"
@@ -241,13 +248,6 @@ enum SupplyStock: String, Codable, CaseIterable {
         }
     }
 
-    var color: String {
-        switch self {
-        case .inStock: "green"
-        case .low: "orange"
-        case .out: "red"
-        }
-    }
 }
 
 // MARK: - User Profile

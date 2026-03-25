@@ -4,6 +4,17 @@ import Charts
 struct StatsView: View {
     @Environment(DataStore.self) private var dataStore
 
+    // Single-pass grouping of all completions by day — shared across all charts
+    private var completionsByDay: [Date: [TaskCompletion]] {
+        let calendar = Calendar.current
+        return Dictionary(grouping: dataStore.completions) { calendar.startOfDay(for: $0.completedAt) }
+    }
+
+    // Pre-built task ID → category lookup for O(1) category resolution
+    private var taskCategoryMap: [UUID: TaskCategory] {
+        Dictionary(uniqueKeysWithValues: dataStore.tasks.map { ($0.id, $0.category) })
+    }
+
     var body: some View {
         ScrollView {
             VStack(spacing: Theme.sectionSpacing) {
@@ -22,11 +33,10 @@ struct StatsView: View {
     private var xpPerDay: [(date: Date, xp: Int)] {
         let calendar = Calendar.current
         let today = calendar.startOfDay(for: Date())
+        let grouped = completionsByDay
         return (0..<14).reversed().compactMap { offset -> (Date, Int)? in
             guard let date = calendar.date(byAdding: .day, value: -offset, to: today) else { return nil }
-            let dayXP = dataStore.completions
-                .filter { calendar.isDate($0.completedAt, inSameDayAs: date) }
-                .reduce(0) { $0 + $1.xpEarned + $1.streakBonus }
+            let dayXP = (grouped[date] ?? []).reduce(0) { $0 + $1.xpEarned + $1.streakBonus }
             return (date, dayXP)
         }
     }
@@ -64,12 +74,10 @@ struct StatsView: View {
     private var completionsPerDay: [(date: Date, count: Int)] {
         let calendar = Calendar.current
         let today = calendar.startOfDay(for: Date())
+        let grouped = completionsByDay
         return (0..<30).reversed().compactMap { offset -> (Date, Int)? in
             guard let date = calendar.date(byAdding: .day, value: -offset, to: today) else { return nil }
-            let count = dataStore.completions
-                .filter { calendar.isDate($0.completedAt, inSameDayAs: date) }
-                .count
-            return (date, count)
+            return (date, (grouped[date] ?? []).count)
         }
     }
 
@@ -111,11 +119,16 @@ struct StatsView: View {
     // MARK: - Category Breakdown
 
     private var categoryData: [(category: TaskCategory, count: Int)] {
-        TaskCategory.allCases.compactMap { category in
-            let count = dataStore.completions.filter { completion in
-                dataStore.tasks.first { $0.id == completion.taskId }?.category == category
-            }.count
-            return count > 0 ? (category, count) : nil
+        let categoryMap = taskCategoryMap
+        var counts: [TaskCategory: Int] = [:]
+        for completion in dataStore.completions {
+            if let category = categoryMap[completion.taskId] {
+                counts[category, default: 0] += 1
+            }
+        }
+        return TaskCategory.allCases.compactMap { category in
+            guard let count = counts[category], count > 0 else { return nil }
+            return (category, count)
         }
     }
 
@@ -162,13 +175,7 @@ struct StatsView: View {
     // MARK: - Streak Calendar (GitHub-style heatmap, last 12 weeks)
 
     private var streakData: [Date: Int] {
-        let calendar = Calendar.current
-        var result: [Date: Int] = [:]
-        for completion in dataStore.completions {
-            let day = calendar.startOfDay(for: completion.completedAt)
-            result[day, default: 0] += 1
-        }
-        return result
+        completionsByDay.mapValues(\.count)
     }
 
     private var calendarWeeks: [[Date]] {

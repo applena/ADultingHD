@@ -33,6 +33,14 @@ enum Theme {
         }
     }
 
+    static func supplyStockColor(_ stock: SupplyStock) -> Color {
+        switch stock {
+        case .inStock: successGreen
+        case .low: streakOrange
+        case .out: warningRed
+        }
+    }
+
     static func difficultyColor(_ difficulty: Difficulty) -> Color {
         switch difficulty {
         case .easy: Color(red: 0.40, green: 0.82, blue: 0.60)

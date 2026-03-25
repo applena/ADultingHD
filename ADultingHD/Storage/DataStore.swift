@@ -14,8 +14,6 @@ final class DataStore {
     var supplyStock: [String: SupplyStock] = [:]
     var isLoaded = false
 
-    // Celebration state
-    var showCelebration = false
     var celebrationType: CelebrationOverlay.CelebrationType?
 
     private let store = TaskStore()
@@ -101,21 +99,21 @@ final class DataStore {
         let newLevel = profile.level
         if newLevel > previousLevel {
             celebrationType = .levelUp(newLevel)
-            showCelebration = true
+
             FeedbackManager.levelUp()
         } else if profile.unlockedAchievements.count > previousAchievements.count {
             let newId = profile.unlockedAchievements.first { !previousAchievements.contains($0) }
             let name = allAchievements.first { $0.id == newId }?.name ?? "Achievement"
             celebrationType = .achievement(name)
-            showCelebration = true
+
             FeedbackManager.achievementUnlocked()
         } else if [3, 7, 14, 30, 100].contains(profile.currentStreak) {
             celebrationType = .streakMilestone(profile.currentStreak)
-            showCelebration = true
+
             FeedbackManager.streakMilestone()
         } else {
             celebrationType = .taskComplete
-            showCelebration = true
+
             FeedbackManager.taskCompleted()
         }
 

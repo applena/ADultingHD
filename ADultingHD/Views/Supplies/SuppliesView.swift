@@ -88,7 +88,7 @@ struct SuppliesView: View {
                                 Text(stock.rawValue)
                                     .font(.caption)
                             }
-                            .foregroundStyle(Color(stock.color))
+                            .foregroundStyle(Theme.supplyStockColor(stock))
                         }
                         .buttonStyle(.plain)
 

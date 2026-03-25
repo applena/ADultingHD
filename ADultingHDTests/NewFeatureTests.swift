@@ -366,9 +366,11 @@ final class NewFeatureTests: XCTestCase {
         }
     }
 
-    func testSupplyStockColors() {
+    func testSupplyStockThemeColors() {
         for stock in SupplyStock.allCases {
-            XCTAssertFalse(stock.color.isEmpty, "\(stock.rawValue) should have a color")
+            // Verify Theme.supplyStockColor returns a non-default color
+            let color = Theme.supplyStockColor(stock)
+            XCTAssertNotEqual(color, .clear, "\(stock.rawValue) should have a theme color")
         }
     }
 
