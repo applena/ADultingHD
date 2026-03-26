@@ -236,14 +236,6 @@ struct DueTaskRow: View {
                 Text(task.name)
                     .font(.subheadline.weight(.medium))
                 HStack(spacing: 6) {
-                    if task.isOverdue {
-                        Text("OVERDUE")
-                            .font(.caption2.bold())
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 4)
-                            .padding(.vertical, 1)
-                            .background(Theme.warningRed, in: Capsule())
-                    }
                     Text("\(task.estimatedMinutes)m")
                         .font(.caption)
                         .foregroundStyle(.secondary)
