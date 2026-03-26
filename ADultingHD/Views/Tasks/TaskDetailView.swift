@@ -69,12 +69,12 @@ struct TaskDetailView: View {
                         .font(.title3.bold())
                         .foregroundStyle(Theme.xpGold)
                     if currentTask.isDue {
-                        Text(currentTask.isOverdue ? "OVERDUE" : "DUE")
+                        Text("DUE")
                             .font(.caption.bold())
                             .foregroundStyle(.white)
                             .padding(.horizontal, 8)
                             .padding(.vertical, 2)
-                            .background(currentTask.isOverdue ? Theme.warningRed : Theme.streakOrange, in: Capsule())
+                            .background(Theme.streakOrange, in: Capsule())
                     }
                 }
             }

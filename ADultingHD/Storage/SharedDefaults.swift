@@ -6,7 +6,6 @@ enum SharedDefaults {
 
     private enum Key {
         static let dueTasks = "widget_dueTasks"
-        static let overdueTasks = "widget_overdueTasks"
         static let streak = "widget_streak"
         static let level = "widget_level"
         static let levelTitle = "widget_levelTitle"
@@ -16,10 +15,9 @@ enum SharedDefaults {
         static let nextTask = "widget_nextTask"
     }
 
-    static func updateWidgetData(dueTasks: Int, overdueTasks: Int, streak: Int, level: Int, levelTitle: String, xpProgress: Double, totalXP: Int, todayCompleted: Int, nextTaskName: String?) {
+    static func updateWidgetData(dueTasks: Int, streak: Int, level: Int, levelTitle: String, xpProgress: Double, totalXP: Int, todayCompleted: Int, nextTaskName: String?) {
         guard let defaults else { return }
         defaults.set(dueTasks, forKey: Key.dueTasks)
-        defaults.set(overdueTasks, forKey: Key.overdueTasks)
         defaults.set(streak, forKey: Key.streak)
         defaults.set(level, forKey: Key.level)
         defaults.set(levelTitle, forKey: Key.levelTitle)
@@ -30,7 +28,6 @@ enum SharedDefaults {
     }
 
     static var dueTasks: Int { defaults?.integer(forKey: Key.dueTasks) ?? 0 }
-    static var overdueTasks: Int { defaults?.integer(forKey: Key.overdueTasks) ?? 0 }
     static var streak: Int { defaults?.integer(forKey: Key.streak) ?? 0 }
     static var level: Int { defaults?.integer(forKey: Key.level) ?? 0 }
     static var levelTitle: String { defaults?.string(forKey: Key.levelTitle) ?? "Rookie Roommate" }

@@ -132,7 +132,7 @@ struct TaskRow: View {
 
             if task.isDue && task.isActive {
                 Circle()
-                    .fill(task.isOverdue ? Theme.warningRed : Theme.streakOrange)
+                    .fill(Theme.streakOrange)
                     .frame(width: 8, height: 8)
             }
         }

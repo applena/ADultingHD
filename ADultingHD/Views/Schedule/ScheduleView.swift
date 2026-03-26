@@ -38,20 +38,12 @@ struct ScheduleView: View {
                     .card()
 
                 // Summary stats
-                let overdue = dataStore.overdueTasks.count
                 let due = dataStore.dueTasks.count
-                if overdue > 0 || due > 0 {
+                if due > 0 {
                     HStack(spacing: 12) {
-                        if overdue > 0 {
-                            Label("\(overdue) overdue", systemImage: "exclamationmark.triangle.fill")
-                                .font(.subheadline.bold())
-                                .foregroundStyle(Theme.warningRed)
-                        }
-                        if due > 0 {
-                            Label("\(due) due", systemImage: "clock.fill")
-                                .font(.subheadline)
-                                .foregroundStyle(Theme.streakOrange)
-                        }
+                        Label("\(due) due", systemImage: "clock.fill")
+                            .font(.subheadline)
+                            .foregroundStyle(Theme.streakOrange)
                     }
                     .frame(maxWidth: .infinity)
                     .card()
@@ -158,11 +150,6 @@ struct ScheduleView: View {
                                     Text("\(task.estimatedMinutes)m")
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
-                                    if task.isOverdue {
-                                        Image(systemName: "exclamationmark.circle.fill")
-                                            .foregroundStyle(Theme.warningRed)
-                                            .font(.caption)
-                                    }
                                 }
                             }
 

@@ -15,6 +15,9 @@ final class DataStore {
     var isLoaded = false
 
     var celebrationType: CelebrationOverlay.CelebrationType?
+    private let dailyClearBonusXP = 25
+    private let weeklyConsistencyBonusXP = 75
+    private let monthlyConsistencyBonusXP = 150
 
     private let store = TaskStore()
 
@@ -87,6 +90,12 @@ final class DataStore {
 
         if let idx = tasks.firstIndex(where: { $0.id == task.id }) {
             tasks[idx].lastCompleted = Date()
+        }
+
+        let periodBonus = applyPeriodBonusesIfEarned(at: completion.completedAt)
+        if periodBonus > 0 {
+            profile.totalXP += periodBonus
+            logger.info("Applied consistency bonus: +\(periodBonus)XP")
         }
 
         let previousLevel = profile.level
@@ -245,7 +254,6 @@ final class DataStore {
     private func updateWidgetData() {
         SharedDefaults.updateWidgetData(
             dueTasks: dueTasks.count,
-            overdueTasks: overdueTasks.count,
             streak: profile.currentStreak,
             level: profile.level,
             levelTitle: profile.levelTitle,
@@ -255,6 +263,77 @@ final class DataStore {
             nextTaskName: dueTasks.first?.name
         )
         WidgetCenter.shared.reloadAllTimelines()
+    }
+
+    // MARK: - Consistency Bonuses
+
+    private func applyPeriodBonusesIfEarned(at date: Date) -> Int {
+        var totalBonus = 0
+
+        if dueTasks.isEmpty {
+            totalBonus += awardIfFirst(for: "daily", at: date, xp: dailyClearBonusXP)
+        }
+
+        if earnedWeeklyConsistencyBonus(at: date) {
+            totalBonus += awardIfFirst(for: "weekly", at: date, xp: weeklyConsistencyBonusXP)
+        }
+
+        if earnedMonthlyConsistencyBonus(at: date) {
+            totalBonus += awardIfFirst(for: "monthly", at: date, xp: monthlyConsistencyBonusXP)
+        }
+
+        return totalBonus
+    }
+
+    private func earnedWeeklyConsistencyBonus(at date: Date) -> Bool {
+        let calendar = Calendar.current
+        guard let interval = calendar.dateInterval(of: .weekOfYear, for: date) else { return false }
+        let completedTaskIDs = Set(
+            completions
+                .filter { interval.contains($0.completedAt) }
+                .map(\.taskId)
+        )
+        let requiredTaskIDs = Set(activeTasks.map(\.id))
+        return !requiredTaskIDs.isEmpty && requiredTaskIDs.isSubset(of: completedTaskIDs)
+    }
+
+    private func earnedMonthlyConsistencyBonus(at date: Date) -> Bool {
+        let calendar = Calendar.current
+        guard let interval = calendar.dateInterval(of: .month, for: date) else { return false }
+        let completedTaskIDs = Set(
+            completions
+                .filter { interval.contains($0.completedAt) }
+                .map(\.taskId)
+        )
+        let requiredTaskIDs = Set(activeTasks.map(\.id))
+        return !requiredTaskIDs.isEmpty && requiredTaskIDs.isSubset(of: completedTaskIDs)
+    }
+
+    private func awardIfFirst(for period: String, at date: Date, xp: Int) -> Int {
+        let key = bonusPeriodKey(period: period, date: date)
+        let defaults = UserDefaults.standard
+        guard !defaults.bool(forKey: key) else { return 0 }
+        defaults.set(true, forKey: key)
+        return xp
+    }
+
+    private func bonusPeriodKey(period: String, date: Date) -> String {
+        let calendar = Calendar.current
+        let anchorDate: Date
+        switch period {
+        case "weekly":
+            anchorDate = calendar.dateInterval(of: .weekOfYear, for: date)?.start ?? date
+        case "monthly":
+            anchorDate = calendar.dateInterval(of: .month, for: date)?.start ?? date
+        default:
+            anchorDate = calendar.startOfDay(for: date)
+        }
+        let formatter = DateFormatter()
+        formatter.locale = .init(identifier: "en_US_POSIX")
+        formatter.timeZone = .current
+        formatter.dateFormat = "yyyy-MM-dd"
+        let stamp = formatter.string(from: anchorDate)
+        return "bonus_awarded_\(period)_\(stamp)"
     }
 
     // MARK: - Household Profiles

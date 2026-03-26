@@ -6,7 +6,6 @@ import SwiftUI
 struct TaskEntry: TimelineEntry {
     let date: Date
     let dueTasks: Int
-    let overdueTasks: Int
     let streak: Int
     let level: Int
     let levelTitle: String
@@ -20,7 +19,7 @@ struct TaskEntry: TimelineEntry {
 
 struct TaskTimelineProvider: TimelineProvider {
     func placeholder(in context: Context) -> TaskEntry {
-        TaskEntry(date: Date(), dueTasks: 5, overdueTasks: 1, streak: 7, level: 3, levelTitle: "Chore Champion", xpProgress: 0.6, totalXP: 450, todayCompleted: 2, nextTask: "Wash Dishes")
+        TaskEntry(date: Date(), dueTasks: 5, streak: 7, level: 3, levelTitle: "Chore Champion", xpProgress: 0.6, totalXP: 450, todayCompleted: 2, nextTask: "Wash Dishes")
     }
 
     func getSnapshot(in context: Context, completion: @escaping (TaskEntry) -> Void) {
@@ -37,7 +36,6 @@ struct TaskTimelineProvider: TimelineProvider {
         TaskEntry(
             date: Date(),
             dueTasks: SharedDefaults.dueTasks,
-            overdueTasks: SharedDefaults.overdueTasks,
             streak: SharedDefaults.streak,
             level: SharedDefaults.level,
             levelTitle: SharedDefaults.levelTitle,
@@ -73,11 +71,6 @@ struct SmallWidgetView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
-            if entry.overdueTasks > 0 {
-                Text("\(entry.overdueTasks) overdue")
-                    .font(.caption2.bold())
-                    .foregroundStyle(.red)
-            }
         }
         .containerBackground(.fill.tertiary, for: .widget)
     }
