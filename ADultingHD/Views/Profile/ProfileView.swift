@@ -28,7 +28,7 @@ struct ProfileView: View {
             }
             .padding()
         }
-        .navigationTitle("Profile")
+        .navigationTitle("")
         #if os(iOS)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
@@ -46,18 +46,46 @@ struct ProfileView: View {
 
     private var levelCard: some View {
         VStack(spacing: 16) {
-            // Avatar area
-            ZStack {
-                Circle()
-                    .fill(Theme.levelPurple.opacity(0.15))
-                    .frame(width: 80, height: 80)
-                Text("\(dataStore.profile.level)")
-                    .font(.system(size: 32, weight: .bold, design: .rounded))
-                    .foregroundStyle(Theme.levelPurple)
-            }
+            // Avatar
+            NavigationLink {
+                AvatarShopView()
+            } label: {
+                VStack(spacing: 8) {
+                    AvatarView(avatarState: dataStore.profile.avatarState, size: 100)
 
-            Text(dataStore.profile.levelTitle)
-                .font(.title2.bold())
+                    HStack(spacing: 4) {
+                        Text("Customize")
+                            .font(.caption)
+                            .foregroundStyle(Theme.levelPurple)
+                        Image(systemName: "chevron.right")
+                            .font(.caption2)
+                            .foregroundStyle(Theme.levelPurple)
+                    }
+                }
+            }
+            .buttonStyle(.plain)
+
+            // Level info
+            HStack(spacing: 8) {
+                ZStack {
+                    Circle()
+                        .fill(Theme.levelPurple.opacity(0.15))
+                        .frame(width: 36, height: 36)
+                    Text("\(dataStore.profile.level)")
+                        .font(.system(size: 16, weight: .bold, design: .rounded))
+                        .foregroundStyle(Theme.levelPurple)
+                }
+                Text(dataStore.profile.levelTitle)
+                    .font(.headline)
+                Spacer()
+                HStack(spacing: 4) {
+                    Image(systemName: "dollarsign.circle.fill")
+                        .foregroundStyle(Theme.xpGold)
+                    Text("\(dataStore.profile.coins)")
+                        .font(.subheadline.bold())
+                        .foregroundStyle(Theme.xpGold)
+                }
+            }
 
             // XP Progress
             VStack(spacing: 6) {

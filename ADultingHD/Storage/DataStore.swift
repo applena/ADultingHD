@@ -86,6 +86,7 @@ final class DataStore {
 
         completions.insert(completion, at: 0)
         profile.totalXP += xpEarned + streakBonus
+        profile.coins += xpEarned + streakBonus
         profile.totalTasksCompleted += 1
 
         if let idx = tasks.firstIndex(where: { $0.id == task.id }) {
@@ -154,6 +155,26 @@ final class DataStore {
             tasks[idx] = task
             await store.saveTasks(tasks)
         }
+    }
+
+    // MARK: - Avatar
+
+    func purchaseAvatarItem(_ item: AvatarItem) async {
+        guard profile.coins >= item.cost else { return }
+        profile.coins -= item.cost
+        profile.avatarState.purchase(item)
+        profile.avatarState.equip(item)
+        await store.saveProfile(profile)
+    }
+
+    func equipAvatarItem(_ item: AvatarItem) async {
+        profile.avatarState.equip(item)
+        await store.saveProfile(profile)
+    }
+
+    func unequipAvatarItem(slot: AvatarSlot) async {
+        profile.avatarState.unequip(slot: slot)
+        await store.saveProfile(profile)
     }
 
     // MARK: - Supply Stock

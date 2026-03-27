@@ -1,7 +1,33 @@
 import SwiftUI
 
+// MARK: - Tips
+
+private let gameTips: [String] = [
+    "Clear all your due tasks in a day to earn a 25 XP bonus!",
+    "Complete every active task in a week for a 75 XP consistency bonus.",
+    "Hit every task in a month and you'll earn a massive 150 XP bonus.",
+    "Keep your streak alive! Each day adds up to +50 bonus XP per task.",
+    "When completing a task, expand the description to see exactly what's involved.",
+    "Add notes when you complete a task to track what you did.",
+    "Tap the frequency on any task to change how often it's due.",
+    "Coins are earned alongside XP — spend them in the Avatar Shop!",
+    "Unlock new characters, hats, and accessories as you level up.",
+    "Complete 5 tasks in one day to unlock the \"Productive Day\" achievement.",
+    "Your streak resets if you skip a day — don't break the chain!",
+    "Higher-difficulty tasks earn more XP. Challenge yourself!",
+    "Less-frequent tasks (monthly, quarterly) earn extra XP per completion.",
+    "Browse the All Tasks tab to discover new tasks to add to your list.",
+    "You can create your own custom tasks from the All Tasks tab.",
+    "Check the Supplies view to track what cleaning products you need.",
+    "Longer tasks earn a time bonus — every 10 minutes adds +2 XP.",
+    "Reach level 5 to unlock the Panda and the Crown in the shop!",
+    "Completing a task early (before it's due) can unlock the Early Bird achievement.",
+    "Seasonal tasks appear on your dashboard — add them before the season ends!",
+]
+
 struct DashboardView: View {
     @Environment(DataStore.self) private var dataStore
+    @AppStorage("showSeasonalSection") private var showSeasonalSection = true
 
     private var greeting: String {
         let hour = Calendar.current.component(.hour, from: Date())
@@ -22,10 +48,16 @@ struct DashboardView: View {
         return "You've got \(due) tasks to tackle. You got this!"
     }
 
+    private var currentTip: String {
+        let day = Calendar.current.ordinality(of: .day, in: .year, for: Date()) ?? 0
+        return gameTips[day % gameTips.count]
+    }
+
     var body: some View {
         ScrollView {
             VStack(spacing: Theme.sectionSpacing) {
                 heroSection
+                tipBanner
                 statsRow
 
                 if !dataStore.dueTasks.isEmpty {
@@ -40,7 +72,7 @@ struct DashboardView: View {
             }
             .padding()
         }
-        .navigationTitle("Home")
+        .navigationTitle("")
     }
 
     // MARK: - Hero Section
@@ -58,14 +90,7 @@ struct DashboardView: View {
             }
 
             HStack(spacing: 12) {
-                ZStack {
-                    Circle()
-                        .fill(Theme.levelPurple.opacity(0.15))
-                        .frame(width: 44, height: 44)
-                    Text("\(dataStore.profile.level)")
-                        .font(.system(size: 20, weight: .bold, design: .rounded))
-                        .foregroundStyle(Theme.levelPurple)
-                }
+                CompactAvatarView(avatarState: dataStore.profile.avatarState, size: 44)
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(dataStore.profile.levelTitle)
@@ -87,6 +112,23 @@ struct DashboardView: View {
             }
         }
         .card()
+    }
+
+    // MARK: - Tip Banner
+
+    private var tipBanner: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "lightbulb.fill")
+                .font(.title3)
+                .foregroundStyle(Theme.xpGold)
+
+            Text(currentTip)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(12)
+        .background(Theme.xpGold.opacity(0.08), in: RoundedRectangle(cornerRadius: Theme.cornerRadius))
     }
 
     // MARK: - Stats Row
@@ -156,36 +198,43 @@ struct DashboardView: View {
                         Label("\(Season.current.rawValue) Tasks", systemImage: Season.current.icon)
                             .font(.headline)
                         Spacer()
-                        Text("Seasonal")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                        Button {
+                            withAnimation { showSeasonalSection.toggle() }
+                        } label: {
+                            Text(showSeasonalSection ? "Hide" : "Show")
+                                .font(.caption)
+                                .foregroundStyle(Theme.accent)
+                        }
+                        .buttonStyle(.plain)
                     }
 
-                    ForEach(seasonalSuggestions) { suggestion in
-                        HStack(spacing: 10) {
-                            Image(systemName: suggestion.category.icon)
-                                .foregroundStyle(Theme.categoryColor(suggestion.category))
-                                .frame(width: 24)
+                    if showSeasonalSection {
+                        ForEach(seasonalSuggestions) { suggestion in
+                            HStack(spacing: 10) {
+                                Image(systemName: suggestion.category.icon)
+                                    .foregroundStyle(Theme.categoryColor(suggestion.category))
+                                    .frame(width: 24)
 
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(suggestion.name)
-                                    .font(.subheadline.weight(.medium))
-                                Text("\(suggestion.estimatedMinutes)m · \(suggestion.difficulty.label)")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(suggestion.name)
+                                        .font(.subheadline.weight(.medium))
+                                    Text("\(suggestion.estimatedMinutes)m · \(suggestion.difficulty.label)")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+
+                                Spacer()
+
+                                Button {
+                                    Task { await dataStore.addCustomTask(suggestion.toTask()) }
+                                } label: {
+                                    Image(systemName: "plus.circle.fill")
+                                        .foregroundStyle(Theme.accent)
+                                }
+                                .buttonStyle(.plain)
                             }
-
-                            Spacer()
-
-                            Button {
-                                Task { await dataStore.addCustomTask(suggestion.toTask()) }
-                            } label: {
-                                Image(systemName: "plus.circle.fill")
-                                    .foregroundStyle(Theme.accent)
-                            }
-                            .buttonStyle(.plain)
+                            .padding(.vertical, 2)
                         }
-                        .padding(.vertical, 2)
                     }
                 }
                 .card()
@@ -269,7 +318,7 @@ struct CompleteTaskSheet: View {
     @Environment(DataStore.self) private var dataStore
     @Environment(\.dismiss) private var dismiss
     let task: HouseholdTask
-    @State private var quality: CompletionQuality = .normal
+    @State private var showDescription = false
     @State private var notes = ""
 
     var body: some View {
@@ -281,23 +330,47 @@ struct CompleteTaskSheet: View {
                             .foregroundStyle(Theme.categoryColor(task.category))
                         Text(task.name)
                             .font(.headline)
+                        Spacer()
+                        HStack(spacing: 4) {
+                            Image(systemName: "star.fill")
+                                .font(.caption)
+                            Text("+\(task.xpReward) XP")
+                                .font(.subheadline.bold())
+                        }
+                        .foregroundStyle(Theme.xpGold)
+                    }
+
+                    if !task.description.isEmpty {
+                        Button {
+                            withAnimation { showDescription.toggle() }
+                        } label: {
+                            HStack {
+                                Text("What's involved")
+                                    .font(.subheadline)
+                                    .foregroundStyle(.primary)
+                                Spacer()
+                                Image(systemName: showDescription ? "chevron.up" : "chevron.down")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        .buttonStyle(.plain)
+
+                        if showDescription {
+                            Text(task.description)
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
                     }
                 }
 
-                Section("How thorough?") {
-                    Picker("Quality", selection: $quality) {
-                        ForEach(CompletionQuality.allCases) { q in
-                            Label(q.label, systemImage: q.icon).tag(q)
+                if !task.supplies.isEmpty {
+                    Section("Supplies needed") {
+                        ForEach(task.supplies, id: \.self) { supply in
+                            Label(supply, systemImage: "circle.fill")
+                                .font(.subheadline)
+                                .labelStyle(SupplyLabelStyle())
                         }
-                    }
-                    .pickerStyle(.segmented)
-
-                    HStack {
-                        Text("XP Reward")
-                        Spacer()
-                        Text("+\(Int(Double(task.xpReward) * quality.xpMultiplier)) XP")
-                            .bold()
-                            .foregroundStyle(Theme.xpGold)
                     }
                 }
 
@@ -317,12 +390,23 @@ struct CompleteTaskSheet: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") {
                         Task {
-                            await dataStore.completeTask(task, notes: notes.isEmpty ? nil : notes, quality: quality)
+                            await dataStore.completeTask(task, notes: notes.isEmpty ? nil : notes)
                             dismiss()
                         }
                     }
                 }
             }
+        }
+    }
+}
+
+struct SupplyLabelStyle: LabelStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        HStack(spacing: 8) {
+            configuration.icon
+                .font(.system(size: 5))
+                .foregroundStyle(.secondary)
+            configuration.title
         }
     }
 }

@@ -4,6 +4,7 @@ struct TaskDetailView: View {
     @Environment(DataStore.self) private var dataStore
     let task: HouseholdTask
     @State private var showComplete = false
+    @State private var showFrequencyPicker = false
 
     private var currentTask: HouseholdTask {
         dataStore.tasks.first { $0.id == task.id } ?? task
@@ -91,7 +92,11 @@ struct TaskDetailView: View {
 
     private var detailsCard: some View {
         LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-            DetailItem(label: "Frequency", value: currentTask.frequency.rawValue, icon: currentTask.frequency.icon)
+            Button { showFrequencyPicker = true } label: {
+                DetailItem(label: "Frequency", value: currentTask.frequency.rawValue, icon: currentTask.frequency.icon)
+            }
+            .buttonStyle(.plain)
+
             DetailItem(label: "Difficulty", value: currentTask.difficulty.label, icon: currentTask.difficulty.icon)
             DetailItem(label: "Est. Time", value: "\(currentTask.estimatedMinutes) min", icon: "clock")
 
@@ -102,6 +107,9 @@ struct TaskDetailView: View {
             }
         }
         .card()
+        .sheet(isPresented: $showFrequencyPicker) {
+            FrequencyPickerSheet(task: currentTask)
+        }
     }
 
     // MARK: - Supplies
@@ -112,13 +120,9 @@ struct TaskDetailView: View {
                 .font(.headline)
 
             ForEach(currentTask.supplies, id: \.self) { supply in
-                HStack(spacing: 8) {
-                    Image(systemName: "circle.fill")
-                        .font(.system(size: 5))
-                        .foregroundStyle(.secondary)
-                    Text(supply)
-                        .font(.subheadline)
-                }
+                Label(supply, systemImage: "circle.fill")
+                    .font(.subheadline)
+                    .labelStyle(SupplyLabelStyle())
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -179,6 +183,74 @@ struct TaskDetailView: View {
             }
         }
         .card()
+    }
+}
+
+// MARK: - Frequency Picker
+
+struct FrequencyPickerSheet: View {
+    @Environment(DataStore.self) private var dataStore
+    @Environment(\.dismiss) private var dismiss
+    let task: HouseholdTask
+    @State private var selected: TaskFrequency
+
+    init(task: HouseholdTask) {
+        self.task = task
+        self._selected = State(initialValue: task.frequency)
+    }
+
+    var body: some View {
+        NavigationStack {
+            List {
+                ForEach(TaskFrequency.allCases) { freq in
+                    Button {
+                        selected = freq
+                    } label: {
+                        HStack(spacing: 12) {
+                            Image(systemName: freq.icon)
+                                .foregroundStyle(Theme.categoryColor(.general))
+                                .frame(width: 24)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(freq.rawValue)
+                                    .font(.body)
+                                Text("Every \(freq.days) day\(freq.days == 1 ? "" : "s")")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            if freq == selected {
+                                Image(systemName: "checkmark")
+                                    .foregroundStyle(Theme.successGreen)
+                                    .fontWeight(.semibold)
+                            }
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .navigationTitle("Frequency")
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        var updated = task
+                        updated.frequency = selected
+                        Task { await dataStore.updateTask(updated) }
+                        dismiss()
+                    }
+                    .disabled(selected == task.frequency)
+                }
+            }
+        }
+        #if os(iOS)
+        .presentationDetents([.medium])
+        #endif
     }
 }
 

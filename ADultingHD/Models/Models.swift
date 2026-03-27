@@ -257,12 +257,14 @@ struct UserProfile: Codable, Identifiable {
     var name: String = "Player 1"
     var avatar: String = "person.crop.circle.fill"
     var totalXP: Int = 0
+    var coins: Int = 0
     var currentStreak: Int = 0
     var longestStreak: Int = 0
     var lastActiveDate: Date?
     var unlockedAchievements: [String] = []
     var totalTasksCompleted: Int = 0
     var joinDate: Date = Date()
+    var avatarState: AvatarState = AvatarState()
 
     var level: Int {
         // Each level requires progressively more XP: level N needs N*100 XP

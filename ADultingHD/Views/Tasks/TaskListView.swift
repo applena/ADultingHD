@@ -1,16 +1,64 @@
 import SwiftUI
 
+// MARK: - Navigation
+
+enum TaskNavDestination: Hashable {
+    case detail(HouseholdTask)
+}
+
+enum TaskTab: String, CaseIterable {
+    case myTasks = "My Tasks"
+    case allTasks = "All Tasks"
+}
+
 struct TaskListView: View {
     @Environment(DataStore.self) private var dataStore
+    @State private var selectedTab: TaskTab = .myTasks
     @State private var selectedCategory: TaskCategory?
     @State private var searchText = ""
-    @State private var showActiveOnly = false
-    @State private var showAddTask = false
+    @State private var showAddCustom = false
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Picker("View", selection: $selectedTab) {
+                ForEach(TaskTab.allCases, id: \.self) { tab in
+                    Text(tab.rawValue).tag(tab)
+                }
+            }
+            .pickerStyle(.segmented)
+            .padding(.horizontal)
+            .padding(.vertical, 8)
+            .onChange(of: selectedTab) {
+                selectedCategory = nil
+            }
+
+            Group {
+                switch selectedTab {
+                case .myTasks:
+                    myTasksList
+                case .allTasks:
+                    catalogList
+                }
+            }
+        }
+        .searchable(text: $searchText, prompt: selectedTab == .myTasks ? "Search my tasks..." : "Search all tasks...")
+        .navigationTitle("")
+        .navigationDestination(for: TaskNavDestination.self) { destination in
+            switch destination {
+            case .detail(let task):
+                TaskDetailView(task: task)
+            }
+        }
+        .sheet(isPresented: $showAddCustom) {
+            AddTaskView()
+        }
+    }
+
+    // MARK: - My Tasks
 
     private var filteredTasks: [HouseholdTask] {
         var result = dataStore.tasks
         if let cat = selectedCategory { result = result.filter { $0.category == cat } }
-        if showActiveOnly { result = result.filter(\.isActive) }
         if !searchText.isEmpty {
             result = result.filter {
                 $0.name.localizedCaseInsensitiveContains(searchText) ||
@@ -25,37 +73,22 @@ struct TaskListView: View {
             .sorted { $0.key.rawValue < $1.key.rawValue }
     }
 
-    var body: some View {
+    private var myTasksList: some View {
         List {
-            // Category Filter
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    FilterChip(label: "All", isSelected: selectedCategory == nil) {
-                        selectedCategory = nil
-                    }
-                    ForEach(TaskCategory.allCases) { category in
-                        FilterChip(
-                            label: category.rawValue,
-                            icon: category.icon,
-                            isSelected: selectedCategory == category
-                        ) {
-                            selectedCategory = selectedCategory == category ? nil : category
-                        }
-                    }
+            categoryFilter
+
+            if groupedTasks.isEmpty {
+                ContentUnavailableView {
+                    Label("No Tasks Yet", systemImage: "checklist")
+                } description: {
+                    Text("Switch to All Tasks to browse and add tasks to your list.")
                 }
-                .padding(.vertical, 4)
             }
-            .listRowInsets(EdgeInsets())
-            .listRowBackground(Color.clear)
 
-            // Toggle
-            Toggle("Active tasks only", isOn: $showActiveOnly)
-
-            // Task List
             ForEach(groupedTasks, id: \.0) { category, tasks in
                 Section {
                     ForEach(tasks) { task in
-                        NavigationLink(value: task) {
+                        NavigationLink(value: TaskNavDestination.detail(task)) {
                             TaskRow(task: task)
                         }
                     }
@@ -65,23 +98,96 @@ struct TaskListView: View {
                 }
             }
         }
-        .searchable(text: $searchText, prompt: "Search tasks...")
-        .navigationTitle("Tasks")
-        .navigationDestination(for: HouseholdTask.self) { task in
-            TaskDetailView(task: task)
+    }
+
+    // MARK: - All Tasks Catalog
+
+    private var existingTaskNames: Set<String> {
+        Set(dataStore.tasks.map { $0.name.lowercased() })
+    }
+
+    private var filteredCatalog: [CatalogTask] {
+        var result = taskCatalog
+        if let cat = selectedCategory { result = result.filter { $0.category == cat } }
+        if !searchText.isEmpty {
+            result = result.filter {
+                $0.name.localizedCaseInsensitiveContains(searchText) ||
+                $0.description.localizedCaseInsensitiveContains(searchText)
+            }
         }
-        .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                Button {
-                    showAddTask = true
-                } label: {
-                    Image(systemName: "plus")
+        return result
+    }
+
+    private var groupedCatalog: [(TaskCategory, [CatalogTask])] {
+        Dictionary(grouping: filteredCatalog, by: \.category)
+            .sorted { $0.key.rawValue < $1.key.rawValue }
+    }
+
+    private var catalogList: some View {
+        List {
+            categoryFilter
+
+            Section {
+                Button { showAddCustom = true } label: {
+                    HStack(spacing: 12) {
+                        Image(systemName: "plus.circle.fill")
+                            .font(.title2)
+                            .foregroundStyle(Theme.accent)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Create Custom Task")
+                                .font(.body.weight(.medium))
+                                .foregroundStyle(.primary)
+                            Text("Add your own task with a custom schedule")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+                    }
+                }
+                .buttonStyle(.plain)
+            }
+
+            ForEach(groupedCatalog, id: \.0) { category, tasks in
+                Section {
+                    ForEach(tasks) { catalogTask in
+                        CatalogRow(
+                            catalogTask: catalogTask,
+                            alreadyAdded: existingTaskNames.contains(catalogTask.name.lowercased())
+                        )
+                    }
+                } header: {
+                    Label(category.rawValue, systemImage: category.icon)
+                        .foregroundStyle(Theme.categoryColor(category))
                 }
             }
         }
-        .sheet(isPresented: $showAddTask) {
-            AddTaskView()
+    }
+
+    // MARK: - Shared
+
+    private var categoryFilter: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                FilterChip(label: "All", isSelected: selectedCategory == nil) {
+                    selectedCategory = nil
+                }
+                ForEach(TaskCategory.allCases) { category in
+                    FilterChip(
+                        label: category.rawValue,
+                        icon: category.icon,
+                        isSelected: selectedCategory == category
+                    ) {
+                        selectedCategory = selectedCategory == category ? nil : category
+                    }
+                }
+            }
+            .padding(.vertical, 4)
         }
+        .listRowInsets(EdgeInsets())
+        .listRowBackground(Color.clear)
     }
 }
 
@@ -104,19 +210,7 @@ struct TaskRow: View {
                     .font(.body.weight(.medium))
                     .strikethrough(!task.isActive, color: .secondary)
 
-                HStack(spacing: 8) {
-                    Label(task.frequency.rawValue, systemImage: task.frequency.icon)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-
-                    Label(task.difficulty.label, systemImage: task.difficulty.icon)
-                        .font(.caption)
-                        .foregroundStyle(Theme.difficultyColor(task.difficulty))
-
-                    Text("\(task.estimatedMinutes)m")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
+                TaskMetadataRow(frequency: task.frequency, difficulty: task.difficulty, estimatedMinutes: task.estimatedMinutes)
             }
 
             Spacer()
@@ -137,6 +231,76 @@ struct TaskRow: View {
             }
         }
         .padding(.vertical, 2)
+    }
+}
+
+// MARK: - Catalog Row
+
+struct CatalogRow: View {
+    @Environment(DataStore.self) private var dataStore
+    let catalogTask: CatalogTask
+    let alreadyAdded: Bool
+    @State private var justAdded = false
+
+    var body: some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(catalogTask.name)
+                    .font(.body.weight(.medium))
+
+                Text(catalogTask.description)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+
+                TaskMetadataRow(frequency: catalogTask.suggestedFrequency, difficulty: catalogTask.difficulty, estimatedMinutes: catalogTask.estimatedMinutes)
+            }
+
+            Spacer()
+
+            if alreadyAdded || justAdded {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(Theme.successGreen)
+                    .imageScale(.large)
+            } else {
+                Button {
+                    let task = catalogTask.toHouseholdTask()
+                    Task { await dataStore.addCustomTask(task) }
+                    withAnimation { justAdded = true }
+                    FeedbackManager.taskCompleted()
+                } label: {
+                    Image(systemName: "plus.circle.fill")
+                        .foregroundStyle(Theme.accent)
+                        .imageScale(.large)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.vertical, 2)
+    }
+}
+
+// MARK: - Task Metadata Row
+
+struct TaskMetadataRow: View {
+    let frequency: TaskFrequency
+    let difficulty: Difficulty
+    let estimatedMinutes: Int
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Label(frequency.rawValue, systemImage: frequency.icon)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            Label(difficulty.label, systemImage: difficulty.icon)
+                .font(.caption)
+                .foregroundStyle(Theme.difficultyColor(difficulty))
+
+            Text("\(estimatedMinutes)m")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
     }
 }
 

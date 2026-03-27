@@ -25,7 +25,7 @@ struct StatsView: View {
             }
             .padding()
         }
-        .navigationTitle("Stats")
+        .navigationTitle("")
     }
 
     // MARK: - XP Per Day (last 14 days)

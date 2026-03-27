@@ -172,7 +172,7 @@ struct ScheduleView: View {
             }
             .padding()
         }
-        .navigationTitle("Schedule")
+        .navigationTitle("")
         .sheet(isPresented: $showPowerHour) {
             PowerHourView(tasks: todayTasks)
         }
