@@ -2,6 +2,7 @@ import SwiftUI
 
 struct AvatarShopView: View {
     @Environment(DataStore.self) private var dataStore
+    @Environment(StoreManager.self) private var storeManager
     @State private var selectedSlot: AvatarSlot = .base
 
     private var coins: Int { dataStore.profile.coins }
@@ -26,6 +27,10 @@ struct AvatarShopView: View {
 
                 // Items Grid
                 itemsGrid
+
+                if !storeManager.isPro {
+                    ProPromptCard(title: "Full Avatar Shop", icon: "paintpalette.fill")
+                }
             }
             .padding()
         }
@@ -139,6 +144,7 @@ struct AvatarShopView: View {
 
 private struct ShopItemCard: View {
     @Environment(DataStore.self) private var dataStore
+    @Environment(StoreManager.self) private var storeManager
     let item: AvatarItem
 
     private var profile: UserProfile { dataStore.profile }
@@ -146,6 +152,7 @@ private struct ShopItemCard: View {
     private var equipped: Bool { profile.avatarState.equipped(slot: item.slot) == item.id }
     private var canAfford: Bool { profile.coins >= item.cost }
     private var levelLocked: Bool { profile.level < item.unlockLevel }
+    private var proLocked: Bool { !storeManager.isPro && item.cost > 0 && !owned }
 
     var body: some View {
         Button { handleTap() } label: {
@@ -158,10 +165,10 @@ private struct ShopItemCard: View {
                         .font(.system(size: 30))
                         .opacity(levelLocked && !owned ? 0.3 : 1.0)
 
-                    if levelLocked && !owned {
+                    if (levelLocked && !owned) || proLocked {
                         Image(systemName: "lock.fill")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(proLocked ? Theme.xpGold : .secondary)
                             .offset(x: 18, y: 18)
                     }
                 }
@@ -180,6 +187,10 @@ private struct ShopItemCard: View {
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                     }
+                } else if proLocked {
+                    Text("Pro")
+                        .font(.caption2.bold())
+                        .foregroundStyle(Theme.xpGold)
                 } else if levelLocked {
                     Text("Lvl \(item.unlockLevel)")
                         .font(.caption2)
@@ -206,7 +217,7 @@ private struct ShopItemCard: View {
             )
         }
         .buttonStyle(.plain)
-        .disabled(levelLocked && !owned)
+        .disabled((levelLocked && !owned) || proLocked)
     }
 
     private func handleTap() {

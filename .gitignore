@@ -17,3 +17,8 @@ Pods/
 
 # Editor/terminal themes
 .ghostty-theme
+screenshots.xcresult/
+ipad_screenshots.xcresult/
+screenshots/
+ipad_screenshots/
+asc_screenshots_uploaded.png

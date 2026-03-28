@@ -3,6 +3,7 @@ import Charts
 
 struct StatsView: View {
     @Environment(DataStore.self) private var dataStore
+    @Environment(StoreManager.self) private var storeManager
 
     // Single-pass grouping of all completions by day — shared across all charts
     private var completionsByDay: [Date: [TaskCompletion]] {
@@ -18,9 +19,13 @@ struct StatsView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: Theme.sectionSpacing) {
-                xpPerDayChart
-                completionTrendChart
-                categoryBreakdownChart
+                if storeManager.isPro {
+                    xpPerDayChart
+                    completionTrendChart
+                    categoryBreakdownChart
+                } else {
+                    ProPromptCard(title: "Pro Analytics", icon: "chart.bar.fill")
+                }
                 streakCalendar
             }
             .padding()

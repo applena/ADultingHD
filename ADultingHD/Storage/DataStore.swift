@@ -50,6 +50,20 @@ final class DataStore {
     // MARK: - Load
 
     func load() async {
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("-demo") {
+            let demo = DemoData.generate()
+            tasks = demo.tasks
+            profile = demo.profile
+            completions = demo.completions
+            supplyStock = demo.supplyStock
+            householdProfiles = demo.householdProfiles
+            isLoaded = true
+            logger.info("🎬 Demo data loaded")
+            return
+        }
+        #endif
+
         let loadedTasks = await store.loadTasks()
         let loadedProfile = await store.loadProfile()
         let loadedCompletions = await store.loadCompletions()

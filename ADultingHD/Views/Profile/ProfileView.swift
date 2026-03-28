@@ -2,9 +2,15 @@ import SwiftUI
 
 struct ProfileView: View {
     @Environment(DataStore.self) private var dataStore
+    @Environment(StoreManager.self) private var storeManager
 
     private var unlockedCount: Int { dataStore.profile.unlockedAchievements.count }
     private var totalCount: Int { allAchievements.count }
+
+    private var visibleAchievements: [Achievement] {
+        if storeManager.isPro { return allAchievements }
+        return allAchievements.filter { StoreManager.freeAchievementIDs.contains($0.id) }
+    }
 
     var body: some View {
         ScrollView {
@@ -19,7 +25,7 @@ struct ProfileView: View {
                 achievementsSection
 
                 // Household
-                if dataStore.householdProfiles.count > 1 {
+                if storeManager.isPro && dataStore.householdProfiles.count > 1 {
                     leaderboardPreview
                 }
 
@@ -134,11 +140,15 @@ struct ProfileView: View {
             }
 
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
-                ForEach(allAchievements) { achievement in
+                ForEach(visibleAchievements) { achievement in
                     let unlocked = dataStore.profile.unlockedAchievements.contains(achievement.id)
                     let progress = achievement.progressFraction(dataStore.profile, dataStore.completions)
                     AchievementCard(achievement: achievement, unlocked: unlocked, progress: progress)
                 }
+            }
+
+            if !storeManager.isPro {
+                ProPromptCard(title: "All 18 Achievements", icon: "medal.fill")
             }
         }
         .card()

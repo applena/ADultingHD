@@ -111,6 +111,7 @@ struct SuppliesView: View {
 
 struct ShoppingListView: View {
     @Environment(DataStore.self) private var dataStore
+    @Environment(StoreManager.self) private var storeManager
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -146,7 +147,7 @@ struct ShoppingListView: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") { dismiss() }
                 }
-                if !dataStore.shoppingList.isEmpty {
+                if !dataStore.shoppingList.isEmpty && storeManager.isPro {
                     ToolbarItem(placement: .primaryAction) {
                         ShareLink(item: shareText)
                     }

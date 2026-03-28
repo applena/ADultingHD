@@ -11,11 +11,25 @@ settings:
   base:
     DEVELOPMENT_TEAM: TYQ32QCF6K
     MARKETING_VERSION: "1.0.0"
-    CURRENT_PROJECT_VERSION: 8
+    CURRENT_PROJECT_VERSION: 9
     SWIFT_VERSION: "6.0"
     DEAD_CODE_STRIPPING: YES
     ENABLE_USER_SCRIPT_SANDBOXING: YES
     SWIFT_EMIT_LOC_STRINGS: YES
+
+schemes:
+  ADultingHD_iOS:
+    build:
+      targets:
+        ADultingHD_iOS: all
+        ADultingHDUITests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - ADultingHDTests_iOS
+        - ADultingHDUITests
 
 targets:
   ADultingHD:
@@ -74,7 +88,7 @@ targets:
         SWIFT_EMIT_LOC_STRINGS: YES
         GENERATE_INFOPLIST_FILE: YES
         MARKETING_VERSION: "1.0.0"
-        CURRENT_PROJECT_VERSION: 8
+        CURRENT_PROJECT_VERSION: 9
 
   ADultingHDTests_iOS:
     type: bundle.unit-test
@@ -97,3 +111,14 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: net.shadowpuppet.ADultingHD.tests
+
+  ADultingHDUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - ADultingHDUITests
+    dependencies:
+      - target: ADultingHD_iOS
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: net.shadowpuppet.ADultingHD.uitests

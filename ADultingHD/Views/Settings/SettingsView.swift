@@ -1,12 +1,30 @@
 import SwiftUI
+#if os(iOS)
+import MessageUI
+#endif
 
 struct SettingsView: View {
     @Environment(DataStore.self) private var dataStore
     @Environment(NotificationManager.self) private var notificationManager
+    @Environment(StoreManager.self) private var storeManager
     @State private var showResetConfirm = false
     @State private var showExportShare = false
     @State private var showImportPicker = false
     @State private var importMessage: String?
+    @State private var showProUpgrade = false
+    @State private var showingMailComposer = false
+
+    private static let feedbackEmail = "adultinghd@shadowpuppet.net"
+    private static let privacyURL = URL(string: "https://adameivy.com/ADultingHD.online/privacy.html")!
+    private static let termsURL = URL(string: "https://adameivy.com/ADultingHD.online/terms.html")!
+
+    private var appVersion: String {
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—"
+    }
+
+    private var buildNumber: String {
+        Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "—"
+    }
 
     private var reminderTime: Binding<Date> {
         Binding(
@@ -43,6 +61,32 @@ struct SettingsView: View {
                     Text("Get daily reminders about due tasks")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                }
+            }
+
+            // Pro
+            if !storeManager.isPro {
+                Section {
+                    Button { showProUpgrade = true } label: {
+                        HStack(spacing: 12) {
+                            Image(systemName: "crown.fill")
+                                .font(.title2)
+                                .foregroundStyle(Theme.xpGold)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Upgrade to Pro")
+                                    .font(.headline)
+                                    .foregroundStyle(.primary)
+                                Text("One-time purchase \u{2014} unlock all features")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.caption)
+                                .foregroundStyle(.tertiary)
+                        }
+                    }
+                    .buttonStyle(.plain)
                 }
             }
 
@@ -86,34 +130,88 @@ struct SettingsView: View {
             }
 
             // Household
-            Section("Household") {
-                NavigationLink {
-                    HouseholdView()
-                } label: {
-                    Label("Manage Household", systemImage: "person.3.fill")
+            if storeManager.isPro {
+                Section("Household") {
+                    NavigationLink {
+                        HouseholdView()
+                    } label: {
+                        Label("Manage Household", systemImage: "person.3.fill")
+                    }
+                    LabeledContent("Current Profile", value: dataStore.profile.name)
                 }
-                LabeledContent("Current Profile", value: dataStore.profile.name)
+            } else {
+                Section("Household") {
+                    ProPromptCard(title: "Household Profiles", icon: "person.3.fill")
+                }
             }
 
             // Data
-            Section("Data") {
-                Button {
-                    exportData()
-                } label: {
-                    Label("Export Backup", systemImage: "square.and.arrow.up")
-                }
+            if storeManager.isPro {
+                Section("Data") {
+                    Button {
+                        exportData()
+                    } label: {
+                        Label("Export Backup", systemImage: "square.and.arrow.up")
+                    }
 
-                Button {
-                    showImportPicker = true
-                } label: {
-                    Label("Import Backup", systemImage: "square.and.arrow.down")
-                }
+                    Button {
+                        showImportPicker = true
+                    } label: {
+                        Label("Import Backup", systemImage: "square.and.arrow.down")
+                    }
 
-                if let msg = importMessage {
-                    Text(msg)
-                        .font(.caption)
-                        .foregroundStyle(msg.contains("Error") ? .red : .green)
+                    if let msg = importMessage {
+                        Text(msg)
+                            .font(.caption)
+                            .foregroundStyle(msg.contains("Error") ? .red : .green)
+                    }
                 }
+            } else {
+                Section("Data") {
+                    ProPromptCard(title: "Data Export & Import", icon: "square.and.arrow.up")
+                }
+            }
+
+            // Feedback
+            Section("Feedback") {
+                #if os(iOS)
+                if MFMailComposeViewController.canSendMail() {
+                    Button {
+                        showingMailComposer = true
+                    } label: {
+                        Label("Send Feedback", systemImage: "envelope")
+                    }
+                } else if let url = URL(string: "mailto:\(Self.feedbackEmail)?subject=ADultingHD%20Feedback") {
+                    Link(destination: url) {
+                        Label("Send Feedback", systemImage: "envelope")
+                    }
+                }
+                #else
+                if let url = URL(string: "mailto:\(Self.feedbackEmail)?subject=ADultingHD%20Feedback") {
+                    Link(destination: url) {
+                        Label("Send Feedback", systemImage: "envelope")
+                    }
+                }
+                #endif
+            }
+
+            // Legal
+            Section {
+                Link(destination: Self.privacyURL) {
+                    Label("Privacy Policy", systemImage: "hand.raised")
+                }
+                Link(destination: Self.termsURL) {
+                    Label("Terms of Use", systemImage: "doc.text")
+                }
+            }
+
+            // Version
+            Section {
+                Text("Version \(appVersion) (\(buildNumber))")
+                    .font(.footnote)
+                    .foregroundStyle(.tertiary)
+                    .frame(maxWidth: .infinity)
+                    .listRowBackground(Color.clear)
             }
 
             // Danger Zone
@@ -137,6 +235,20 @@ struct SettingsView: View {
         .fileImporter(isPresented: $showImportPicker, allowedContentTypes: [.json]) { result in
             handleImport(result)
         }
+        .sheet(isPresented: $showProUpgrade) {
+            ProUpgradeView()
+        }
+        #if os(iOS)
+        .sheet(isPresented: $showingMailComposer) {
+            MailComposer(
+                recipient: Self.feedbackEmail,
+                subject: "ADultingHD Feedback",
+                body: "\n\n---\nApp: ADultingHD v\(appVersion) (\(buildNumber))\nDevice: \(UIDevice.current.model), iOS \(UIDevice.current.systemVersion)",
+                onDismiss: { showingMailComposer = false }
+            )
+            .ignoresSafeArea()
+        }
+        #endif
     }
 
     private func exportData() {

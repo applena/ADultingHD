@@ -27,6 +27,7 @@ private let gameTips: [String] = [
 
 struct DashboardView: View {
     @Environment(DataStore.self) private var dataStore
+    @Environment(StoreManager.self) private var storeManager
     @AppStorage("showSeasonalSection") private var showSeasonalSection = true
 
     private var greeting: String {
@@ -68,7 +69,9 @@ struct DashboardView: View {
                     recentCompletionsSection
                 }
 
-                seasonalSection
+                if storeManager.isPro {
+                    seasonalSection
+                }
             }
             .padding()
         }
@@ -316,10 +319,12 @@ struct DueTaskRow: View {
 
 struct CompleteTaskSheet: View {
     @Environment(DataStore.self) private var dataStore
+    @Environment(StoreManager.self) private var storeManager
     @Environment(\.dismiss) private var dismiss
     let task: HouseholdTask
     @State private var showDescription = false
     @State private var notes = ""
+    @State private var selectedQuality: CompletionQuality = .normal
 
     var body: some View {
         NavigationStack {
@@ -374,6 +379,27 @@ struct CompleteTaskSheet: View {
                     }
                 }
 
+                if storeManager.isPro {
+                    Section("Quality") {
+                        Picker("Completion Quality", selection: $selectedQuality) {
+                            ForEach(CompletionQuality.allCases) { quality in
+                                Label(quality.label, systemImage: quality.icon)
+                                    .tag(quality)
+                            }
+                        }
+                        .pickerStyle(.segmented)
+
+                        HStack {
+                            Text("XP multiplier:")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Text("\(selectedQuality.xpMultiplier, specifier: "%.2f")x")
+                                .font(.caption.bold())
+                                .foregroundStyle(Theme.xpGold)
+                        }
+                    }
+                }
+
                 Section("Notes (optional)") {
                     TextField("How did it go?", text: $notes, axis: .vertical)
                         .lineLimit(2...4)
@@ -390,7 +416,8 @@ struct CompleteTaskSheet: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") {
                         Task {
-                            await dataStore.completeTask(task, notes: notes.isEmpty ? nil : notes)
+                            let quality = storeManager.isPro ? selectedQuality : .normal
+                            await dataStore.completeTask(task, notes: notes.isEmpty ? nil : notes, quality: quality)
                             dismiss()
                         }
                     }

@@ -13,10 +13,21 @@ enum TaskTab: String, CaseIterable {
 
 struct TaskListView: View {
     @Environment(DataStore.self) private var dataStore
+    @Environment(StoreManager.self) private var storeManager
     @State private var selectedTab: TaskTab = .myTasks
     @State private var selectedCategory: TaskCategory?
     @State private var searchText = ""
     @State private var showAddCustom = false
+    @State private var showProUpgrade = false
+
+    private var customTaskCount: Int {
+        let catalogNames = Set(taskCatalog.map { $0.name.lowercased() })
+        return dataStore.tasks.filter { !catalogNames.contains($0.name.lowercased()) }.count
+    }
+
+    private var canCreateCustomTask: Bool {
+        storeManager.isPro || customTaskCount < StoreManager.freeCustomTaskLimit
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -51,6 +62,9 @@ struct TaskListView: View {
         }
         .sheet(isPresented: $showAddCustom) {
             AddTaskView()
+        }
+        .sheet(isPresented: $showProUpgrade) {
+            ProUpgradeView()
         }
     }
 
@@ -128,23 +142,41 @@ struct TaskListView: View {
             categoryFilter
 
             Section {
-                Button { showAddCustom = true } label: {
+                Button {
+                    if canCreateCustomTask {
+                        showAddCustom = true
+                    } else {
+                        showProUpgrade = true
+                    }
+                } label: {
                     HStack(spacing: 12) {
                         Image(systemName: "plus.circle.fill")
                             .font(.title2)
-                            .foregroundStyle(Theme.accent)
+                            .foregroundStyle(canCreateCustomTask ? Theme.accent : Theme.xpGold)
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Create Custom Task")
                                 .font(.body.weight(.medium))
                                 .foregroundStyle(.primary)
-                            Text("Add your own task with a custom schedule")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                            if canCreateCustomTask {
+                                Text("Add your own task with a custom schedule")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            } else {
+                                Text("Upgrade to Pro for unlimited custom tasks")
+                                    .font(.caption)
+                                    .foregroundStyle(Theme.xpGold)
+                            }
                         }
                         Spacer()
-                        Image(systemName: "chevron.right")
-                            .font(.caption)
-                            .foregroundStyle(.tertiary)
+                        if canCreateCustomTask {
+                            Image(systemName: "chevron.right")
+                                .font(.caption)
+                                .foregroundStyle(.tertiary)
+                        } else {
+                            Image(systemName: "lock.fill")
+                                .font(.caption)
+                                .foregroundStyle(Theme.xpGold)
+                        }
                     }
                 }
                 .buttonStyle(.plain)
