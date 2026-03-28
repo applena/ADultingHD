@@ -2,63 +2,89 @@ import SwiftUI
 
 struct TaskDetailView: View {
     @Environment(DataStore.self) private var dataStore
+    @Environment(\.dismiss) private var dismiss
     let task: HouseholdTask
     @State private var showComplete = false
     @State private var showFrequencyPicker = false
+    @State private var showEditSheet = false
+    @State private var showDeleteConfirm = false
 
     private var currentTask: HouseholdTask {
         dataStore.tasks.first { $0.id == task.id } ?? task
     }
 
     private var recentCompletions: [TaskCompletion] {
-        dataStore.completions
-            .filter { $0.taskId == task.id }
-            .prefix(20)
-            .map { $0 }
+        Array(dataStore.completions.filter { $0.taskId == task.id }.prefix(20))
     }
 
     var body: some View {
+        let task = currentTask
+        let completions = recentCompletions
         ScrollView {
             VStack(spacing: Theme.sectionSpacing) {
-                // Header
-                headerCard
+                headerCard(task)
+                detailsCard(task)
 
-                // Details
-                detailsCard
-
-                // Supplies
-                if !currentTask.supplies.isEmpty {
-                    suppliesCard
+                if !task.supplies.isEmpty {
+                    suppliesCard(task)
                 }
 
-                // Complete Button
-                if currentTask.isActive {
-                    completeButton
+                if task.isActive {
+                    completeButton(task)
                 }
 
-                // History
-                if !recentCompletions.isEmpty {
-                    historySection
+                if !completions.isEmpty {
+                    historySection(completions)
                 }
             }
             .padding()
         }
         .navigationTitle(task.name)
+        #if os(iOS)
+        .navigationBarTitleDisplayMode(.inline)
+        #endif
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Menu {
+                    Button { showEditSheet = true } label: {
+                        Label("Edit Task", systemImage: "pencil")
+                    }
+                    Button(role: .destructive) { showDeleteConfirm = true } label: {
+                        Label("Delete Task", systemImage: "trash")
+                    }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                }
+            }
+        }
+        .sheet(isPresented: $showEditSheet) {
+            EditTaskView(task: currentTask)
+        }
+        .confirmationDialog("Delete Task?", isPresented: $showDeleteConfirm) {
+            Button("Delete", role: .destructive) {
+                Task {
+                    await dataStore.deleteTask(currentTask)
+                    dismiss()
+                }
+            }
+        } message: {
+            Text("This will permanently delete \"\(currentTask.name)\" and cannot be undone.")
+        }
     }
 
     // MARK: - Header
 
-    private var headerCard: some View {
+    private func headerCard(_ task: HouseholdTask) -> some View {
         VStack(spacing: 12) {
             HStack {
-                Image(systemName: currentTask.category.icon)
+                Image(systemName: task.category.icon)
                     .font(.largeTitle)
-                    .foregroundStyle(Theme.categoryColor(currentTask.category))
+                    .foregroundStyle(Theme.categoryColor(task.category))
 
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(currentTask.name)
+                    Text(task.name)
                         .font(.title2.bold())
-                    Text(currentTask.category.rawValue)
+                    Text(task.category.rawValue)
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
@@ -66,10 +92,10 @@ struct TaskDetailView: View {
                 Spacer()
 
                 VStack(alignment: .trailing) {
-                    Text("+\(currentTask.xpReward) XP")
+                    Text("+\(task.xpReward) XP")
                         .font(.title3.bold())
                         .foregroundStyle(Theme.xpGold)
-                    if currentTask.isDue {
+                    if task.isDue {
                         Text("DUE")
                             .font(.caption.bold())
                             .foregroundStyle(.white)
@@ -80,7 +106,7 @@ struct TaskDetailView: View {
                 }
             }
 
-            Text(currentTask.description)
+            Text(task.description)
                 .font(.body)
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -90,17 +116,17 @@ struct TaskDetailView: View {
 
     // MARK: - Details
 
-    private var detailsCard: some View {
+    private func detailsCard(_ task: HouseholdTask) -> some View {
         LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
             Button { showFrequencyPicker = true } label: {
-                DetailItem(label: "Frequency", value: currentTask.frequency.rawValue, icon: currentTask.frequency.icon)
+                DetailItem(label: "Frequency", value: task.frequency.rawValue, icon: task.frequency.icon)
             }
             .buttonStyle(.plain)
 
-            DetailItem(label: "Difficulty", value: currentTask.difficulty.label, icon: currentTask.difficulty.icon)
-            DetailItem(label: "Est. Time", value: "\(currentTask.estimatedMinutes) min", icon: "clock")
+            DetailItem(label: "Difficulty", value: task.difficulty.label, icon: task.difficulty.icon)
+            DetailItem(label: "Est. Time", value: "\(task.estimatedMinutes) min", icon: "clock")
 
-            if let days = currentTask.daysSinceLastCompleted {
+            if let days = task.daysSinceLastCompleted {
                 DetailItem(label: "Last Done", value: "\(days)d ago", icon: "calendar.badge.clock")
             } else {
                 DetailItem(label: "Last Done", value: "Never", icon: "calendar.badge.clock")
@@ -108,18 +134,18 @@ struct TaskDetailView: View {
         }
         .card()
         .sheet(isPresented: $showFrequencyPicker) {
-            FrequencyPickerSheet(task: currentTask)
+            FrequencyPickerSheet(task: task)
         }
     }
 
     // MARK: - Supplies
 
-    private var suppliesCard: some View {
+    private func suppliesCard(_ task: HouseholdTask) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Label("Supplies Needed", systemImage: "cart")
                 .font(.headline)
 
-            ForEach(currentTask.supplies, id: \.self) { supply in
+            ForEach(task.supplies, id: \.self) { supply in
                 Label(supply, systemImage: "circle.fill")
                     .font(.subheadline)
                     .labelStyle(SupplyLabelStyle())
@@ -131,7 +157,7 @@ struct TaskDetailView: View {
 
     // MARK: - Complete Button
 
-    private var completeButton: some View {
+    private func completeButton(_ task: HouseholdTask) -> some View {
         Button {
             showComplete = true
         } label: {
@@ -144,18 +170,18 @@ struct TaskDetailView: View {
         }
         .buttonStyle(.plain)
         .sheet(isPresented: $showComplete) {
-            CompleteTaskSheet(task: currentTask)
+            CompleteTaskSheet(task: task)
         }
     }
 
     // MARK: - History
 
-    private var historySection: some View {
+    private func historySection(_ completions: [TaskCompletion]) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Label("Recent History", systemImage: "clock.arrow.circlepath")
                 .font(.headline)
 
-            ForEach(recentCompletions) { completion in
+            ForEach(completions) { completion in
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
                         Text(completion.completedAt, style: .date)

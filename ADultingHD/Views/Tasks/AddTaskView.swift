@@ -4,13 +4,58 @@ struct AddTaskView: View {
     @Environment(DataStore.self) private var dataStore
     @Environment(\.dismiss) private var dismiss
 
-    @State private var name = ""
-    @State private var description = ""
-    @State private var category: TaskCategory = .general
-    @State private var frequency: TaskFrequency = .weekly
-    @State private var estimatedMinutes = 15
-    @State private var difficulty: Difficulty = .medium
-    @State private var suppliesText = ""
+    var body: some View {
+        TaskFormView(title: "New Task", buttonLabel: "Add") { task in
+            await dataStore.addCustomTask(task)
+        }
+    }
+}
+
+struct EditTaskView: View {
+    @Environment(DataStore.self) private var dataStore
+    @Environment(\.dismiss) private var dismiss
+    let task: HouseholdTask
+
+    var body: some View {
+        TaskFormView(title: "Edit Task", buttonLabel: "Save", existingTask: task) { updated in
+            await dataStore.updateTask(updated)
+        }
+    }
+}
+
+// MARK: - Shared Task Form
+
+private struct TaskFormView: View {
+    @Environment(\.dismiss) private var dismiss
+
+    let title: String
+    let buttonLabel: String
+    let onSave: (HouseholdTask) async -> Void
+
+    @State private var name: String
+    @State private var description: String
+    @State private var category: TaskCategory
+    @State private var frequency: TaskFrequency
+    @State private var estimatedMinutes: Int
+    @State private var difficulty: Difficulty
+    @State private var suppliesText: String
+
+    private let existingTask: HouseholdTask?
+
+    init(title: String, buttonLabel: String, existingTask: HouseholdTask? = nil,
+         onSave: @escaping (HouseholdTask) async -> Void) {
+        self.title = title
+        self.buttonLabel = buttonLabel
+        self.existingTask = existingTask
+        self.onSave = onSave
+        _name = State(initialValue: existingTask?.name ?? "")
+        _description = State(initialValue: existingTask?.description ?? "")
+        _category = State(initialValue: existingTask?.category ?? .general)
+        _frequency = State(initialValue: existingTask?.frequency ?? .weekly)
+        _estimatedMinutes = State(initialValue: existingTask?.estimatedMinutes ?? 15)
+        _difficulty = State(initialValue: existingTask?.difficulty ?? .medium)
+        _suppliesText = State(initialValue: existingTask?.supplies.joined(separator: "\n") ?? "")
+    }
 
     var body: some View {
         NavigationStack {
@@ -49,17 +94,16 @@ struct AddTaskView: View {
                 }
 
                 Section {
-                    let xp = computeXP()
                     HStack {
                         Text("XP Reward")
                         Spacer()
-                        Text("+\(xp) XP")
+                        Text("+\(HouseholdTask.computeXP(difficulty: difficulty, frequency: frequency, estimatedMinutes: estimatedMinutes)) XP")
                             .bold()
                             .foregroundStyle(Theme.xpGold)
                     }
                 }
             }
-            .navigationTitle("New Task")
+            .navigationTitle(title)
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif
@@ -68,42 +112,31 @@ struct AddTaskView: View {
                     Button("Cancel") { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Add") {
-                        addTask()
-                    }
-                    .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
+                    Button(buttonLabel) { save() }
+                        .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
             }
         }
     }
 
-    private func computeXP() -> Int {
-        let baseXP = difficulty.rawValue * 10
-        let frequencyMultiplier = max(1, frequency.days / 7)
-        let timeBonus = estimatedMinutes / 10
-        return baseXP + (frequencyMultiplier * 5) + (timeBonus * 2)
-    }
+    private func save() {
+        let supplies = HouseholdTask.parseSupplies(from: suppliesText)
 
-    private func addTask() {
-        let supplies = suppliesText
-            .split(separator: "\n")
-            .map { $0.trimmingCharacters(in: .whitespaces) }
-            .filter { !$0.isEmpty }
-
-        let task = HouseholdTask(
-            id: UUID(),
-            name: name.trimmingCharacters(in: .whitespaces),
-            description: description.trimmingCharacters(in: .whitespaces),
-            category: category,
-            frequency: frequency,
-            estimatedMinutes: estimatedMinutes,
-            difficulty: difficulty,
-            supplies: supplies,
-            isActive: true
+        var task = existingTask ?? HouseholdTask(
+            id: UUID(), name: "", description: "", category: .general,
+            frequency: .weekly, estimatedMinutes: 15, difficulty: .medium,
+            supplies: [], isActive: true
         )
+        task.name = name.trimmingCharacters(in: .whitespaces)
+        task.description = description.trimmingCharacters(in: .whitespaces)
+        task.category = category
+        task.frequency = frequency
+        task.estimatedMinutes = estimatedMinutes
+        task.difficulty = difficulty
+        task.supplies = supplies
 
         Task {
-            await dataStore.addCustomTask(task)
+            await onSave(task)
             dismiss()
         }
     }

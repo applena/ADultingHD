@@ -15,8 +15,8 @@ struct SettingsView: View {
     @State private var showingMailComposer = false
 
     private static let feedbackEmail = "adultinghd@shadowpuppet.net"
-    private static let privacyURL = URL(string: "https://adameivy.com/ADultingHD.online/privacy.html")!
-    private static let termsURL = URL(string: "https://adameivy.com/ADultingHD.online/terms.html")!
+    private static let privacyURL = URL(string: "https://adultinghd.shadowpuppet.net/privacy.html")!
+    private static let termsURL = URL(string: "https://adultinghd.shadowpuppet.net/terms.html")!
 
     private var appVersion: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—"

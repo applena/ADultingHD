@@ -142,10 +142,20 @@ struct HouseholdTask: Codable, Identifiable, Hashable {
     var lastCompleted: Date?
 
     var xpReward: Int {
+        Self.computeXP(difficulty: difficulty, frequency: frequency, estimatedMinutes: estimatedMinutes)
+    }
+
+    static func computeXP(difficulty: Difficulty, frequency: TaskFrequency, estimatedMinutes: Int) -> Int {
         let baseXP = difficulty.rawValue * 10
         let frequencyMultiplier = max(1, frequency.days / 7)
         let timeBonus = estimatedMinutes / 10
         return baseXP + (frequencyMultiplier * 5) + (timeBonus * 2)
+    }
+
+    static func parseSupplies(from text: String) -> [String] {
+        text.split(separator: "\n")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
     }
 
     var isDue: Bool {
