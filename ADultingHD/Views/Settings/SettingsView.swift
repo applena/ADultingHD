@@ -44,6 +44,34 @@ struct SettingsView: View {
 
     var body: some View {
         List {
+            // iCloud Sync
+            Section("iCloud Sync") {
+                HStack(spacing: 12) {
+                    Image(systemName: ICloudMonitor.shared.isICloud ? "icloud.fill" : "icloud.slash")
+                        .foregroundStyle(ICloudMonitor.shared.isICloud ? Color.accentColor : .secondary)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("iCloud")
+                            .font(.subheadline).fontWeight(.medium)
+                        Text(ICloudMonitor.shared.isICloud ? "Syncing across devices" : "Sign in to iCloud to sync")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    if ICloudMonitor.shared.isICloud {
+                        Button {
+                            Task { await ICloudMonitor.shared.syncNow() }
+                        } label: {
+                            if ICloudMonitor.shared.isSyncing {
+                                ProgressView().controlSize(.small)
+                            } else {
+                                Image(systemName: "arrow.triangle.2.circlepath.icloud")
+                            }
+                        }
+                        .disabled(ICloudMonitor.shared.isSyncing)
+                    }
+                }
+            }
+
             // Notifications
             Section("Notifications") {
                 if notificationManager.isAuthorized {

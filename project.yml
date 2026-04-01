@@ -30,6 +30,28 @@ schemes:
       targets:
         - ADultingHDTests_iOS
         - ADultingHDUITests
+    profile:
+      config: Release
+    analyze:
+      config: Debug
+    archive:
+      config: Release
+  ADultingHD_macOS:
+    build:
+      targets:
+        ADultingHD_macOS: all
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - ADultingHDTests_macOS
+    profile:
+      config: Release
+    analyze:
+      config: Debug
+    archive:
+      config: Release
 
 targets:
   ADultingHD:
@@ -72,6 +94,11 @@ targets:
       properties:
         com.apple.security.app-sandbox: true
         com.apple.security.files.user-selected.read-write: true
+        com.apple.security.files.downloads.read-write: true
+        com.apple.developer.icloud-container-identifiers:
+          - iCloud.net.shadowpuppet.ADultingHD
+        com.apple.developer.icloud-services:
+          - CloudDocuments
 
   ADultingHDWidget:
     type: app-extension

@@ -415,6 +415,20 @@ final class DataStore {
         householdProfiles.sorted { $0.totalXP > $1.totalXP }
     }
 
+    // MARK: - iCloud Sync
+
+    /// Start listening for remote iCloud changes and reload when they arrive.
+    func startSyncObserver() {
+        NotificationCenter.default.addObserver(
+            forName: .dataDidSync, object: nil, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                await self?.load()
+                logger.info("☁️ reloaded from iCloud sync")
+            }
+        }
+    }
+
     // MARK: - Export/Import
 
     func exportData() async -> Data? {

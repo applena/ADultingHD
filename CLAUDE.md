@@ -7,7 +7,7 @@ Gamified household task management app for iOS and macOS. Turns adulting chores 
 - Swift 6.0, SwiftUI, Swift Charts
 - iOS 17.0+ / macOS 14.0+
 - XcodeGen (`project.yml` is source of truth, not `.xcodeproj`)
-- JSON file-based storage in Documents directory
+- JSON file-based storage in Documents, mirrored to iCloud Documents for cross-device sync
 - Bundle ID: `net.shadowpuppet.ADultingHD`
 
 ## Build Commands
@@ -27,7 +27,7 @@ xcodebuild build -project ADultingHD.xcodeproj -scheme ADultingHD_macOS \
 
 - **Models** (`ADultingHD/Models/`): All data types — HouseholdTask, TaskCompletion, UserProfile, Achievement
 - **Data** (`ADultingHD/Data/`): Built-in task library with 50+ household tasks, categories, supplies, frequencies
-- **Storage** (`ADultingHD/Storage/`): JSON file persistence and @Observable in-memory state
+- **Storage** (`ADultingHD/Storage/`): JSON file persistence with iCloud Documents sync (`ICloudMonitor` + `TaskStore` dual-writes)
 - **Views** (`ADultingHD/Views/`): Platform-adaptive — `NavigationSplitView` on macOS, `TabView` on iOS
 - **Theme** (`ADultingHD/Theme/`): Adaptive colors for light/dark mode
 
@@ -37,6 +37,14 @@ xcodebuild build -project ADultingHD.xcodeproj -scheme ADultingHD_macOS \
 - Platform-specific code guarded with `#if os(macOS)` / `#if os(iOS)`
 - Gamification: XP per task (difficulty-based), levels, streaks, achievements
 - Tasks have categories, frequencies, difficulty ratings, and supply lists
+
+## iCloud Sync Pattern
+
+All files in `TaskStore` are dual-written: once to the local Documents directory (`~/Documents/ADultingHD/`), once to the iCloud ubiquity container (`iCloud.net.shadowpuppet.ADultingHD/Documents/ADultingHD/`). Loads use a `newerOf(cloud:local:)` comparison of modification dates to prefer the most-recently-updated copy.
+
+`ICloudMonitor` (Storage/ICloudMonitor.swift) watches the iCloud container via `NSMetadataQuery` for `*.json` changes from other devices. On detection it debounces 2s, checks a 5s write-suppression window (to ignore our own iCloud writes), then posts `.dataDidSync` which `DataStore.startSyncObserver()` handles by calling `load()`.
+
+This is the same pattern used in MortalLoom and EscapeMint-Swift.
 
 ## Git Workflow
 

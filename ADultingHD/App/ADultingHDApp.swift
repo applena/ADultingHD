@@ -20,6 +20,8 @@ struct ADultingHDApp: App {
                     }
                     #endif
                     await dataStore.load()
+                    ICloudMonitor.shared.start()
+                    dataStore.startSyncObserver()
                     await notificationManager.checkAuthorizationStatus()
                     await storeManager.loadProducts()
                 }

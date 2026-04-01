@@ -13,11 +13,38 @@ actor TaskStore {
         return appDir
     }
 
+    private var iCloudURL: URL? {
+        guard let base = fileManager.url(forUbiquityContainerIdentifier: CloudConfig.containerID) else { return nil }
+        let dir = base.appendingPathComponent("Documents/ADultingHD", isDirectory: true)
+        try? fileManager.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir
+    }
+
     private var tasksURL: URL { documentsURL.appendingPathComponent("tasks.json") }
     private var profileURL: URL { documentsURL.appendingPathComponent("profile.json") }
     private var completionsURL: URL { documentsURL.appendingPathComponent("completions.json") }
     private var supplyStockURL: URL { documentsURL.appendingPathComponent("supply_stock.json") }
     private var householdURL: URL { documentsURL.appendingPathComponent("household.json") }
+
+    // Returns the newer of cloud or local file.
+    private func newerOf(cloud: URL?, local: URL) -> URL {
+        guard let cloud, fileManager.fileExists(atPath: cloud.path) else { return local }
+        let cloudDate = (try? fileManager.attributesOfItem(atPath: cloud.path)[.modificationDate] as? Date) ?? .distantPast
+        let localDate = (try? fileManager.attributesOfItem(atPath: local.path)[.modificationDate] as? Date) ?? .distantPast
+        return cloudDate >= localDate ? cloud : local
+    }
+
+    private func cloudURL(for filename: String) -> URL? {
+        iCloudURL?.appendingPathComponent(filename)
+    }
+
+    private func dualWrite(_ data: Data, local: URL, filename: String) {
+        try? data.write(to: local, options: .atomic)
+        if let cloud = cloudURL(for: filename) {
+            try? data.write(to: cloud, options: .atomic)
+        }
+        Task { @MainActor in ICloudMonitor.shared.markLocalWrite() }
+    }
 
     private let encoder: JSONEncoder = {
         let e = JSONEncoder()
@@ -35,7 +62,8 @@ actor TaskStore {
     // MARK: - Tasks
 
     func loadTasks() -> [HouseholdTask] {
-        guard let data = try? Data(contentsOf: tasksURL),
+        let url = newerOf(cloud: cloudURL(for: "tasks.json"), local: tasksURL)
+        guard let data = try? Data(contentsOf: url),
               let tasks = try? decoder.decode([HouseholdTask].self, from: data) else {
             logger.info("No saved tasks found, using defaults")
             let tasks = defaultHouseholdTasks
@@ -48,14 +76,15 @@ actor TaskStore {
 
     func saveTasks(_ tasks: [HouseholdTask]) {
         guard let data = try? encoder.encode(tasks) else { return }
-        try? data.write(to: tasksURL, options: .atomic)
+        dualWrite(data, local: tasksURL, filename: "tasks.json")
         logger.info("Saved \(tasks.count) tasks")
     }
 
     // MARK: - Profile
 
     func loadProfile() -> UserProfile {
-        guard let data = try? Data(contentsOf: profileURL),
+        let url = newerOf(cloud: cloudURL(for: "profile.json"), local: profileURL)
+        guard let data = try? Data(contentsOf: url),
               let profile = try? decoder.decode(UserProfile.self, from: data) else {
             logger.info("No saved profile, creating new")
             let profile = UserProfile()
@@ -67,13 +96,14 @@ actor TaskStore {
 
     func saveProfile(_ profile: UserProfile) {
         guard let data = try? encoder.encode(profile) else { return }
-        try? data.write(to: profileURL, options: .atomic)
+        dualWrite(data, local: profileURL, filename: "profile.json")
     }
 
     // MARK: - Completions
 
     func loadCompletions() -> [TaskCompletion] {
-        guard let data = try? Data(contentsOf: completionsURL),
+        let url = newerOf(cloud: cloudURL(for: "completions.json"), local: completionsURL)
+        guard let data = try? Data(contentsOf: url),
               let completions = try? decoder.decode([TaskCompletion].self, from: data) else {
             return []
         }
@@ -83,13 +113,14 @@ actor TaskStore {
 
     func saveCompletions(_ completions: [TaskCompletion]) {
         guard let data = try? encoder.encode(completions) else { return }
-        try? data.write(to: completionsURL, options: .atomic)
+        dualWrite(data, local: completionsURL, filename: "completions.json")
     }
 
     // MARK: - Household Profiles
 
     func loadHouseholdProfiles() -> [UserProfile] {
-        guard let data = try? Data(contentsOf: householdURL),
+        let url = newerOf(cloud: cloudURL(for: "household.json"), local: householdURL)
+        guard let data = try? Data(contentsOf: url),
               let profiles = try? decoder.decode([UserProfile].self, from: data) else {
             return []
         }
@@ -98,13 +129,14 @@ actor TaskStore {
 
     func saveHouseholdProfiles(_ profiles: [UserProfile]) {
         guard let data = try? encoder.encode(profiles) else { return }
-        try? data.write(to: householdURL, options: .atomic)
+        dualWrite(data, local: householdURL, filename: "household.json")
     }
 
     // MARK: - Supply Stock
 
     func loadSupplyStock() -> [String: SupplyStock] {
-        guard let data = try? Data(contentsOf: supplyStockURL),
+        let url = newerOf(cloud: cloudURL(for: "supply_stock.json"), local: supplyStockURL)
+        guard let data = try? Data(contentsOf: url),
               let stock = try? decoder.decode([String: SupplyStock].self, from: data) else {
             return [:]
         }
@@ -113,7 +145,7 @@ actor TaskStore {
 
     func saveSupplyStock(_ stock: [String: SupplyStock]) {
         guard let data = try? encoder.encode(stock) else { return }
-        try? data.write(to: supplyStockURL, options: .atomic)
+        dualWrite(data, local: supplyStockURL, filename: "supply_stock.json")
     }
 
     // MARK: - Export/Import
