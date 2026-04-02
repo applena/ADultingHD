@@ -91,23 +91,33 @@ struct SettingsView: View {
     }
 }
 
-// MARK: - macOS: Tabbed Two-Column Layout
+// MARK: - macOS: Responsive Column Layout
 
 #if os(macOS)
 extension SettingsView {
     private var macBody: some View {
-        TabView {
-            generalTab
-                .tabItem { Label("General", systemImage: "gear") }
-            accountTab
-                .tabItem { Label("Account", systemImage: "person.crop.circle") }
-            dataTab
-                .tabItem { Label("Tasks & Data", systemImage: "externaldrive") }
-            aboutTab
-                .tabItem { Label("About", systemImage: "info.circle") }
+        GeometryReader { geo in
+            let w = geo.size.width
+            ScrollView {
+                Group {
+                    if w >= 860 {
+                        HStack(alignment: .top, spacing: 16) {
+                            col1.frame(maxWidth: .infinity)
+                            col2.frame(maxWidth: .infinity)
+                            col3.frame(maxWidth: .infinity)
+                        }
+                    } else if w >= 540 {
+                        HStack(alignment: .top, spacing: 16) {
+                            VStack(spacing: 16) { col1; col3 }.frame(maxWidth: .infinity)
+                            col2.frame(maxWidth: .infinity)
+                        }
+                    } else {
+                        VStack(spacing: 16) { col1; col2; col3 }
+                    }
+                }
+                .padding()
+            }
         }
-        .padding(20)
-        .frame(minWidth: 580, minHeight: 320)
         .navigationTitle("Settings")
         .confirmationDialog("Reset All Data?", isPresented: $showResetConfirm) {
             Button("Reset Everything", role: .destructive) {
@@ -122,215 +132,173 @@ extension SettingsView {
         .sheet(isPresented: $showProUpgrade) { ProUpgradeView() }
     }
 
-    private var generalTab: some View {
-        HStack(alignment: .top, spacing: 16) {
-            Form {
-                Section("Notifications") {
-                    if notificationManager.isAuthorized {
-                        @Bindable var nm = notificationManager
-                        Toggle("Daily Reminder", isOn: $nm.dailyReminderEnabled)
-                        if notificationManager.dailyReminderEnabled {
-                            DatePicker("Reminder Time", selection: reminderTime, displayedComponents: .hourAndMinute)
-                        }
-                    } else {
-                        Button {
-                            Task { await notificationManager.requestAuthorization() }
-                        } label: {
-                            Label("Enable Notifications", systemImage: "bell.badge")
-                        }
-                        Text("Get daily reminders about due tasks")
-                            .font(.caption).foregroundStyle(.secondary)
-                    }
-                }
-            }
-            .formStyle(.grouped)
-            .frame(maxWidth: .infinity)
-
-            Form {
-                Section("iCloud Sync") {
-                    HStack(spacing: 10) {
-                        Image(systemName: ICloudMonitor.shared.isICloud ? "icloud.fill" : "icloud.slash")
-                            .foregroundStyle(ICloudMonitor.shared.isICloud ? Color.accentColor : .secondary)
-                        Text(ICloudMonitor.shared.isICloud ? "Syncing across devices" : "Sign in to iCloud to sync")
-                            .font(.subheadline)
-                        Spacer()
-                        if ICloudMonitor.shared.isICloud {
-                            Button {
-                                Task { await ICloudMonitor.shared.syncNow() }
-                            } label: {
-                                if ICloudMonitor.shared.isSyncing {
-                                    ProgressView().controlSize(.small)
-                                } else {
-                                    Image(systemName: "arrow.triangle.2.circlepath.icloud")
-                                }
-                            }
-                            .disabled(ICloudMonitor.shared.isSyncing)
-                        }
-                    }
-                }
-                Section("Your Stats") {
-                    LabeledContent("Tasks Completed", value: "\(dataStore.profile.totalTasksCompleted)")
-                    LabeledContent("Total XP", value: "\(dataStore.profile.totalXP)")
-                    LabeledContent("Level", value: "\(dataStore.profile.level) — \(dataStore.profile.levelTitle)")
-                    LabeledContent("Active / Total Tasks", value: "\(dataStore.activeTasks.count) / \(dataStore.tasks.count)")
-                    if let joinDate = dataStore.profile.joinDate as Date? {
-                        LabeledContent("Member Since") { Text(joinDate, style: .date) }
-                    }
-                }
-            }
-            .formStyle(.grouped)
-            .frame(maxWidth: .infinity)
-        }
-        .padding()
-    }
-
-    private var accountTab: some View {
-        HStack(alignment: .top, spacing: 16) {
-            Form {
-                if storeManager.isPro {
-                    Section("Pro Membership") {
-                        Label("You're a Pro member!", systemImage: "crown.fill")
-                            .foregroundStyle(Theme.xpGold)
+    private var col1: some View {
+        Form {
+            Section("Notifications") {
+                if notificationManager.isAuthorized {
+                    @Bindable var nm = notificationManager
+                    Toggle("Daily Reminder", isOn: $nm.dailyReminderEnabled)
+                    if notificationManager.dailyReminderEnabled {
+                        DatePicker("Reminder Time", selection: reminderTime, displayedComponents: .hourAndMinute)
                     }
                 } else {
-                    Section {
-                        Button { showProUpgrade = true } label: {
-                            HStack(spacing: 12) {
-                                Image(systemName: "crown.fill")
-                                    .font(.title2)
-                                    .foregroundStyle(Theme.xpGold)
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text("Upgrade to Pro")
-                                        .font(.headline)
-                                    Text("One-time purchase \u{2014} unlock all features")
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                }
-                                Spacer()
-                                Image(systemName: "chevron.right")
-                                    .font(.caption).foregroundStyle(.tertiary)
-                            }
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-            }
-            .formStyle(.grouped)
-            .frame(maxWidth: .infinity)
-
-            Form {
-                if storeManager.isPro {
-                    Section("Household") {
-                        NavigationLink { HouseholdView() } label: {
-                            Label("Manage Household", systemImage: "person.3.fill")
-                        }
-                        LabeledContent("Current Profile", value: dataStore.profile.name)
-                    }
-                } else {
-                    Section("Household") {
-                        ProPromptCard(title: "Household Profiles", icon: "person.3.fill")
-                    }
-                }
-            }
-            .formStyle(.grouped)
-            .frame(maxWidth: .infinity)
-        }
-        .padding()
-    }
-
-    private var dataTab: some View {
-        HStack(alignment: .top, spacing: 16) {
-            Form {
-                Section("Task Management") {
-                    NavigationLink { ManageTasksView() } label: {
-                        Label("Manage Active Tasks", systemImage: "checklist")
-                    }
-                }
-                if storeManager.isPro {
-                    Section("Backup") {
-                        Button { exportData() } label: {
-                            Label("Export Backup", systemImage: "square.and.arrow.up")
-                        }
-                        Button { showImportPicker = true } label: {
-                            Label("Import Backup", systemImage: "square.and.arrow.down")
-                        }
-                        if let msg = importMessage {
-                            Text(msg)
-                                .font(.caption)
-                                .foregroundStyle(msg.contains("Error") ? .red : .green)
-                        }
-                    }
-                } else {
-                    Section("Backup") {
-                        ProPromptCard(title: "Data Export & Import", icon: "square.and.arrow.up")
-                    }
-                }
-            }
-            .formStyle(.grouped)
-            .frame(maxWidth: .infinity)
-
-            Form {
-                Section("Danger Zone") {
-                    Button(role: .destructive) {
-                        showResetConfirm = true
+                    Button {
+                        Task { await notificationManager.requestAuthorization() }
                     } label: {
-                        Label("Reset All Data", systemImage: "trash")
-                            .foregroundStyle(.red)
+                        Label("Enable Notifications", systemImage: "bell.badge")
+                    }
+                    Text("Get daily reminders about due tasks")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            Section("iCloud Sync") {
+                HStack(spacing: 10) {
+                    Image(systemName: ICloudMonitor.shared.isICloud ? "icloud.fill" : "icloud.slash")
+                        .foregroundStyle(ICloudMonitor.shared.isICloud ? Color.accentColor : .secondary)
+                    Text(ICloudMonitor.shared.isICloud ? "Syncing across devices" : "Sign in to iCloud to sync")
+                        .font(.subheadline)
+                    Spacer()
+                    if ICloudMonitor.shared.isICloud {
+                        Button {
+                            Task { await ICloudMonitor.shared.syncNow() }
+                        } label: {
+                            if ICloudMonitor.shared.isSyncing {
+                                ProgressView().controlSize(.small)
+                            } else {
+                                Image(systemName: "arrow.triangle.2.circlepath.icloud")
+                            }
+                        }
+                        .disabled(ICloudMonitor.shared.isSyncing)
                     }
                 }
             }
-            .formStyle(.grouped)
-            .frame(maxWidth: .infinity)
+            Section("Stats") {
+                LabeledContent("Tasks Completed", value: "\(dataStore.profile.totalTasksCompleted)")
+                LabeledContent("Total XP", value: "\(dataStore.profile.totalXP)")
+                LabeledContent("Level", value: "\(dataStore.profile.level) — \(dataStore.profile.levelTitle)")
+                LabeledContent("Active / Total Tasks", value: "\(dataStore.activeTasks.count) / \(dataStore.tasks.count)")
+                if let joinDate = dataStore.profile.joinDate as Date? {
+                    LabeledContent("Member Since") { Text(joinDate, style: .date) }
+                }
+            }
         }
-        .padding()
+        .formStyle(.grouped)
     }
 
-    private var aboutTab: some View {
-        HStack(alignment: .top, spacing: 16) {
-            Form {
+    private var col2: some View {
+        Form {
+            if storeManager.isPro {
+                Section("Pro Membership") {
+                    Label("You're a Pro member!", systemImage: "crown.fill")
+                        .foregroundStyle(Theme.xpGold)
+                }
+            } else {
                 Section {
-                    HStack(spacing: 14) {
-                        Image(systemName: "clipboard.fill")
-                            .font(.system(size: 36))
-                            .foregroundStyle(Theme.accent)
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("ADultingHD")
-                                .font(.title3.bold())
-                            Text("Gamified household task management")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                            Text("Version \(appVersion) (\(buildNumber))")
-                                .font(.caption2)
-                                .foregroundStyle(.tertiary)
+                    Button { showProUpgrade = true } label: {
+                        HStack(spacing: 12) {
+                            Image(systemName: "crown.fill")
+                                .font(.title2)
+                                .foregroundStyle(Theme.xpGold)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Upgrade to Pro")
+                                    .font(.headline)
+                                Text("One-time purchase \u{2014} unlock all features")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.caption).foregroundStyle(.tertiary)
                         }
                     }
-                    .padding(.vertical, 4)
+                    .buttonStyle(.plain)
                 }
             }
-            .formStyle(.grouped)
-            .frame(maxWidth: .infinity)
-
-            Form {
-                Section("Support") {
-                    if let url = URL(string: "mailto:\(Self.feedbackEmail)?subject=ADultingHD%20Feedback") {
-                        Link(destination: url) {
-                            Label("Send Feedback", systemImage: "envelope")
-                        }
+            if storeManager.isPro {
+                Section("Household") {
+                    NavigationLink { HouseholdView() } label: {
+                        Label("Manage Household", systemImage: "person.3.fill")
                     }
+                    LabeledContent("Current Profile", value: dataStore.profile.name)
                 }
-                Section("Legal") {
-                    Link(destination: Self.privacyURL) {
-                        Label("Privacy Policy", systemImage: "hand.raised")
-                    }
-                    Link(destination: Self.termsURL) {
-                        Label("Terms of Use", systemImage: "doc.text")
-                    }
+            } else {
+                Section("Household") {
+                    ProPromptCard(title: "Household Profiles", icon: "person.3.fill")
                 }
             }
-            .formStyle(.grouped)
-            .frame(maxWidth: .infinity)
+            Section("Task Management") {
+                NavigationLink { ManageTasksView() } label: {
+                    Label("Manage Active Tasks", systemImage: "checklist")
+                }
+            }
         }
-        .padding()
+        .formStyle(.grouped)
+    }
+
+    private var col3: some View {
+        Form {
+            if storeManager.isPro {
+                Section("Backup") {
+                    Button { exportData() } label: {
+                        Label("Export Backup", systemImage: "square.and.arrow.up")
+                    }
+                    Button { showImportPicker = true } label: {
+                        Label("Import Backup", systemImage: "square.and.arrow.down")
+                    }
+                    if let msg = importMessage {
+                        Text(msg)
+                            .font(.caption)
+                            .foregroundStyle(msg.contains("Error") ? .red : .green)
+                    }
+                }
+            } else {
+                Section("Backup") {
+                    ProPromptCard(title: "Data Export & Import", icon: "square.and.arrow.up")
+                }
+            }
+            Section {
+                HStack(spacing: 14) {
+                    Image(systemName: "clipboard.fill")
+                        .font(.system(size: 36))
+                        .foregroundStyle(Theme.accent)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("ADultingHD")
+                            .font(.title3.bold())
+                        Text("Gamified household task management")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Text("Version \(appVersion) (\(buildNumber))")
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                    }
+                }
+                .padding(.vertical, 4)
+            }
+            Section("Support") {
+                if let url = URL(string: "mailto:\(Self.feedbackEmail)?subject=ADultingHD%20Feedback") {
+                    Link(destination: url) {
+                        Label("Send Feedback", systemImage: "envelope")
+                    }
+                }
+            }
+            Section("Legal") {
+                Link(destination: Self.privacyURL) {
+                    Label("Privacy Policy", systemImage: "hand.raised")
+                }
+                Link(destination: Self.termsURL) {
+                    Label("Terms of Use", systemImage: "doc.text")
+                }
+            }
+            Section("Danger Zone") {
+                Button(role: .destructive) {
+                    showResetConfirm = true
+                } label: {
+                    Label("Reset All Data", systemImage: "trash")
+                        .foregroundStyle(.red)
+                }
+            }
+        }
+        .formStyle(.grouped)
     }
 }
 #endif
