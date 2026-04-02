@@ -3,6 +3,9 @@ import SwiftUI
 struct ProfileView: View {
     @Environment(DataStore.self) private var dataStore
     @Environment(StoreManager.self) private var storeManager
+    #if os(iOS)
+    @State private var showSettings = false
+    #endif
 
     private var unlockedCount: Int { dataStore.profile.unlockedAchievements.count }
     private var totalCount: Int { allAchievements.count }
@@ -38,11 +41,19 @@ struct ProfileView: View {
         #if os(iOS)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                NavigationLink {
-                    SettingsView()
-                } label: {
+                Button { showSettings = true } label: {
                     Image(systemName: "gear")
                 }
+            }
+        }
+        .sheet(isPresented: $showSettings) {
+            NavigationStack {
+                SettingsView()
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Done") { showSettings = false }
+                        }
+                    }
             }
         }
         #endif

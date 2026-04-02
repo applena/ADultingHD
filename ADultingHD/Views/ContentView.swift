@@ -74,15 +74,18 @@ struct MacContentView: View {
             }
             .navigationTitle("ADultingHD")
         } detail: {
-            switch selectedTab {
-            case .home: DashboardView()
-            case .tasks: TaskListView()
-            case .schedule: ScheduleView()
-            case .supplies: SuppliesView()
-            case .stats: StatsView()
-            case .profile: ProfileView()
-            case .settings: SettingsView()
+            NavigationStack {
+                switch selectedTab {
+                case .home: DashboardView()
+                case .tasks: TaskListView()
+                case .schedule: ScheduleView()
+                case .supplies: SuppliesView()
+                case .stats: StatsView()
+                case .profile: ProfileView()
+                case .settings: SettingsView()
+                }
             }
+            .id(selectedTab)
         }
     }
 }

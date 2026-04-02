@@ -55,8 +55,8 @@ struct AvatarItem: Identifiable, Hashable {
 // MARK: - Avatar State
 
 struct AvatarState: Codable {
-    var ownedItemIds: Set<String> = ["cat"]
-    var equippedItemIds: [AvatarSlot: String] = [.character: "cat"]
+    var ownedItemIds: Set<String> = ["person"]
+    var equippedItemIds: [AvatarSlot: String] = [.character: "person"]
 
     func owns(_ itemId: String) -> Bool { ownedItemIds.contains(itemId) }
 
@@ -78,8 +78,11 @@ struct AvatarState: Codable {
 // MARK: - Shop Catalog
 
 let avatarShopItems: [AvatarItem] = [
+    // Default starter
+    AvatarItem(id: "person",  name: "Person",  emoji: "🧑", cost: 0),
+
     // Base animals
-    AvatarItem(id: "cat",     name: "Cat",     emoji: "🐱", cost: 0,    imageName: "cat"),
+    AvatarItem(id: "cat",     name: "Cat",     emoji: "🐱", cost: 200,  imageName: "cat"),
     AvatarItem(id: "dog",     name: "Dog",     emoji: "🐶", cost: 200,  imageName: "dog"),
     AvatarItem(id: "bunny",   name: "Bunny",   emoji: "🐰", cost: 200,  imageName: "bunny"),
     AvatarItem(id: "bear",    name: "Bear",    emoji: "🐻", cost: 300,  imageName: "bear"),
