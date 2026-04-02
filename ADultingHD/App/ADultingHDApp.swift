@@ -2,6 +2,12 @@ import SwiftUI
 
 @main
 struct ADultingHDApp: App {
+    #if os(iOS)
+    @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+    #elseif os(macOS)
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+    #endif
+
     @State private var dataStore = DataStore()
     @State private var notificationManager = NotificationManager()
     @State private var storeManager = StoreManager()
@@ -19,6 +25,7 @@ struct ADultingHDApp: App {
                         storeManager.enableDemoMode()
                     }
                     #endif
+                    dataStore.configure(notificationManager: notificationManager)
                     await dataStore.load()
                     ICloudMonitor.shared.start()
                     dataStore.startSyncObserver()

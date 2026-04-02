@@ -8,6 +8,9 @@ private let logger = Logger(subsystem: "net.shadowpuppet.ADultingHD", category: 
 @Observable
 final class NotificationManager {
     var isAuthorized = false
+    var householdActivityEnabled: Bool = UserDefaults.standard.bool(forKey: "householdActivityEnabled") {
+        didSet { UserDefaults.standard.set(householdActivityEnabled, forKey: "householdActivityEnabled") }
+    }
     var dailyReminderEnabled: Bool = UserDefaults.standard.bool(forKey: "dailyReminderEnabled") {
         didSet {
             UserDefaults.standard.set(dailyReminderEnabled, forKey: "dailyReminderEnabled")
@@ -102,5 +105,23 @@ final class NotificationManager {
 
     func cancelAll() {
         center.removeAllPendingNotificationRequests()
+    }
+
+    func notifyHouseholdActivity(_ activity: HouseholdActivity) {
+        guard isAuthorized, householdActivityEnabled else { return }
+
+        let content = UNMutableNotificationContent()
+        content.title = activity.notificationTitle
+        content.body = activity.notificationBody
+        content.sound = .default
+
+        let request = UNNotificationRequest(
+            identifier: "household_\(activity.id.uuidString)",
+            content: content,
+            trigger: nil
+        )
+        center.add(request) { error in
+            if let error { logger.error("Household notification failed: \(error.localizedDescription)") }
+        }
     }
 }

@@ -80,6 +80,8 @@ targets:
         LSApplicationCategoryType: public.app-category.lifestyle
         UILaunchScreen: {}
         ITSAppUsesNonExemptEncryption: false
+        UIBackgroundModes:
+          - remote-notification
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
           - UIInterfaceOrientationLandscapeLeft
@@ -100,6 +102,7 @@ targets:
         com.apple.developer.icloud-services:
           - CloudDocuments
           - CloudKit
+        aps-environment: development
 
   ADultingHDWidget:
     type: app-extension

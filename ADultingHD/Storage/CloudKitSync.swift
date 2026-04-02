@@ -36,6 +36,8 @@ final class CloudKitSync: ObservableObject {
 
     private var zone: CKRecordZone { CKRecordZone(zoneName: ZoneName.household) }
 
+    private var subscriptionsConfigured = false
+
     private init() {}
 
     // MARK: - Setup
@@ -61,6 +63,26 @@ final class CloudKitSync: ObservableObject {
         if zones.contains(where: { $0.zoneID.zoneName == ZoneName.household }) { return }
         _ = try await privateDB.save(zone)
         logger.info("☁️ Created HouseholdZone")
+    }
+
+    func setupSubscriptions() async {
+        guard isAvailable, !subscriptionsConfigured else { return }
+        let subscriptionID = "household-zone-changes"
+        do {
+            let db = try await resolveDatabase()
+            let existing = try await db.fetchAllSubscriptions()
+            if !existing.contains(where: { $0.subscriptionID == subscriptionID }) {
+                let sub = CKRecordZoneSubscription(zoneID: zone.zoneID, subscriptionID: subscriptionID)
+                let info = CKSubscription.NotificationInfo()
+                info.shouldSendContentAvailable = true
+                sub.notificationInfo = info
+                _ = try await db.saveSubscription(sub)
+                logger.info("☁️ CloudKit zone subscription registered")
+            }
+            subscriptionsConfigured = true
+        } catch {
+            logger.error("☁️ Subscription setup failed: \(error.localizedDescription)")
+        }
     }
 
     // MARK: - Push (local → CloudKit)
@@ -259,6 +281,24 @@ private extension CKDatabase {
         }
     }
 
+    func fetchAllSubscriptions() async throws -> [CKSubscription] {
+        try await withCheckedThrowingContinuation { cont in
+            self.fetchAllSubscriptions { subs, error in
+                if let subs { cont.resume(returning: subs) }
+                else { cont.resume(throwing: error ?? CloudKitSyncError.zoneNotFound) }
+            }
+        }
+    }
+
+    func saveSubscription(_ sub: CKSubscription) async throws -> CKSubscription {
+        try await withCheckedThrowingContinuation { cont in
+            self.save(sub) { saved, error in
+                if let saved { cont.resume(returning: saved) }
+                else { cont.resume(throwing: error ?? CloudKitSyncError.zoneNotFound) }
+            }
+        }
+    }
+
     func modifyRecords(saving: [CKRecord], deleting: [CKRecord.ID]) async throws -> ([CKRecord], [CKRecord.ID]) {
         try await withCheckedThrowingContinuation { cont in
             let op = CKModifyRecordsOperation(recordsToSave: saving, recordIDsToDelete: deleting)
@@ -333,6 +373,7 @@ extension TaskCompletion {
         r["streakBonus"] = streakBonus as CKRecordValue
         r["notes"]       = notes as CKRecordValue?
         r["quality"]     = quality?.rawValue as CKRecordValue?
+        r["profileId"]   = profileId?.uuidString as CKRecordValue?
         return r
     }
 
@@ -356,6 +397,7 @@ extension TaskCompletion {
         self.streakBonus = streakBonus
         self.notes = record["notes"] as? String
         self.quality = (record["quality"] as? Int).flatMap(CompletionQuality.init)
+        self.profileId = (record["profileId"] as? String).flatMap(UUID.init)
     }
 }
 

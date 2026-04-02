@@ -53,6 +53,35 @@ struct HouseholdView: View {
                 }
             }
 
+            // Recent Activity
+            if !dataStore.householdActivityFeed.isEmpty {
+                Section("Recent Activity") {
+                    ForEach(dataStore.householdActivityFeed.prefix(10)) { activity in
+                        HStack(spacing: 10) {
+                            Image(systemName: activity.avatar)
+                                .font(.body)
+                                .foregroundStyle(.secondary)
+                                .frame(width: 28)
+
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(activity.displayTitle)
+                                    .font(.subheadline)
+                                Text(activity.timestamp, style: .relative)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+
+                            Spacer()
+
+                            Image(systemName: activity.systemImage)
+                                .font(.caption)
+                                .foregroundStyle(activityColor(activity))
+                        }
+                        .padding(.vertical, 2)
+                    }
+                }
+            }
+
             // Switch Profile
             if dataStore.householdProfiles.count > 1 {
                 Section("Switch Profile") {
@@ -95,6 +124,15 @@ struct HouseholdView: View {
             Button("Cancel", role: .cancel) { newName = "" }
         } message: {
             Text("Enter a name for the new household member")
+        }
+    }
+
+    private func activityColor(_ activity: HouseholdActivity) -> Color {
+        switch activity.event {
+        case .completedTask: Theme.successGreen
+        case .leveledUp: Theme.levelPurple
+        case .achievementUnlocked: Theme.xpGold
+        case .passedYou: Theme.streakOrange
         }
     }
 }

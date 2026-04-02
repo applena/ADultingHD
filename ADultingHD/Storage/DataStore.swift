@@ -15,6 +15,8 @@ final class DataStore {
     var isLoaded = false
 
     var celebrationType: CelebrationOverlay.CelebrationType?
+    var householdActivityFeed: [HouseholdActivity] = []
+
     private let dailyClearBonusXP = 25
     private let weeklyConsistencyBonusXP = 75
     private let monthlyConsistencyBonusXP = 150
@@ -22,8 +24,17 @@ final class DataStore {
     private let store = TaskStore()
     private let ckSync = CloudKitSync.shared
 
+    @ObservationIgnored
+    private var notificationManager: NotificationManager?
+    @ObservationIgnored
+    private var syncObserverTokens: [NSObjectProtocol] = []
+
     private var isHouseholdSharingEnabled: Bool {
         UserDefaults.standard.bool(forKey: "householdSharingEnabled")
+    }
+
+    func configure(notificationManager: NotificationManager) {
+        self.notificationManager = notificationManager
     }
 
     // MARK: - Derived State
@@ -69,6 +80,12 @@ final class DataStore {
         }
         #endif
 
+        // Snapshot household state before reload for change detection on subsequent loads
+        let wasLoaded = isLoaded
+        let preProfiles = wasLoaded ? householdProfiles : []
+        let preCompletionIDs = wasLoaded ? Set(completions.map(\.id)) : []
+        let preRank = wasLoaded ? leaderboard.firstIndex(where: { $0.id == profile.id }).map { $0 + 1 } : nil
+
         let loadedTasks = await store.loadTasks()
         let loadedProfile = await store.loadProfile()
         let loadedCompletions = await store.loadCompletions()
@@ -84,11 +101,16 @@ final class DataStore {
         await loadHouseholdProfiles()
         logger.info("DataStore loaded: \(self.tasks.count) tasks, level \(self.profile.level)")
 
+        if wasLoaded {
+            detectHouseholdChanges(preProfiles: preProfiles, preCompletionIDs: preCompletionIDs, preRank: preRank)
+        }
+
         // CloudKit: only engage if household sharing has been explicitly enabled
         if isHouseholdSharingEnabled {
             await ckSync.setup()
             if ckSync.isAvailable {
                 await migrateToCloudKitIfNeeded()
+                await ckSync.setupSubscriptions()
             }
         }
     }
@@ -108,7 +130,8 @@ final class DataStore {
             xpEarned: xpEarned,
             streakBonus: streakBonus,
             notes: notes,
-            quality: quality
+            quality: quality,
+            profileId: profile.id
         )
 
         completions.insert(completion, at: 0)
@@ -451,14 +474,18 @@ final class DataStore {
     func pullFromCloudKit() async {
         guard ckSync.isAvailable, let payload = await ckSync.pullAll() else { return }
 
+        // Snapshot before merge for change detection
+        let preProfiles = householdProfiles
+        let preCompletionIDs = Set(completions.map(\.id))
+        let preRank = leaderboard.firstIndex(where: { $0.id == profile.id }).map { $0 + 1 }
+
         // Merge tasks: union by ID, keeping local custom tasks not in cloud
         let cloudTaskIds = Set(payload.tasks.map(\.id))
         let localOnly = tasks.filter { !cloudTaskIds.contains($0.id) }
         tasks = payload.tasks + localOnly
 
         // Merge completions: union by ID
-        let existingIds = Set(completions.map(\.id))
-        let newCompletions = payload.completions.filter { !existingIds.contains($0.id) }
+        let newCompletions = payload.completions.filter { !preCompletionIDs.contains($0.id) }
         completions = (completions + newCompletions).sorted { $0.completedAt > $1.completedAt }
 
         // Merge profiles: prefer higher XP version
@@ -476,6 +503,74 @@ final class DataStore {
 
         await save()
         logger.info("☁️ CloudKit pull merged: \(self.tasks.count) tasks, \(self.completions.count) completions")
+
+        detectHouseholdChanges(preProfiles: preProfiles, preCompletionIDs: preCompletionIDs, preRank: preRank)
+    }
+
+    private func detectHouseholdChanges(preProfiles: [UserProfile], preCompletionIDs: Set<UUID>, preRank: Int?) {
+        guard householdProfiles.count > 1 else { return }
+
+        let preXP = Dictionary(uniqueKeysWithValues: preProfiles.map { ($0.id, $0.totalXP) })
+        let preLevels = Dictionary(uniqueKeysWithValues: preProfiles.map { ($0.id, $0.level) })
+        let preAchievs = Dictionary(uniqueKeysWithValues: preProfiles.map { ($0.id, Set($0.unlockedAchievements)) })
+
+        var newActivities: [HouseholdActivity] = []
+
+        for member in householdProfiles where member.id != profile.id {
+            let prevXP = preXP[member.id] ?? 0
+            guard prevXP > 0 else { continue }  // skip members not seen before (avoid false level-up on add)
+
+            // Level up
+            let prevLevel = preLevels[member.id] ?? 0
+            if member.level > prevLevel {
+                newActivities.append(HouseholdActivity(
+                    profileId: member.id, profileName: member.name, avatar: member.avatar,
+                    event: .leveledUp(level: member.level), timestamp: Date()
+                ))
+            }
+
+            // New achievements
+            let prevAch = preAchievs[member.id] ?? []
+            for achievId in Set(member.unlockedAchievements).subtracting(prevAch) {
+                let name = allAchievements.first { $0.id == achievId }?.name ?? achievId
+                newActivities.append(HouseholdActivity(
+                    profileId: member.id, profileName: member.name, avatar: member.avatar,
+                    event: .achievementUnlocked(name: name), timestamp: Date()
+                ))
+            }
+
+            // New completions attributed to this member
+            let memberCompletions = completions.filter {
+                $0.profileId == member.id && !preCompletionIDs.contains($0.id)
+            }
+            for c in memberCompletions.prefix(5) {
+                newActivities.append(HouseholdActivity(
+                    profileId: member.id, profileName: member.name, avatar: member.avatar,
+                    event: .completedTask(name: c.taskName, xp: c.xpEarned), timestamp: c.completedAt
+                ))
+            }
+        }
+
+        // Rank drop: did someone pass the current user?
+        let postRank = leaderboard.firstIndex(where: { $0.id == profile.id }).map { $0 + 1 }
+        if let pre = preRank, let post = postRank, post > pre {
+            // Find members who were at or below our XP before but are now ahead
+            let passers = leaderboard.prefix(post - 1).filter { member in
+                (preXP[member.id] ?? member.totalXP) <= profile.totalXP
+            }
+            for passer in passers.prefix(1) {
+                newActivities.append(HouseholdActivity(
+                    profileId: passer.id, profileName: passer.name, avatar: passer.avatar,
+                    event: .passedYou(newRank: post), timestamp: Date()
+                ))
+            }
+        }
+
+        guard !newActivities.isEmpty else { return }
+
+        householdActivityFeed = Array((newActivities + householdActivityFeed).prefix(50))
+        newActivities.forEach { notificationManager?.notifyHouseholdActivity($0) }
+        logger.info("🏠 \(newActivities.count) new household activities detected")
     }
 
     var cloudKitShareURL: URL? { ckSync.shareURL }
@@ -491,16 +586,27 @@ final class DataStore {
 
     // MARK: - iCloud Documents Sync
 
-    /// Start listening for remote iCloud changes and reload when they arrive.
+    /// Start listening for remote iCloud and CloudKit changes. Safe to call once.
     func startSyncObserver() {
-        NotificationCenter.default.addObserver(
-            forName: .dataDidSync, object: nil, queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor in
-                await self?.load()
-                logger.info("☁️ reloaded from iCloud sync")
+        guard syncObserverTokens.isEmpty else { return }
+
+        syncObserverTokens.append(
+            NotificationCenter.default.addObserver(forName: .dataDidSync, object: nil, queue: .main) { [weak self] _ in
+                Task { @MainActor in
+                    await self?.load()
+                    logger.info("☁️ reloaded from iCloud sync")
+                }
             }
-        }
+        )
+
+        syncObserverTokens.append(
+            NotificationCenter.default.addObserver(forName: .cloudKitRemoteChange, object: nil, queue: .main) { [weak self] _ in
+                Task { @MainActor in
+                    await self?.pullFromCloudKit()
+                    logger.info("☁️ pulled from CloudKit remote change")
+                }
+            }
+        )
     }
 
     // MARK: - Export/Import

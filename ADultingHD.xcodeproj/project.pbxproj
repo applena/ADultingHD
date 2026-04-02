@@ -61,6 +61,7 @@
 		89E2EACB56230C51F30C983D /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 3A3517C461E95902B75B83EC /* Assets.xcassets */; };
 		8D0F4534D07BA76C6387C53A /* DataStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7A30BDBD828F7148288710C /* DataStore.swift */; };
 		8DE2F629284ED770D3B2D48B /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81CDE793214D211A1B6C4124 /* ContentView.swift */; };
+		903A1FCACE9EB8111F170CA6 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC7C1D393BEF1BD66D303071 /* AppDelegate.swift */; };
 		9C1DEBF4250D2976DB2BB016 /* AvatarShopView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4757FDAA2BA9BF7C4FCF13EF /* AvatarShopView.swift */; };
 		A1AE097D34F2C2F96302AE42 /* SharedDefaults.swift in Sources */ = {isa = PBXBuildFile; fileRef = 237812D11116F8AC3958C169 /* SharedDefaults.swift */; };
 		A749CF0FE2A205BA72AC5B7D /* AddTaskView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC09792564158736721A229E /* AddTaskView.swift */; };
@@ -73,6 +74,7 @@
 		C19DB4BB11AB785EE04F0097 /* SuppliesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4625924B07ADFBF1008BB9A7 /* SuppliesView.swift */; };
 		C580DDA7F993E8F55A55996C /* TaskCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBF9F9EF33AED52C9BCD464D /* TaskCatalog.swift */; };
 		CCE73807F751779BBA12F2D4 /* SharedDefaults.swift in Sources */ = {isa = PBXBuildFile; fileRef = 237812D11116F8AC3958C169 /* SharedDefaults.swift */; };
+		CE5D9208158614C478A57CF1 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC7C1D393BEF1BD66D303071 /* AppDelegate.swift */; };
 		D01170ED32D390FC87CD5772 /* ICloudMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3657A503A8E12F538794820B /* ICloudMonitor.swift */; };
 		D34A296E21D0680E7FD36A53 /* ScheduleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1404A4A0405FEE3627DCF6ED /* ScheduleView.swift */; };
 		D5ED0D8A6525358B05C0F0B6 /* WelcomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 124C98670AF61F31F83E9446 /* WelcomeView.swift */; };
@@ -161,6 +163,7 @@
 		E47DD27D62AD23DAEE39C772 /* NewFeatureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewFeatureTests.swift; sourceTree = "<group>"; };
 		E5F315AD0A00703DCF818D81 /* NotificationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationManager.swift; sourceTree = "<group>"; };
 		E9884417AB73CB97FADC3F3C /* ADultingHDTests_iOS.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = ADultingHDTests_iOS.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		EC7C1D393BEF1BD66D303071 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -380,6 +383,7 @@
 			children = (
 				76526EBCE81380FCFDA75143 /* ADultingHD.entitlements */,
 				5EAA3948D9FC1F50504D54B1 /* ADultingHDApp.swift */,
+				EC7C1D393BEF1BD66D303071 /* AppDelegate.swift */,
 				3A3517C461E95902B75B83EC /* Assets.xcassets */,
 				7459F3A8C4313CF430C5F9C3 /* Info.plist */,
 				94BE46FE41B7C1EA8E502F61 /* Products.storekit */,
@@ -609,6 +613,7 @@
 			files = (
 				3BAB900BC70ACCDC13B6DFAA /* ADultingHDApp.swift in Sources */,
 				A749CF0FE2A205BA72AC5B7D /* AddTaskView.swift in Sources */,
+				CE5D9208158614C478A57CF1 /* AppDelegate.swift in Sources */,
 				E3DF2EB293C94F7A4C2CDD8F /* AvatarModels.swift in Sources */,
 				7E5F65F8C2955E1677436850 /* AvatarShopView.swift in Sources */,
 				71179E1595419332759B5383 /* AvatarView.swift in Sources */,
@@ -649,6 +654,7 @@
 			files = (
 				FAB88E2381DF0C5442B48ADF /* ADultingHDApp.swift in Sources */,
 				86B63C6F7C5A3B9F2B5A9977 /* AddTaskView.swift in Sources */,
+				903A1FCACE9EB8111F170CA6 /* AppDelegate.swift in Sources */,
 				6E9CFD6E05FDD6FB61E2EF5C /* AvatarModels.swift in Sources */,
 				9C1DEBF4250D2976DB2BB016 /* AvatarShopView.swift in Sources */,
 				B2E33766E6A443E258D27C8E /* AvatarView.swift in Sources */,

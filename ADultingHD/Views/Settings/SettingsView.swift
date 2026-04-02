@@ -141,6 +141,9 @@ extension SettingsView {
                     if notificationManager.dailyReminderEnabled {
                         DatePicker("Reminder Time", selection: reminderTime, displayedComponents: .hourAndMinute)
                     }
+                    Toggle("Household Activity", isOn: $nm.householdActivityEnabled)
+                    Text("Get notified when household members complete tasks or move up the leaderboard")
+                        .font(.caption).foregroundStyle(.secondary)
                 } else {
                     Button {
                         Task { await notificationManager.requestAuthorization() }
@@ -342,6 +345,9 @@ extension SettingsView {
                     if notificationManager.dailyReminderEnabled {
                         DatePicker("Reminder Time", selection: reminderTime, displayedComponents: .hourAndMinute)
                     }
+                    Toggle("Household Activity", isOn: $nm.householdActivityEnabled)
+                    Text("Get notified when household members complete tasks or move up the leaderboard")
+                        .font(.caption).foregroundStyle(.secondary)
                 } else {
                     Button {
                         Task { await notificationManager.requestAuthorization() }

@@ -234,6 +234,65 @@ struct TaskCompletion: Codable, Identifiable {
     let streakBonus: Int
     let notes: String?
     var quality: CompletionQuality?
+    var profileId: UUID?  // nil = legacy data; set to completing member's profile id
+}
+
+// MARK: - Household Activity Feed
+
+enum HouseholdActivityEvent {
+    case completedTask(name: String, xp: Int)
+    case leveledUp(level: Int)
+    case achievementUnlocked(name: String)
+    case passedYou(newRank: Int)
+}
+
+struct HouseholdActivity: Identifiable {
+    let id = UUID()
+    let profileId: UUID
+    let profileName: String
+    let avatar: String
+    let event: HouseholdActivityEvent
+    let timestamp: Date
+
+    var displayTitle: String {
+        switch event {
+        case .completedTask(let name, let xp):
+            return "\(profileName) completed '\(name)' +\(xp) XP"
+        case .leveledUp(let level):
+            return "\(profileName) reached Level \(level)!"
+        case .achievementUnlocked(let name):
+            return "\(profileName) unlocked \(name)"
+        case .passedYou(let rank):
+            return "\(profileName) passed you (you're now #\(rank))"
+        }
+    }
+
+    var systemImage: String {
+        switch event {
+        case .completedTask: "checkmark.circle.fill"
+        case .leveledUp: "arrow.up.circle.fill"
+        case .achievementUnlocked: "star.fill"
+        case .passedYou: "arrow.up.right.circle.fill"
+        }
+    }
+
+    var notificationTitle: String {
+        switch event {
+        case .completedTask: return "\(profileName) is adulting!"
+        case .leveledUp: return "\(profileName) leveled up!"
+        case .achievementUnlocked: return "\(profileName) unlocked an achievement!"
+        case .passedYou: return "\(profileName) passed you!"
+        }
+    }
+
+    var notificationBody: String {
+        switch event {
+        case .completedTask(let name, let xp): return "Completed '\(name)' for +\(xp) XP"
+        case .leveledUp(let level): return "Now Level \(level) on the household leaderboard"
+        case .achievementUnlocked(let name): return name
+        case .passedYou(let newRank): return "You dropped to #\(newRank) on the leaderboard. Time to catch up!"
+        }
+    }
 }
 
 // MARK: - Supply Stock
