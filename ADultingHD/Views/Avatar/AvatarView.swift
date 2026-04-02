@@ -6,52 +6,31 @@ struct AvatarView: View {
 
     private var scale: CGFloat { size / 120 }
 
-    private func equippedItem(for slot: AvatarSlot) -> AvatarItem? {
-        guard let id = avatarState.equipped(slot: slot) else { return nil }
+    private var equippedCharacter: AvatarItem? {
+        guard let id = avatarState.equipped(slot: .character) else { return nil }
         return avatarItem(byId: id)
     }
 
     var body: some View {
         ZStack {
-            // Background
-            if let bg = equippedItem(for: .background) {
-                backgroundLayer(bg)
-            } else {
-                Circle()
-                    .fill(Theme.levelPurple.opacity(0.12))
-                    .frame(width: size, height: size)
-            }
+            Circle()
+                .fill(Theme.levelPurple.opacity(0.12))
+                .frame(width: size, height: size)
 
-            ForEach([AvatarSlot.base, .hat, .glasses, .accessory], id: \.self) { slot in
-                if let item = equippedItem(for: slot) {
-                    Text(item.emoji)
-                        .font(.system(size: item.fontSize * scale))
-                        .offset(x: item.offsetX * scale, y: item.offsetY * scale)
+            if let character = equippedCharacter {
+                if let imgName = character.imageName {
+                    Image(imgName)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: size * 0.85, height: size * 0.85)
+                        .clipShape(Circle())
+                } else {
+                    Text(character.emoji)
+                        .font(.system(size: character.fontSize * scale))
                 }
             }
         }
         .frame(width: size, height: size)
-    }
-
-    @ViewBuilder
-    private func backgroundLayer(_ bg: AvatarItem) -> some View {
-        ZStack {
-            Circle()
-                .fill(Theme.levelPurple.opacity(0.08))
-                .frame(width: size, height: size)
-
-            // Scatter the background emoji around
-            let positions: [(CGFloat, CGFloat)] = [
-                (-0.3, -0.35), (0.3, -0.3), (-0.35, 0.2),
-                (0.35, 0.25), (0.0, -0.4), (0.0, 0.4),
-            ]
-            ForEach(Array(positions.enumerated()), id: \.offset) { _, pos in
-                Text(bg.emoji)
-                    .font(.system(size: 14 * scale))
-                    .opacity(0.5)
-                    .offset(x: pos.0 * size, y: pos.1 * size)
-            }
-        }
     }
 }
 

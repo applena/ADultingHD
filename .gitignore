@@ -15,6 +15,9 @@ Pods/
 # OS
 .DS_Store
 
+# Generated build artifacts
+generated-avatars/
+
 # Editor/terminal themes
 .ghostty-theme
 screenshots.xcresult/

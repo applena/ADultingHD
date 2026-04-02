@@ -9,29 +9,15 @@
       <BuildActionEntries>
          <BuildActionEntry
             buildForTesting = "YES"
-            buildForRunning = "NO"
-            buildForProfiling = "NO"
-            buildForArchiving = "NO"
-            buildForAnalyzing = "NO">
-            <BuildableReference
-               BuildableIdentifier = "primary"
-               BlueprintIdentifier = "C1C6A8E0BEF9D062143FD804"
-               BuildableName = "ADultingHDUITests.xctest"
-               BlueprintName = "ADultingHDUITests"
-               ReferencedContainer = "container:ADultingHD.xcodeproj">
-            </BuildableReference>
-         </BuildActionEntry>
-         <BuildActionEntry
-            buildForTesting = "YES"
             buildForRunning = "YES"
             buildForProfiling = "YES"
             buildForArchiving = "YES"
             buildForAnalyzing = "YES">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "9D965F565A63263F3D04366F"
+               BlueprintIdentifier = "241DB83DB6F78743CFFD2257"
                BuildableName = "ADultingHD.app"
-               BlueprintName = "ADultingHD_iOS"
+               BlueprintName = "ADultingHD_macOS"
                ReferencedContainer = "container:ADultingHD.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
@@ -46,9 +32,9 @@
       <MacroExpansion>
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "9D965F565A63263F3D04366F"
+            BlueprintIdentifier = "241DB83DB6F78743CFFD2257"
             BuildableName = "ADultingHD.app"
-            BlueprintName = "ADultingHD_iOS"
+            BlueprintName = "ADultingHD_macOS"
             ReferencedContainer = "container:ADultingHD.xcodeproj">
          </BuildableReference>
       </MacroExpansion>
@@ -58,20 +44,9 @@
             parallelizable = "NO">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "4067515989BF9243B8DB2EC2"
-               BuildableName = "ADultingHDTests_iOS.xctest"
-               BlueprintName = "ADultingHDTests_iOS"
-               ReferencedContainer = "container:ADultingHD.xcodeproj">
-            </BuildableReference>
-         </TestableReference>
-         <TestableReference
-            skipped = "NO"
-            parallelizable = "NO">
-            <BuildableReference
-               BuildableIdentifier = "primary"
-               BlueprintIdentifier = "C1C6A8E0BEF9D062143FD804"
-               BuildableName = "ADultingHDUITests.xctest"
-               BlueprintName = "ADultingHDUITests"
+               BlueprintIdentifier = "EDA793009F48CF9062D0A6E8"
+               BuildableName = "ADultingHDTests_macOS.xctest"
+               BlueprintName = "ADultingHDTests_macOS"
                ReferencedContainer = "container:ADultingHD.xcodeproj">
             </BuildableReference>
          </TestableReference>
@@ -93,9 +68,9 @@
          runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "9D965F565A63263F3D04366F"
+            BlueprintIdentifier = "241DB83DB6F78743CFFD2257"
             BuildableName = "ADultingHD.app"
-            BlueprintName = "ADultingHD_iOS"
+            BlueprintName = "ADultingHD_macOS"
             ReferencedContainer = "container:ADultingHD.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
@@ -112,9 +87,9 @@
          runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "9D965F565A63263F3D04366F"
+            BlueprintIdentifier = "241DB83DB6F78743CFFD2257"
             BuildableName = "ADultingHD.app"
-            BlueprintName = "ADultingHD_iOS"
+            BlueprintName = "ADultingHD_macOS"
             ReferencedContainer = "container:ADultingHD.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>

@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		012E7B188D2A57AC62E22D61 /* CelebrationOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = C83482BE393F043CC98D85D5 /* CelebrationOverlay.swift */; };
+		08AA7BF41F5C829B9CD76EE5 /* CloudKitSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC0D49B9607490BDBDF8E190 /* CloudKitSync.swift */; };
 		08B24DF878A7259865426EFB /* ProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6FBFA6567C2B1A40A60A5E2 /* ProfileView.swift */; };
 		0A1DFB68D9B5E5EF8D71D9B7 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 595B8FFDEAA880BB683CE951 /* Theme.swift */; };
 		0C4892190E1675E2621AC90E /* ModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12E42443B93064A0049A2DE8 /* ModelTests.swift */; };
@@ -42,6 +43,7 @@
 		6337C10485FA4AB0AFC8D431 /* ModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12E42443B93064A0049A2DE8 /* ModelTests.swift */; };
 		63BACBDA0B80E661879BD3DE /* DemoData.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7FA39F5B9D5EB44665C21D60 /* DemoData.swift */; };
 		65B1424603726E76E01DCDE2 /* DefaultTasks.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04D1D6ED759D2E2C16961F3F /* DefaultTasks.swift */; };
+		68ECBCF85C1FBDB970904EA3 /* ICloudMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3657A503A8E12F538794820B /* ICloudMonitor.swift */; };
 		6D3913B7404D76076FFBD3EC /* NewFeatureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E47DD27D62AD23DAEE39C772 /* NewFeatureTests.swift */; };
 		6E9CFD6E05FDD6FB61E2EF5C /* AvatarModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E4E23E901E5476ADB2336D1 /* AvatarModels.swift */; };
 		6EA755C6B47C601D4AC5214A /* SeasonalTasks.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0B77A6011E1BFCF8CBD20D /* SeasonalTasks.swift */; };
@@ -63,6 +65,7 @@
 		A1AE097D34F2C2F96302AE42 /* SharedDefaults.swift in Sources */ = {isa = PBXBuildFile; fileRef = 237812D11116F8AC3958C169 /* SharedDefaults.swift */; };
 		A749CF0FE2A205BA72AC5B7D /* AddTaskView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC09792564158736721A229E /* AddTaskView.swift */; };
 		AB9CED694A786AED0A665721 /* Products.storekit in Resources */ = {isa = PBXBuildFile; fileRef = 94BE46FE41B7C1EA8E502F61 /* Products.storekit */; };
+		AD649BB11A09F94907291EA6 /* CloudKitSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC0D49B9607490BDBDF8E190 /* CloudKitSync.swift */; };
 		AE9A26A486ADF8D8C308066E /* DefaultTasks.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04D1D6ED759D2E2C16961F3F /* DefaultTasks.swift */; };
 		B2E33766E6A443E258D27C8E /* AvatarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1090F574CE8B557B631AA05C /* AvatarView.swift */; };
 		B719C8440B8AA15C2D29DE11 /* StorageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC655FB6ECD683EFB08D9D2A /* StorageTests.swift */; };
@@ -70,6 +73,7 @@
 		C19DB4BB11AB785EE04F0097 /* SuppliesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4625924B07ADFBF1008BB9A7 /* SuppliesView.swift */; };
 		C580DDA7F993E8F55A55996C /* TaskCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBF9F9EF33AED52C9BCD464D /* TaskCatalog.swift */; };
 		CCE73807F751779BBA12F2D4 /* SharedDefaults.swift in Sources */ = {isa = PBXBuildFile; fileRef = 237812D11116F8AC3958C169 /* SharedDefaults.swift */; };
+		D01170ED32D390FC87CD5772 /* ICloudMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3657A503A8E12F538794820B /* ICloudMonitor.swift */; };
 		D34A296E21D0680E7FD36A53 /* ScheduleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1404A4A0405FEE3627DCF6ED /* ScheduleView.swift */; };
 		D5ED0D8A6525358B05C0F0B6 /* WelcomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 124C98670AF61F31F83E9446 /* WelcomeView.swift */; };
 		DCBFC7323C498C4BCACA07F2 /* WelcomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 124C98670AF61F31F83E9446 /* WelcomeView.swift */; };
@@ -118,6 +122,7 @@
 		237812D11116F8AC3958C169 /* SharedDefaults.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedDefaults.swift; sourceTree = "<group>"; };
 		2F5B0036B4BFEAB2320CF8F3 /* ADultingHD.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ADultingHD.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		317D978794EB297B3B1016C3 /* TaskDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskDetailView.swift; sourceTree = "<group>"; };
+		3657A503A8E12F538794820B /* ICloudMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ICloudMonitor.swift; sourceTree = "<group>"; };
 		3A3517C461E95902B75B83EC /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		4625924B07ADFBF1008BB9A7 /* SuppliesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SuppliesView.swift; sourceTree = "<group>"; };
 		4757FDAA2BA9BF7C4FCF13EF /* AvatarShopView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AvatarShopView.swift; sourceTree = "<group>"; };
@@ -140,6 +145,7 @@
 		9842B7EFD24606C323FF2B0A /* TaskListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskListView.swift; sourceTree = "<group>"; };
 		A7A30BDBD828F7148288710C /* DataStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DataStore.swift; sourceTree = "<group>"; };
 		AB0B77A6011E1BFCF8CBD20D /* SeasonalTasks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SeasonalTasks.swift; sourceTree = "<group>"; };
+		AC0D49B9607490BDBDF8E190 /* CloudKitSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitSync.swift; sourceTree = "<group>"; };
 		AC655FB6ECD683EFB08D9D2A /* StorageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageTests.swift; sourceTree = "<group>"; };
 		ADEF2B5DEB9BCCF7E7E71E62 /* ADultingHDWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ADultingHDWidget.swift; sourceTree = "<group>"; };
 		AE96F106523C9887126C1272 /* ADultingHD.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = ADultingHD.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -178,7 +184,9 @@
 		11FBB908C9AB35B09E744F35 /* Storage */ = {
 			isa = PBXGroup;
 			children = (
+				AC0D49B9607490BDBDF8E190 /* CloudKitSync.swift */,
 				A7A30BDBD828F7148288710C /* DataStore.swift */,
+				3657A503A8E12F538794820B /* ICloudMonitor.swift */,
 				237812D11116F8AC3958C169 /* SharedDefaults.swift */,
 				E301F5BC8F6566FA177AF157 /* TaskStore.swift */,
 			);
@@ -605,6 +613,7 @@
 				7E5F65F8C2955E1677436850 /* AvatarShopView.swift in Sources */,
 				71179E1595419332759B5383 /* AvatarView.swift in Sources */,
 				012E7B188D2A57AC62E22D61 /* CelebrationOverlay.swift in Sources */,
+				AD649BB11A09F94907291EA6 /* CloudKitSync.swift in Sources */,
 				F98B81C6A4D7E11C87DE2424 /* ContentView.swift in Sources */,
 				29CCC391251B81468E3C4D89 /* DashboardView.swift in Sources */,
 				72C9E74018875C9858192642 /* DataStore.swift in Sources */,
@@ -612,6 +621,7 @@
 				E613C7B7E0929774AD26EFA3 /* DemoData.swift in Sources */,
 				E0A6C9DCEA16B498614C0660 /* FeedbackManager.swift in Sources */,
 				EAD9D9ED183F29BF6113503F /* HouseholdView.swift in Sources */,
+				68ECBCF85C1FBDB970904EA3 /* ICloudMonitor.swift in Sources */,
 				85DEF4BA984FD4CCFE3F7F3E /* MailComposer.swift in Sources */,
 				81EE3B8055126ADDA86D97FA /* Models.swift in Sources */,
 				716FE347214FE37EC6B948A6 /* NotificationManager.swift in Sources */,
@@ -643,6 +653,7 @@
 				9C1DEBF4250D2976DB2BB016 /* AvatarShopView.swift in Sources */,
 				B2E33766E6A443E258D27C8E /* AvatarView.swift in Sources */,
 				217DCA6798A2B5FEBC6F3F36 /* CelebrationOverlay.swift in Sources */,
+				08AA7BF41F5C829B9CD76EE5 /* CloudKitSync.swift in Sources */,
 				8DE2F629284ED770D3B2D48B /* ContentView.swift in Sources */,
 				EF2F578B0B23F18F8F82CBB8 /* DashboardView.swift in Sources */,
 				8D0F4534D07BA76C6387C53A /* DataStore.swift in Sources */,
@@ -650,6 +661,7 @@
 				63BACBDA0B80E661879BD3DE /* DemoData.swift in Sources */,
 				192D8A1B3C12ABF4EB2B4D27 /* FeedbackManager.swift in Sources */,
 				1B89BFD27BDC7BF01730F544 /* HouseholdView.swift in Sources */,
+				D01170ED32D390FC87CD5772 /* ICloudMonitor.swift in Sources */,
 				0EBCCB3952C73766A7550BB1 /* MailComposer.swift in Sources */,
 				4E200ACE0644D64B1C8E12FE /* Models.swift in Sources */,
 				2A7E63B6DE2268ADD3EA7169 /* NotificationManager.swift in Sources */,

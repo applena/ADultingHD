@@ -142,17 +142,8 @@ enum DemoData {
             "early_bird", "five_in_day"
         ]
         p.avatarState = AvatarState()
-        p.avatarState.ownedItemIds = [
-            "cat", "bear", "fox", "crown", "star_eyes", "cape", "bg_rainbow",
-            "broom", "baseball_cap", "sunglasses", "bg_stars", "medal"
-        ]
-        p.avatarState.equippedItemIds = [
-            .base: "bear",
-            .hat: "crown",
-            .glasses: "star_eyes",
-            .accessory: "cape",
-            .background: "bg_rainbow"
-        ]
+        p.avatarState.ownedItemIds = ["cat", "bear", "fox", "bear_lumberjack", "bear_knight", "fox_detective"]
+        p.avatarState.equippedItemIds = [.character: "bear_knight"]
         return p
     }
 
@@ -189,8 +180,8 @@ enum DemoData {
         sarah.currentStreak = 9
         sarah.longestStreak = 21
         sarah.joinDate = Calendar.current.date(byAdding: .day, value: -40, to: Date())!
-        sarah.avatarState.ownedItemIds = ["cat", "bunny", "flower_crown", "heart_eyes"]
-        sarah.avatarState.equippedItemIds = [.base: "bunny", .hat: "flower_crown", .glasses: "heart_eyes"]
+        sarah.avatarState.ownedItemIds = ["cat", "bunny", "bunny_gardener", "bunny_wizard"]
+        sarah.avatarState.equippedItemIds = [.character: "bunny_gardener"]
 
         var mike = UserProfile()
         mike.name = "Mike"
@@ -199,8 +190,8 @@ enum DemoData {
         mike.currentStreak = 3
         mike.longestStreak = 11
         mike.joinDate = Calendar.current.date(byAdding: .day, value: -30, to: Date())!
-        mike.avatarState.ownedItemIds = ["cat", "dog", "baseball_cap", "sunglasses"]
-        mike.avatarState.equippedItemIds = [.base: "dog", .hat: "baseball_cap", .glasses: "sunglasses"]
+        mike.avatarState.ownedItemIds = ["cat", "dog", "dog_firefighter"]
+        mike.avatarState.equippedItemIds = [.character: "dog_firefighter"]
 
         return [main, sarah, mike]
     }

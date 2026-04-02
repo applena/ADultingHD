@@ -99,6 +99,7 @@ targets:
           - iCloud.net.shadowpuppet.ADultingHD
         com.apple.developer.icloud-services:
           - CloudDocuments
+          - CloudKit
 
   ADultingHDWidget:
     type: app-extension

@@ -1,52 +1,52 @@
 import Foundation
 
-// MARK: - Avatar Item Slot
+// MARK: - Avatar Tier
 
-enum AvatarSlot: String, Codable, CaseIterable, Identifiable {
-    case base = "Character"
+enum AvatarTier {
+    case animal
+    case hero
+}
+
+// MARK: - Avatar Slot
+
+enum AvatarSlot: String, Codable, Identifiable {
+    case character = "Character"
+    // Legacy slots retained for Codable compatibility with existing saved data
     case hat = "Hat"
     case glasses = "Glasses"
     case accessory = "Accessory"
     case background = "Background"
 
     var id: String { rawValue }
-
-    var icon: String {
-        switch self {
-        case .base: "person.fill"
-        case .hat: "crown"
-        case .glasses: "eyeglasses"
-        case .accessory: "sparkles"
-        case .background: "circle.fill"
-        }
-    }
 }
 
 // MARK: - Avatar Item
 
-struct AvatarItem: Identifiable, Codable, Hashable {
+struct AvatarItem: Identifiable, Hashable {
     let id: String
     let name: String
     let emoji: String
-    let slot: AvatarSlot
     let cost: Int
-    let offsetX: Double
-    let offsetY: Double
     let fontSize: Double
     let unlockLevel: Int
+    let imageName: String?
 
-    init(id: String, name: String, emoji: String, slot: AvatarSlot, cost: Int,
-         offsetX: Double = 0, offsetY: Double = 0, fontSize: Double = 24, unlockLevel: Int = 0) {
+    init(id: String, name: String, emoji: String, cost: Int,
+         fontSize: Double = 60, unlockLevel: Int = 0, imageName: String? = nil) {
         self.id = id
         self.name = name
         self.emoji = emoji
-        self.slot = slot
         self.cost = cost
-        self.offsetX = offsetX
-        self.offsetY = offsetY
         self.fontSize = fontSize
         self.unlockLevel = unlockLevel
+        self.imageName = imageName
     }
+
+    /// Species family inferred from id prefix: "cat_chef" -> "cat", "cat" -> "cat"
+    var family: String { id.components(separatedBy: "_").first ?? id }
+
+    /// Hero avatars have an underscore in their id (e.g. "cat_chef"); others are base animals
+    var tier: AvatarTier { id.contains("_") ? .hero : .animal }
 
     func hash(into hasher: inout Hasher) { hasher.combine(id) }
     static func == (lhs: AvatarItem, rhs: AvatarItem) -> Bool { lhs.id == rhs.id }
@@ -56,7 +56,7 @@ struct AvatarItem: Identifiable, Codable, Hashable {
 
 struct AvatarState: Codable {
     var ownedItemIds: Set<String> = ["cat"]
-    var equippedItemIds: [AvatarSlot: String] = [.base: "cat"]
+    var equippedItemIds: [AvatarSlot: String] = [.character: "cat"]
 
     func owns(_ itemId: String) -> Bool { ownedItemIds.contains(itemId) }
 
@@ -67,64 +67,44 @@ struct AvatarState: Codable {
     }
 
     mutating func equip(_ item: AvatarItem) {
-        equippedItemIds[item.slot] = item.id
+        equippedItemIds[.character] = item.id
     }
 
     mutating func unequip(slot: AvatarSlot) {
-        if slot != .base { equippedItemIds.removeValue(forKey: slot) }
+        if slot != .character { equippedItemIds.removeValue(forKey: slot) }
     }
 }
 
 // MARK: - Shop Catalog
 
 let avatarShopItems: [AvatarItem] = [
-    // Base characters
-    AvatarItem(id: "cat", name: "Cat", emoji: "🐱", slot: .base, cost: 0, fontSize: 60),
-    AvatarItem(id: "dog", name: "Dog", emoji: "🐶", slot: .base, cost: 200, fontSize: 60),
-    AvatarItem(id: "bunny", name: "Bunny", emoji: "🐰", slot: .base, cost: 200, fontSize: 60),
-    AvatarItem(id: "bear", name: "Bear", emoji: "🐻", slot: .base, cost: 300, fontSize: 60),
-    AvatarItem(id: "fox", name: "Fox", emoji: "🦊", slot: .base, cost: 300, fontSize: 60),
-    AvatarItem(id: "panda", name: "Panda", emoji: "🐼", slot: .base, cost: 400, fontSize: 60, unlockLevel: 5),
-    AvatarItem(id: "unicorn", name: "Unicorn", emoji: "🦄", slot: .base, cost: 500, fontSize: 60, unlockLevel: 10),
-    AvatarItem(id: "dragon", name: "Dragon", emoji: "🐲", slot: .base, cost: 1000, fontSize: 60, unlockLevel: 20),
+    // Base animals
+    AvatarItem(id: "cat",     name: "Cat",     emoji: "🐱", cost: 0,    imageName: "cat"),
+    AvatarItem(id: "dog",     name: "Dog",     emoji: "🐶", cost: 200,  imageName: "dog"),
+    AvatarItem(id: "bunny",   name: "Bunny",   emoji: "🐰", cost: 200,  imageName: "bunny"),
+    AvatarItem(id: "bear",    name: "Bear",    emoji: "🐻", cost: 300,  imageName: "bear"),
+    AvatarItem(id: "fox",     name: "Fox",     emoji: "🦊", cost: 300,  imageName: "fox"),
+    AvatarItem(id: "panda",   name: "Panda",   emoji: "🐼", cost: 400,  unlockLevel: 5,  imageName: "panda"),
+    AvatarItem(id: "unicorn", name: "Unicorn", emoji: "🦄", cost: 500,  unlockLevel: 10, imageName: "unicorn"),
+    AvatarItem(id: "dragon",  name: "Dragon",  emoji: "🐲", cost: 1000, unlockLevel: 20, imageName: "dragon"),
 
-    // Hats
-    AvatarItem(id: "party_hat", name: "Party Hat", emoji: "🥳", slot: .hat, cost: 50, offsetY: -38, fontSize: 28),
-    AvatarItem(id: "baseball_cap", name: "Baseball Cap", emoji: "🧢", slot: .hat, cost: 100, offsetY: -36, fontSize: 30),
-    AvatarItem(id: "top_hat", name: "Top Hat", emoji: "🎩", slot: .hat, cost: 200, offsetY: -38, fontSize: 30),
-    AvatarItem(id: "crown", name: "Crown", emoji: "👑", slot: .hat, cost: 500, offsetY: -36, fontSize: 28, unlockLevel: 5),
-    AvatarItem(id: "grad_cap", name: "Grad Cap", emoji: "🎓", slot: .hat, cost: 300, offsetY: -38, fontSize: 30, unlockLevel: 3),
-    AvatarItem(id: "cowboy", name: "Cowboy Hat", emoji: "🤠", slot: .hat, cost: 150, offsetY: -36, fontSize: 28),
-    AvatarItem(id: "helmet", name: "Hard Hat", emoji: "⛑️", slot: .hat, cost: 175, offsetY: -36, fontSize: 26),
-    AvatarItem(id: "wizard_hat", name: "Wizard Hat", emoji: "🧙", slot: .hat, cost: 400, offsetY: -38, fontSize: 28, unlockLevel: 8),
-    AvatarItem(id: "ribbon", name: "Ribbon", emoji: "🎀", slot: .hat, cost: 75, offsetY: -32, fontSize: 22),
-    AvatarItem(id: "flower_crown", name: "Flower Crown", emoji: "🌸", slot: .hat, cost: 125, offsetY: -34, fontSize: 24),
-
-    // Glasses
-    AvatarItem(id: "sunglasses", name: "Sunglasses", emoji: "🕶️", slot: .glasses, cost: 100, offsetY: -4, fontSize: 24),
-    AvatarItem(id: "nerd_glasses", name: "Nerd Glasses", emoji: "🤓", slot: .glasses, cost: 75, offsetY: -4, fontSize: 24),
-    AvatarItem(id: "monocle", name: "Monocle", emoji: "🧐", slot: .glasses, cost: 200, offsetX: 6, offsetY: -4, fontSize: 24),
-    AvatarItem(id: "star_eyes", name: "Star Eyes", emoji: "🤩", slot: .glasses, cost: 250, offsetY: -4, fontSize: 24, unlockLevel: 3),
-    AvatarItem(id: "heart_eyes", name: "Heart Eyes", emoji: "😻", slot: .glasses, cost: 150, offsetY: -4, fontSize: 24),
-
-    // Accessories
-    AvatarItem(id: "scarf", name: "Scarf", emoji: "🧣", slot: .accessory, cost: 100, offsetY: 32, fontSize: 24),
-    AvatarItem(id: "medal", name: "Medal", emoji: "🏅", slot: .accessory, cost: 200, offsetY: 34, fontSize: 22),
-    AvatarItem(id: "broom", name: "Cleaning Broom", emoji: "🧹", slot: .accessory, cost: 150, offsetX: 36, offsetY: 10, fontSize: 28),
-    AvatarItem(id: "sparkle_wand", name: "Sparkle Wand", emoji: "✨", slot: .accessory, cost: 175, offsetX: 36, offsetY: -10, fontSize: 24),
-    AvatarItem(id: "trophy", name: "Trophy", emoji: "🏆", slot: .accessory, cost: 500, offsetX: 36, offsetY: 10, fontSize: 26, unlockLevel: 10),
-    AvatarItem(id: "soap_bubbles", name: "Soap Bubbles", emoji: "🫧", slot: .accessory, cost: 125, offsetX: -36, offsetY: -10, fontSize: 24),
-    AvatarItem(id: "spray_bottle", name: "Spray Bottle", emoji: "🧴", slot: .accessory, cost: 100, offsetX: 36, offsetY: 12, fontSize: 24),
-    AvatarItem(id: "rubber_gloves", name: "Rubber Gloves", emoji: "🧤", slot: .accessory, cost: 100, offsetX: -36, offsetY: 14, fontSize: 24),
-    AvatarItem(id: "cape", name: "Cape", emoji: "🦸", slot: .accessory, cost: 400, offsetY: 28, fontSize: 24, unlockLevel: 7),
-
-    // Backgrounds
-    AvatarItem(id: "bg_rainbow", name: "Rainbow", emoji: "🌈", slot: .background, cost: 200, fontSize: 44),
-    AvatarItem(id: "bg_stars", name: "Starry", emoji: "⭐", slot: .background, cost: 100, fontSize: 44),
-    AvatarItem(id: "bg_hearts", name: "Hearts", emoji: "💕", slot: .background, cost: 150, fontSize: 44),
-    AvatarItem(id: "bg_sparkle", name: "Sparkle", emoji: "💫", slot: .background, cost: 175, fontSize: 44),
-    AvatarItem(id: "bg_fire", name: "On Fire", emoji: "🔥", slot: .background, cost: 300, fontSize: 44, unlockLevel: 5),
-    AvatarItem(id: "bg_clean", name: "Squeaky Clean", emoji: "🫧", slot: .background, cost: 125, fontSize: 44),
+    // Hero classes
+    AvatarItem(id: "cat_chef",        name: "Chef Cat",         emoji: "🐱", cost: 600,  unlockLevel: 5,  imageName: "cat_chef"),
+    AvatarItem(id: "cat_ninja",       name: "Ninja Cat",        emoji: "🐱", cost: 800,  unlockLevel: 8,  imageName: "cat_ninja"),
+    AvatarItem(id: "dog_firefighter", name: "Firefighter Dog",  emoji: "🐶", cost: 800,  unlockLevel: 8,  imageName: "dog_firefighter"),
+    AvatarItem(id: "dog_astronaut",   name: "Astronaut Dog",    emoji: "🐶", cost: 1000, unlockLevel: 12, imageName: "dog_astronaut"),
+    AvatarItem(id: "bunny_gardener",  name: "Gardener Bunny",   emoji: "🐰", cost: 700,  unlockLevel: 6,  imageName: "bunny_gardener"),
+    AvatarItem(id: "bunny_wizard",    name: "Wizard Bunny",     emoji: "🐰", cost: 900,  unlockLevel: 10, imageName: "bunny_wizard"),
+    AvatarItem(id: "bear_lumberjack", name: "Lumberjack Bear",  emoji: "🐻", cost: 800,  unlockLevel: 8,  imageName: "bear_lumberjack"),
+    AvatarItem(id: "bear_knight",     name: "Knight Bear",      emoji: "🐻", cost: 1000, unlockLevel: 12, imageName: "bear_knight"),
+    AvatarItem(id: "fox_detective",   name: "Detective Fox",    emoji: "🦊", cost: 900,  unlockLevel: 10, imageName: "fox_detective"),
+    AvatarItem(id: "fox_pirate",      name: "Pirate Fox",       emoji: "🦊", cost: 1000, unlockLevel: 12, imageName: "fox_pirate"),
+    AvatarItem(id: "panda_sensei",    name: "Sensei Panda",     emoji: "🐼", cost: 1500, unlockLevel: 15, imageName: "panda_sensei"),
+    AvatarItem(id: "panda_emperor",   name: "Emperor Panda",    emoji: "🐼", cost: 2000, unlockLevel: 20, imageName: "panda_emperor"),
+    AvatarItem(id: "unicorn_fairy",   name: "Fairy Unicorn",    emoji: "🦄", cost: 2000, unlockLevel: 18, imageName: "unicorn_fairy"),
+    AvatarItem(id: "unicorn_rockstar",name: "Rockstar Unicorn", emoji: "🦄", cost: 2500, unlockLevel: 22, imageName: "unicorn_rockstar"),
+    AvatarItem(id: "dragon_king",     name: "Dragon King",      emoji: "🐲", cost: 3000, unlockLevel: 25, imageName: "dragon_king"),
+    AvatarItem(id: "dragon_mecha",    name: "Mecha Dragon",     emoji: "🐲", cost: 5000, unlockLevel: 30, imageName: "dragon_mecha"),
 ]
 
 private let avatarItemLookup: [String: AvatarItem] = Dictionary(

@@ -20,6 +20,11 @@ final class DataStore {
     private let monthlyConsistencyBonusXP = 150
 
     private let store = TaskStore()
+    private let ckSync = CloudKitSync.shared
+
+    private var isHouseholdSharingEnabled: Bool {
+        UserDefaults.standard.bool(forKey: "householdSharingEnabled")
+    }
 
     // MARK: - Derived State
 
@@ -78,6 +83,14 @@ final class DataStore {
         updateStreak()
         await loadHouseholdProfiles()
         logger.info("DataStore loaded: \(self.tasks.count) tasks, level \(self.profile.level)")
+
+        // CloudKit: only engage if household sharing has been explicitly enabled
+        if isHouseholdSharingEnabled {
+            await ckSync.setup()
+            if ckSync.isAvailable {
+                await migrateToCloudKitIfNeeded()
+            }
+        }
     }
 
     // MARK: - Complete Task
@@ -284,6 +297,10 @@ final class DataStore {
         await store.saveProfile(profile)
         await store.saveCompletions(completions)
         updateWidgetData()
+        if isHouseholdSharingEnabled && ckSync.isAvailable {
+            await ckSync.pushTasks(tasks)
+            await ckSync.pushProfile(profile)
+        }
     }
 
     private func updateWidgetData() {
@@ -415,7 +432,64 @@ final class DataStore {
         householdProfiles.sorted { $0.totalXP > $1.totalXP }
     }
 
-    // MARK: - iCloud Sync
+    // MARK: - CloudKit Migration & Sync
+
+    /// One-time migration: push existing JSON data to CloudKit on first launch.
+    private func migrateToCloudKitIfNeeded() async {
+        let key = "ckMigrationDone_v1"
+        guard !UserDefaults.standard.bool(forKey: key) else { return }
+        logger.info("☁️ Migrating local data to CloudKit...")
+        await ckSync.pushTasks(tasks)
+        await ckSync.pushProfile(profile)
+        for completion in completions { await ckSync.pushCompletion(completion) }
+        for p in householdProfiles where p.id != profile.id { await ckSync.pushProfile(p) }
+        UserDefaults.standard.set(true, forKey: key)
+        logger.info("☁️ Migration complete")
+    }
+
+    /// Pull latest from CloudKit and merge, preferring higher XP / more recent completions.
+    func pullFromCloudKit() async {
+        guard ckSync.isAvailable, let payload = await ckSync.pullAll() else { return }
+
+        // Merge tasks: union by ID, keeping local custom tasks not in cloud
+        let cloudTaskIds = Set(payload.tasks.map(\.id))
+        let localOnly = tasks.filter { !cloudTaskIds.contains($0.id) }
+        tasks = payload.tasks + localOnly
+
+        // Merge completions: union by ID
+        let existingIds = Set(completions.map(\.id))
+        let newCompletions = payload.completions.filter { !existingIds.contains($0.id) }
+        completions = (completions + newCompletions).sorted { $0.completedAt > $1.completedAt }
+
+        // Merge profiles: prefer higher XP version
+        for cloudProfile in payload.profiles {
+            if cloudProfile.id == profile.id {
+                if cloudProfile.totalXP > profile.totalXP { profile = cloudProfile }
+            } else if let idx = householdProfiles.firstIndex(where: { $0.id == cloudProfile.id }) {
+                if cloudProfile.totalXP > householdProfiles[idx].totalXP {
+                    householdProfiles[idx] = cloudProfile
+                }
+            } else {
+                householdProfiles.append(cloudProfile)
+            }
+        }
+
+        await save()
+        logger.info("☁️ CloudKit pull merged: \(self.tasks.count) tasks, \(self.completions.count) completions")
+    }
+
+    var cloudKitShareURL: URL? { ckSync.shareURL }
+    var cloudKitError: String? { ckSync.syncError }
+
+    func createHouseholdShare() async throws -> URL? {
+        UserDefaults.standard.set(true, forKey: "householdSharingEnabled")
+        await ckSync.setup()
+        await migrateToCloudKitIfNeeded()
+        let share = try await ckSync.createOrFetchShare()
+        return share.url
+    }
+
+    // MARK: - iCloud Documents Sync
 
     /// Start listening for remote iCloud changes and reload when they arrive.
     func startSyncObserver() {
