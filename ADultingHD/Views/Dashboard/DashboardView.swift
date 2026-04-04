@@ -86,35 +86,35 @@ struct DashboardView: View {
 
     private var macOSLayout: some View {
         VStack(spacing: Theme.sectionSpacing) {
-            heroSection
-            statsRow
-            if hasRightColumnContent {
-                HStack(alignment: .top, spacing: Theme.sectionSpacing) {
-                    // Left: tip + due tasks
-                    VStack(spacing: Theme.sectionSpacing) {
-                        tipBanner
-                        if !dataStore.dueTasks.isEmpty { dueTasksSection }
-                    }
+            // Full-width top strip: hero + stats side by side
+            HStack(alignment: .top, spacing: Theme.sectionSpacing) {
+                heroSection
                     .frame(maxWidth: .infinity)
+                VStack(spacing: Theme.sectionSpacing) {
+                    statsRow
+                    tipBanner
+                }
+                .frame(maxWidth: 320)
+            }
 
-                    // Right: completions + seasonal
+            // Main body: due tasks left, secondary content right
+            HStack(alignment: .top, spacing: Theme.sectionSpacing) {
+                if !dataStore.dueTasks.isEmpty {
+                    dueTasksSection
+                        .frame(maxWidth: .infinity)
+                }
+                if hasRightColumnContent {
                     VStack(spacing: Theme.sectionSpacing) {
                         if !dataStore.todayCompletions.isEmpty { recentCompletionsSection }
                         if storeManager.isPro { seasonalSection }
                     }
-                    .frame(maxWidth: .infinity)
-                }
-            } else {
-                if !dataStore.dueTasks.isEmpty {
-                    tipBanner
-                    dueTasksSection
-                } else {
-                    tipBanner
+                    .frame(maxWidth: 320)
                 }
             }
         }
-        .padding()
-        .macOSContentFrame()
+        .padding(.horizontal, 20)
+        .padding(.bottom, 20)
+        .padding(.top, 8)
     }
     #endif
 
@@ -141,9 +141,7 @@ struct DashboardView: View {
                     ProgressView(value: dataStore.profile.xpProgress)
                         .tint(Theme.levelPurple)
                 }
-                #if os(macOS)
-                .frame(maxWidth: 240)
-                #endif
+                .frame(maxWidth: .infinity)
 
                 Spacer()
 
