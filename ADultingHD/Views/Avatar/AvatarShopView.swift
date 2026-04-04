@@ -30,23 +30,52 @@ struct AvatarShopView: View {
 
     var body: some View {
         ScrollView {
+            #if os(macOS)
+            macOSLayout
+            #else
             VStack(spacing: Theme.sectionSpacing) {
                 previewCard
                 coinBalance
                 familyPicker
                 itemsGrid
-
                 if !storeManager.isPro {
                     ProPromptCard(title: "Full Avatar Shop", icon: "paintpalette.fill")
                 }
             }
             .padding()
+            #endif
         }
         .navigationTitle("Avatar Shop")
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
     }
+
+    #if os(macOS)
+    private var macOSLayout: some View {
+        HStack(alignment: .top, spacing: Theme.sectionSpacing) {
+            // Left sidebar: avatar preview + coin balance
+            VStack(spacing: Theme.sectionSpacing) {
+                previewCard
+                coinBalance
+                Spacer()
+            }
+            .frame(width: 220)
+
+            // Right: family filter + items grid
+            VStack(alignment: .leading, spacing: Theme.sectionSpacing) {
+                familyPicker
+                itemsGrid
+                if !storeManager.isPro {
+                    ProPromptCard(title: "Full Avatar Shop", icon: "paintpalette.fill")
+                }
+            }
+            .frame(maxWidth: .infinity)
+        }
+        .padding()
+        .macOSContentFrame()
+    }
+    #endif
 
     // MARK: - Preview
 
@@ -99,12 +128,13 @@ struct AvatarShopView: View {
     // MARK: - Items Grid
 
     private var itemsGrid: some View {
-        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: Theme.gridColumns), spacing: 12) {
             ForEach(filteredItems) { item in
                 ShopItemCard(item: item)
             }
         }
     }
+
 }
 
 // MARK: - Shop Item Card

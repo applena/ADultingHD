@@ -56,27 +56,67 @@ struct DashboardView: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: Theme.sectionSpacing) {
-                heroSection
-                tipBanner
-                statsRow
-
-                if !dataStore.dueTasks.isEmpty {
-                    dueTasksSection
-                }
-
-                if !dataStore.todayCompletions.isEmpty {
-                    recentCompletionsSection
-                }
-
-                if storeManager.isPro {
-                    seasonalSection
-                }
-            }
-            .padding()
+            #if os(macOS)
+            macOSLayout
+            #else
+            iOSLayout
+            #endif
         }
         .navigationTitle("")
     }
+
+    #if os(iOS)
+    private var iOSLayout: some View {
+        VStack(spacing: Theme.sectionSpacing) {
+            heroSection
+            tipBanner
+            statsRow
+            if !dataStore.dueTasks.isEmpty { dueTasksSection }
+            if !dataStore.todayCompletions.isEmpty { recentCompletionsSection }
+            if storeManager.isPro { seasonalSection }
+        }
+        .padding()
+    }
+    #endif
+
+    #if os(macOS)
+    private var hasRightColumnContent: Bool {
+        !dataStore.todayCompletions.isEmpty || (storeManager.isPro && !seasonalSuggestions.isEmpty)
+    }
+
+    private var macOSLayout: some View {
+        VStack(spacing: Theme.sectionSpacing) {
+            heroSection
+            statsRow
+            if hasRightColumnContent {
+                HStack(alignment: .top, spacing: Theme.sectionSpacing) {
+                    // Left: tip + due tasks
+                    VStack(spacing: Theme.sectionSpacing) {
+                        tipBanner
+                        if !dataStore.dueTasks.isEmpty { dueTasksSection }
+                    }
+                    .frame(maxWidth: .infinity)
+
+                    // Right: completions + seasonal
+                    VStack(spacing: Theme.sectionSpacing) {
+                        if !dataStore.todayCompletions.isEmpty { recentCompletionsSection }
+                        if storeManager.isPro { seasonalSection }
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+            } else {
+                if !dataStore.dueTasks.isEmpty {
+                    tipBanner
+                    dueTasksSection
+                } else {
+                    tipBanner
+                }
+            }
+        }
+        .padding()
+        .macOSContentFrame()
+    }
+    #endif
 
     // MARK: - Hero Section
 
@@ -101,6 +141,9 @@ struct DashboardView: View {
                     ProgressView(value: dataStore.profile.xpProgress)
                         .tint(Theme.levelPurple)
                 }
+                #if os(macOS)
+                .frame(maxWidth: 240)
+                #endif
 
                 Spacer()
 

@@ -18,6 +18,9 @@ struct StatsView: View {
 
     var body: some View {
         ScrollView {
+            #if os(macOS)
+            macOSLayout
+            #else
             VStack(spacing: Theme.sectionSpacing) {
                 if storeManager.isPro {
                     xpPerDayChart
@@ -29,9 +32,32 @@ struct StatsView: View {
                 streakCalendar
             }
             .padding()
+            #endif
         }
         .navigationTitle("")
     }
+
+    #if os(macOS)
+    private var macOSLayout: some View {
+        VStack(spacing: Theme.sectionSpacing) {
+            if storeManager.isPro {
+                HStack(alignment: .top, spacing: Theme.sectionSpacing) {
+                    xpPerDayChart.frame(maxWidth: .infinity)
+                    completionTrendChart.frame(maxWidth: .infinity)
+                }
+                HStack(alignment: .top, spacing: Theme.sectionSpacing) {
+                    categoryBreakdownChart.frame(maxWidth: .infinity)
+                    streakCalendar.frame(maxWidth: .infinity)
+                }
+            } else {
+                ProPromptCard(title: "Pro Analytics", icon: "chart.bar.fill")
+                streakCalendar
+            }
+        }
+        .padding()
+        .macOSContentFrame()
+    }
+    #endif
 
     // MARK: - XP Per Day (last 14 days)
 

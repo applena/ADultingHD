@@ -31,13 +31,58 @@ struct ScheduleView: View {
 
     var body: some View {
         ScrollView {
+            #if os(macOS)
+            macOSLayout
+            #else
+            iOSLayout
+            #endif
+        }
+        .navigationTitle("")
+        .sheet(isPresented: $showPowerHour) {
+            PowerHourView(tasks: todayTasks)
+        }
+    }
+
+    private var iOSLayout: some View {
+        VStack(spacing: Theme.sectionSpacing) {
+            DatePicker("Week starting", selection: $selectedDate, displayedComponents: .date)
+                .datePickerStyle(.graphical)
+                .card()
+
+            let due = dataStore.dueTasks.count
+            if due > 0 {
+                HStack(spacing: 12) {
+                    Label("\(due) due", systemImage: "clock.fill")
+                        .font(.subheadline)
+                        .foregroundStyle(Theme.streakOrange)
+                }
+                .frame(maxWidth: .infinity)
+                .card()
+            }
+
+            if !todayByCategory.isEmpty { todayBatchesCard }
+
+            ForEach(weekDates, id: \.self) { date in
+                let tasks = tasksForDate(date)
+                if !tasks.isEmpty { weekDayCard(date: date, tasks: tasks) }
+            }
+        }
+        .padding()
+    }
+
+    #if os(macOS)
+    private var macOSLayout: some View {
+        HStack(alignment: .top, spacing: Theme.sectionSpacing) {
+            // Left: date picker, constrained so it doesn't stretch
             VStack(spacing: Theme.sectionSpacing) {
-                // Date Picker
                 DatePicker("Week starting", selection: $selectedDate, displayedComponents: .date)
                     .datePickerStyle(.graphical)
                     .card()
+            }
+            .frame(width: 300)
 
-                // Summary stats
+            // Right: summary + batches + week view
+            VStack(spacing: Theme.sectionSpacing) {
                 let due = dataStore.dueTasks.count
                 if due > 0 {
                     HStack(spacing: 12) {
@@ -49,133 +94,133 @@ struct ScheduleView: View {
                     .card()
                 }
 
-                // Smart Batching — today's tasks grouped by category
-                if !todayByCategory.isEmpty {
-                    VStack(alignment: .leading, spacing: 10) {
-                        HStack {
-                            Label("Today's Batches", systemImage: "tray.2.fill")
-                                .font(.headline)
-                            Spacer()
-                            let totalMin = todayTasks.totalMinutes
-                            Text("\(totalMin) min total")
-                                .font(.caption.bold())
-                                .foregroundStyle(.secondary)
-                        }
+                if !todayByCategory.isEmpty { todayBatchesCard }
 
-                        ForEach(todayByCategory, id: \.0) { category, tasks in
-                            let batchMinutes = tasks.totalMinutes
-                            let batchXP = tasks.totalXP
-                            VStack(alignment: .leading, spacing: 4) {
-                                HStack {
-                                    Image(systemName: category.icon)
-                                        .foregroundStyle(Theme.categoryColor(category))
-                                    Text("\(category.rawValue) block")
-                                        .font(.subheadline.weight(.medium))
-                                    Spacer()
-                                    Text("\(tasks.count) tasks")
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                    Text("\(batchMinutes)m")
-                                        .font(.caption.bold())
-                                        .foregroundStyle(.secondary)
-                                    Text("+\(batchXP) XP")
-                                        .font(.caption.bold())
-                                        .foregroundStyle(Theme.xpGold)
-                                }
-                                ForEach(tasks) { task in
-                                    HStack(spacing: 6) {
-                                        Text("  \(task.name)")
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
-                                        Spacer()
-                                        Text("\(task.estimatedMinutes)m")
-                                            .font(.caption2)
-                                            .foregroundStyle(.tertiary)
-                                    }
-                                }
-                            }
-                            .padding(.vertical, 2)
-                            if category != todayByCategory.last?.0 {
-                                Divider()
-                            }
-                        }
-
-                        if todayTasks.count >= 2 {
-                            Button {
-                                showPowerHour = true
-                            } label: {
-                                Label("Power Hour", systemImage: "bolt.fill")
-                                    .font(.subheadline.bold())
-                                    .frame(maxWidth: .infinity)
-                                    .padding(.vertical, 10)
-                                    .background(Theme.streakOrange, in: RoundedRectangle(cornerRadius: 10))
-                                    .foregroundStyle(.white)
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                    .card()
-                }
-
-                // Week View
                 ForEach(weekDates, id: \.self) { date in
                     let tasks = tasksForDate(date)
-                    if !tasks.isEmpty {
-                        VStack(alignment: .leading, spacing: 8) {
-                            HStack {
-                                Text(date, format: .dateTime.weekday(.wide).month().day())
-                                    .font(.headline)
-                                if calendar.isDateInToday(date) {
-                                    Text("TODAY")
-                                        .font(.caption.bold())
-                                        .foregroundStyle(.white)
-                                        .padding(.horizontal, 6)
-                                        .padding(.vertical, 2)
-                                        .background(Theme.accent, in: Capsule())
-                                }
-                                Spacer()
-                                Text("\(tasks.count) tasks")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-
-                            ForEach(tasks) { task in
-                                HStack(spacing: 8) {
-                                    Image(systemName: task.category.icon)
-                                        .foregroundStyle(Theme.categoryColor(task.category))
-                                        .frame(width: 20)
-                                    Text(task.name)
-                                        .font(.subheadline)
-                                    Spacer()
-                                    Text("\(task.estimatedMinutes)m")
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                }
-                            }
-
-                            let totalMinutes = tasks.totalMinutes
-                            let totalXP = tasks.totalXP
-                            HStack {
-                                Text("Total: \(totalMinutes) min")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                Spacer()
-                                Text("+\(totalXP) XP")
-                                    .font(.caption.bold())
-                                    .foregroundStyle(Theme.xpGold)
-                            }
-                        }
-                        .padding(Theme.cardPadding)
-                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: Theme.cornerRadius))
-                    }
+                    if !tasks.isEmpty { weekDayCard(date: date, tasks: tasks) }
                 }
             }
-            .padding()
+            .frame(maxWidth: .infinity)
         }
-        .navigationTitle("")
-        .sheet(isPresented: $showPowerHour) {
-            PowerHourView(tasks: todayTasks)
+        .padding()
+        .macOSContentFrame()
+    }
+    #endif
+
+    private var todayBatchesCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Label("Today's Batches", systemImage: "tray.2.fill")
+                    .font(.headline)
+                Spacer()
+                Text("\(todayTasks.totalMinutes) min total")
+                    .font(.caption.bold())
+                    .foregroundStyle(.secondary)
+            }
+
+            ForEach(todayByCategory, id: \.0) { category, tasks in
+                let batchMinutes = tasks.totalMinutes
+                let batchXP = tasks.totalXP
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Image(systemName: category.icon)
+                            .foregroundStyle(Theme.categoryColor(category))
+                        Text("\(category.rawValue) block")
+                            .font(.subheadline.weight(.medium))
+                        Spacer()
+                        Text("\(tasks.count) tasks")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Text("\(batchMinutes)m")
+                            .font(.caption.bold())
+                            .foregroundStyle(.secondary)
+                        Text("+\(batchXP) XP")
+                            .font(.caption.bold())
+                            .foregroundStyle(Theme.xpGold)
+                    }
+                    ForEach(tasks) { task in
+                        HStack(spacing: 6) {
+                            Text("  \(task.name)")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            Text("\(task.estimatedMinutes)m")
+                                .font(.caption2)
+                                .foregroundStyle(.tertiary)
+                        }
+                    }
+                }
+                .padding(.vertical, 2)
+                if category != todayByCategory.last?.0 {
+                    Divider()
+                }
+            }
+
+            if todayTasks.count >= 2 {
+                Button {
+                    showPowerHour = true
+                } label: {
+                    Label("Power Hour", systemImage: "bolt.fill")
+                        .font(.subheadline.bold())
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                        .background(Theme.streakOrange, in: RoundedRectangle(cornerRadius: 10))
+                        .foregroundStyle(.white)
+                }
+                .buttonStyle(.plain)
+            }
         }
+        .card()
+    }
+
+    private func weekDayCard(date: Date, tasks: [HouseholdTask]) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(date, format: .dateTime.weekday(.wide).month().day())
+                    .font(.headline)
+                if calendar.isDateInToday(date) {
+                    Text("TODAY")
+                        .font(.caption.bold())
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Theme.accent, in: Capsule())
+                }
+                Spacer()
+                Text("\(tasks.count) tasks")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            ForEach(tasks) { task in
+                HStack(spacing: 8) {
+                    Image(systemName: task.category.icon)
+                        .foregroundStyle(Theme.categoryColor(task.category))
+                        .frame(width: 20)
+                    Text(task.name)
+                        .font(.subheadline)
+                    Spacer()
+                    Text("\(task.estimatedMinutes)m")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            let totalMinutes = tasks.totalMinutes
+            let totalXP = tasks.totalXP
+            HStack {
+                Text("Total: \(totalMinutes) min")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Text("+\(totalXP) XP")
+                    .font(.caption.bold())
+                    .foregroundStyle(Theme.xpGold)
+            }
+        }
+        .padding(Theme.cardPadding)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: Theme.cornerRadius))
     }
 }
 
@@ -283,7 +328,9 @@ struct PowerHourView: View {
 
     private func startTimer() {
         timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
-            elapsedSeconds += 1
+            Task { @MainActor in
+                elapsedSeconds += 1
+            }
         }
     }
 

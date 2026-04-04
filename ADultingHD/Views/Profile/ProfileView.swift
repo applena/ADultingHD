@@ -18,24 +18,16 @@ struct ProfileView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: Theme.sectionSpacing) {
-                // Level Card
                 levelCard
-
-                // Stats Grid
                 statsGrid
-
-                // Achievements
                 achievementsSection
-
-                // Household
                 if storeManager.isPro && dataStore.householdProfiles.count > 1 {
                     leaderboardPreview
                 }
-
-                // Category Breakdown
                 categoryBreakdown
             }
             .padding()
+            .macOSContentFrame()
         }
         .navigationTitle("")
         #if os(iOS)
@@ -129,7 +121,7 @@ struct ProfileView: View {
     // MARK: - Stats Grid
 
     private var statsGrid: some View {
-        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: Theme.gridColumns), spacing: 12) {
             StatCard(title: "Tasks Done", value: "\(dataStore.profile.totalTasksCompleted)", icon: "checkmark.circle.fill", color: Theme.successGreen)
             StatCard(title: "Current Streak", value: "\(dataStore.profile.currentStreak)d", icon: "flame.fill", color: Theme.streakOrange)
             StatCard(title: "Best Streak", value: "\(dataStore.profile.longestStreak)d", icon: "trophy.fill", color: Theme.xpGold)
@@ -150,7 +142,7 @@ struct ProfileView: View {
                     .foregroundStyle(.secondary)
             }
 
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: Theme.gridColumns), spacing: 8) {
                 ForEach(visibleAchievements) { achievement in
                     let unlocked = dataStore.profile.unlockedAchievements.contains(achievement.id)
                     let progress = achievement.progressFraction(dataStore.profile, dataStore.completions)

@@ -56,11 +56,21 @@ enum Theme {
     static let cardPadding: CGFloat = 16
     static let sectionSpacing: CGFloat = 20
     static let cornerRadius: CGFloat = 16
+    static let macOSContentMaxWidth: CGFloat = 780
     #else
     static let cardPadding: CGFloat = 14
     static let sectionSpacing: CGFloat = 16
     static let cornerRadius: CGFloat = 16
     #endif
+
+    /// Grid column count: 4 on macOS wide layouts, 2 on iOS.
+    static var gridColumns: Int {
+        #if os(macOS)
+        return 4
+        #else
+        return 2
+        #endif
+    }
 }
 
 // MARK: - Card Styling
@@ -85,5 +95,14 @@ extension View {
                     .fill(.background)
                     .shadow(color: .black.opacity(0.05), radius: 10, y: 3)
             }
+    }
+
+    /// Constrains ScrollView content to a readable max width on macOS; no-op on iOS.
+    func macOSContentFrame() -> some View {
+        #if os(macOS)
+        self.frame(maxWidth: Theme.macOSContentMaxWidth, alignment: .leading)
+        #else
+        self
+        #endif
     }
 }

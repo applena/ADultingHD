@@ -207,7 +207,7 @@ final class CloudKitSync: ObservableObject {
 
     /// Returns the private DB if we own the zone, or shared DB if we joined someone else's household
     private func resolveDatabase() async throws -> CKDatabase {
-        let participantStatus = try? await container.userRecordID()
+        _ = try? await container.userRecordID()
         // Simple heuristic: if zone exists in privateDB, use it; otherwise use sharedDB
         let zones = try await privateDB.allRecordZones()
         if zones.contains(where: { $0.zoneID.zoneName == ZoneName.household }) {
