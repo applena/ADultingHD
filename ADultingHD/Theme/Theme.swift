@@ -55,12 +55,14 @@ enum Theme {
     #if os(macOS)
     static let cardPadding: CGFloat = 16
     static let sectionSpacing: CGFloat = 20
-    static let cornerRadius: CGFloat = 16
+    static let cornerRadius: CGFloat = 12
     static let macOSContentMaxWidth: CGFloat = 780
+    static let rowSpacing: CGFloat = 8
     #else
     static let cardPadding: CGFloat = 14
     static let sectionSpacing: CGFloat = 16
     static let cornerRadius: CGFloat = 16
+    static let rowSpacing: CGFloat = 6
     #endif
 
     /// Grid column count: 4 on macOS wide layouts, 2 on iOS.

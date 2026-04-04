@@ -4,6 +4,7 @@ struct ScheduleView: View {
     @Environment(DataStore.self) private var dataStore
     @State private var selectedDate = Date()
     @State private var showPowerHour = false
+    @State private var expandedCategories: Set<TaskCategory> = []
 
     private var calendar: Calendar { Calendar.current }
 
@@ -109,60 +110,38 @@ struct ScheduleView: View {
     #endif
 
     private var todayBatchesCard: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Label("Today's Batches", systemImage: "tray.2.fill")
-                    .font(.headline)
-                Spacer()
-                Text("\(todayTasks.totalMinutes) min total")
-                    .font(.caption.bold())
-                    .foregroundStyle(.secondary)
-            }
+        let completedCount = dataStore.todayCompletions.count
+        let totalCount = todayTasks.count + completedCount
+        let progress = totalCount == 0 ? 0.0 : min(Double(completedCount) / Double(totalCount), 1.0)
 
-            ForEach(todayByCategory, id: \.0) { category, tasks in
-                let batchMinutes = tasks.totalMinutes
-                let batchXP = tasks.totalXP
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack {
-                        Image(systemName: category.icon)
-                            .foregroundStyle(Theme.categoryColor(category))
-                        Text("\(category.rawValue) block")
-                            .font(.subheadline.weight(.medium))
-                        Spacer()
-                        Text("\(tasks.count) tasks")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        Text("\(batchMinutes)m")
-                            .font(.caption.bold())
-                            .foregroundStyle(.secondary)
-                        Text("+\(batchXP) XP")
-                            .font(.caption.bold())
-                            .foregroundStyle(Theme.xpGold)
-                    }
-                    ForEach(tasks) { task in
-                        HStack(spacing: 6) {
-                            Text("  \(task.name)")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                            Spacer()
-                            Text("\(task.estimatedMinutes)m")
-                                .font(.caption2)
-                                .foregroundStyle(.tertiary)
-                        }
-                    }
+        return VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 12) {
+                ZStack {
+                    Circle()
+                        .stroke(Color.secondary.opacity(0.15), lineWidth: 4)
+                    Circle()
+                        .trim(from: 0, to: progress)
+                        .stroke(Theme.successGreen, style: StrokeStyle(lineWidth: 4, lineCap: .round))
+                        .rotationEffect(.degrees(-90))
                 }
-                .padding(.vertical, 2)
-                if category != todayByCategory.last?.0 {
-                    Divider()
+                .frame(width: 36, height: 36)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Today's Tasks")
+                        .font(.headline)
+                    Text("\(todayTasks.count) tasks across \(todayByCategory.count) rooms — about \(todayTasks.totalMinutes / 60)h \(todayTasks.totalMinutes % 60)m")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
+                Spacer()
             }
 
             if todayTasks.count >= 2 {
                 Button {
                     showPowerHour = true
                 } label: {
-                    Label("Power Hour", systemImage: "bolt.fill")
-                        .font(.subheadline.bold())
+                    Label("Start Power Hour", systemImage: "bolt.fill")
+                        .font(.subheadline.weight(.semibold))
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 10)
                         .background(Theme.streakOrange, in: RoundedRectangle(cornerRadius: 10))
@@ -170,8 +149,96 @@ struct ScheduleView: View {
                 }
                 .buttonStyle(.plain)
             }
+
+            // Collapsible category batches
+            ForEach(todayByCategory, id: \.0) { category, tasks in
+                batchSection(category: category, tasks: tasks)
+            }
         }
         .card()
+    }
+
+    private func batchSection(category: TaskCategory, tasks: [HouseholdTask]) -> some View {
+        let isExpanded = expandedCategories.contains(category)
+        let catColor = Theme.categoryColor(category)
+
+        return VStack(alignment: .leading, spacing: 0) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    if isExpanded {
+                        expandedCategories.remove(category)
+                    } else {
+                        expandedCategories.insert(category)
+                    }
+                }
+            } label: {
+                HStack(spacing: 10) {
+                    Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 12)
+
+                    Image(systemName: category.icon)
+                        .foregroundStyle(catColor)
+
+                    Text(category.rawValue)
+                        .font(.subheadline.weight(.medium))
+
+                    Spacer()
+
+                    Text("\(tasks.count)")
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(.secondary)
+
+                    Text("\(tasks.totalMinutes)m")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+
+                    Text("+\(tasks.totalXP) XP")
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(Theme.xpGold)
+                }
+                .padding(.vertical, 8)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            // Expanded task list
+            if isExpanded {
+                VStack(spacing: 2) {
+                    ForEach(tasks) { task in
+                        HStack(spacing: 10) {
+                            Button {
+                                Task { await dataStore.completeTask(task) }
+                            } label: {
+                                Image(systemName: "circle")
+                                    .foregroundStyle(.secondary)
+                                    .imageScale(.small)
+                            }
+                            .buttonStyle(.plain)
+
+                            Text(task.name)
+                                .font(.subheadline)
+
+                            Spacer()
+
+                            Text("\(task.estimatedMinutes)m")
+                                .font(.caption)
+                                .foregroundStyle(.tertiary)
+                        }
+                        .padding(.leading, 22)
+                        .padding(.vertical, 3)
+                    }
+                }
+                .padding(.bottom, 4)
+            }
+        }
+        .padding(.leading, 4)
+        .overlay(alignment: .leading) {
+            RoundedRectangle(cornerRadius: 2)
+                .fill(catColor.opacity(0.6))
+                .frame(width: 3)
+        }
     }
 
     private func weekDayCard(date: Date, tasks: [HouseholdTask]) -> some View {
