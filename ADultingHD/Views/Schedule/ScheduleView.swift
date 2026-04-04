@@ -73,13 +73,12 @@ struct ScheduleView: View {
     #if os(macOS)
     private var macOSLayout: some View {
         HStack(alignment: .top, spacing: Theme.sectionSpacing) {
-            // Left: date picker, constrained so it doesn't stretch
-            VStack(spacing: Theme.sectionSpacing) {
-                DatePicker("Week starting", selection: $selectedDate, displayedComponents: .date)
-                    .datePickerStyle(.graphical)
-                    .card()
-            }
-            .frame(width: 300)
+            // Left: calendar picker (label hidden — it pushes the calendar off-center)
+            DatePicker("", selection: $selectedDate, displayedComponents: .date)
+                .datePickerStyle(.graphical)
+                .labelsHidden()
+                .card()
+                .frame(width: 260)
 
             // Right: summary + batches + week view
             VStack(spacing: Theme.sectionSpacing) {
@@ -103,8 +102,9 @@ struct ScheduleView: View {
             }
             .frame(maxWidth: .infinity)
         }
-        .padding()
-        .macOSContentFrame()
+        .padding(.horizontal, 20)
+        .padding(.bottom, 20)
+        .padding(.top, 8)
     }
     #endif
 

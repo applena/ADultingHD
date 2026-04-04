@@ -46,9 +46,17 @@ struct TaskListView: View {
             Group {
                 switch selectedTab {
                 case .myTasks:
+                    #if os(macOS)
+                    myTasksGrid
+                    #else
                     myTasksList
+                    #endif
                 case .allTasks:
+                    #if os(macOS)
+                    catalogGrid
+                    #else
                     catalogList
+                    #endif
                 }
             }
         }
@@ -198,6 +206,99 @@ struct TaskListView: View {
         }
     }
 
+    // MARK: - macOS Grid Layouts
+
+    #if os(macOS)
+    private static let gridColumns = [GridItem(.adaptive(minimum: 220), spacing: 10)]
+
+    private var myTasksGrid: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: Theme.sectionSpacing) {
+                categoryFilter
+                if groupedTasks.isEmpty {
+                    ContentUnavailableView {
+                        Label("No Tasks Yet", systemImage: "checklist")
+                    } description: {
+                        Text("Switch to All Tasks to browse and add tasks to your list.")
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 40)
+                }
+                ForEach(groupedTasks, id: \.0) { category, tasks in
+                    VStack(alignment: .leading, spacing: 8) {
+                        Label(category.rawValue, systemImage: category.icon)
+                            .font(.headline)
+                            .foregroundStyle(Theme.categoryColor(category))
+                        LazyVGrid(columns: Self.gridColumns, spacing: 10) {
+                            ForEach(tasks) { task in
+                                NavigationLink(value: TaskNavDestination.detail(task)) {
+                                    TaskGridCard(task: task)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    }
+                }
+            }
+            .padding(.horizontal, 20)
+            .padding(.bottom, 20)
+            .padding(.top, 8)
+        }
+    }
+
+    private var catalogGrid: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: Theme.sectionSpacing) {
+                categoryFilter
+                Button {
+                    if canCreateCustomTask { showAddCustom = true } else { showProUpgrade = true }
+                } label: {
+                    HStack(spacing: 12) {
+                        Image(systemName: "plus.circle.fill")
+                            .font(.title2)
+                            .foregroundStyle(canCreateCustomTask ? Theme.accent : Theme.xpGold)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Create Custom Task")
+                                .font(.body.weight(.medium))
+                                .foregroundStyle(.primary)
+                            Text(canCreateCustomTask ? "Add your own task with a custom schedule" : "Upgrade to Pro for unlimited custom tasks")
+                                .font(.caption)
+                                .foregroundStyle(canCreateCustomTask ? .secondary : Theme.xpGold)
+                        }
+                        Spacer()
+                        Image(systemName: canCreateCustomTask ? "chevron.right" : "lock.fill")
+                            .font(.caption)
+                            .foregroundStyle(canCreateCustomTask ? Color.secondary.opacity(0.5) : Theme.xpGold)
+                    }
+                    .padding(12)
+                    .background(.background, in: RoundedRectangle(cornerRadius: 12))
+                    .shadow(color: .black.opacity(0.06), radius: 4, y: 2)
+                }
+                .buttonStyle(.plain)
+
+                ForEach(groupedCatalog, id: \.0) { category, tasks in
+                    VStack(alignment: .leading, spacing: 8) {
+                        Label(category.rawValue, systemImage: category.icon)
+                            .font(.headline)
+                            .foregroundStyle(Theme.categoryColor(category))
+                        LazyVGrid(columns: Self.gridColumns, spacing: 10) {
+                            ForEach(tasks) { catalogTask in
+                                CatalogGridCard(
+                                    catalogTask: catalogTask,
+                                    alreadyAdded: existingTaskNames.contains(catalogTask.name.lowercased())
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            .padding(.horizontal, 20)
+            .padding(.bottom, 20)
+            .padding(.top, 8)
+        }
+    }
+    #endif
+
     // MARK: - Shared
 
     private var categoryFilter: some View {
@@ -335,6 +436,102 @@ struct TaskMetadataRow: View {
         }
     }
 }
+
+// MARK: - macOS Grid Cards
+
+#if os(macOS)
+struct TaskGridCard: View {
+    @Environment(DataStore.self) private var dataStore
+    let task: HouseholdTask
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .top, spacing: 8) {
+                Image(systemName: task.isActive ? "checkmark.circle.fill" : "circle")
+                    .foregroundStyle(task.isActive ? Theme.successGreen : .gray)
+                    .onTapGesture { Task { await dataStore.toggleTask(task) } }
+                Text(task.name)
+                    .font(.subheadline.weight(.medium))
+                    .strikethrough(!task.isActive, color: .secondary)
+                    .lineLimit(2)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                HStack(spacing: 2) {
+                    Text("+\(task.xpReward)")
+                        .font(.caption.bold())
+                        .foregroundStyle(Theme.xpGold)
+                    Text("XP")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            TaskMetadataRow(frequency: task.frequency, difficulty: task.difficulty, estimatedMinutes: task.estimatedMinutes)
+            if task.isDue && task.isActive {
+                Label("Due", systemImage: "clock.fill")
+                    .font(.caption2.bold())
+                    .foregroundStyle(Theme.streakOrange)
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.background, in: RoundedRectangle(cornerRadius: 12))
+        .shadow(color: .black.opacity(0.06), radius: 4, y: 2)
+    }
+}
+
+struct CatalogGridCard: View {
+    @Environment(DataStore.self) private var dataStore
+    let catalogTask: CatalogTask
+    let alreadyAdded: Bool
+    @State private var justAdded = false
+
+    private var xpReward: Int {
+        HouseholdTask.computeXP(difficulty: catalogTask.difficulty, frequency: catalogTask.suggestedFrequency, estimatedMinutes: catalogTask.estimatedMinutes)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .top, spacing: 8) {
+                Text(catalogTask.name)
+                    .font(.subheadline.weight(.medium))
+                    .lineLimit(2)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                HStack(spacing: 2) {
+                    Text("+\(xpReward)")
+                        .font(.caption.bold())
+                        .foregroundStyle(Theme.xpGold)
+                    Text("XP")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+                if alreadyAdded || justAdded {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(Theme.successGreen)
+                } else {
+                    Button {
+                        let task = catalogTask.toHouseholdTask()
+                        Task { await dataStore.addCustomTask(task) }
+                        withAnimation { justAdded = true }
+                        FeedbackManager.taskCompleted()
+                    } label: {
+                        Image(systemName: "plus.circle.fill")
+                            .foregroundStyle(Theme.accent)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            Text(catalogTask.description)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+            TaskMetadataRow(frequency: catalogTask.suggestedFrequency, difficulty: catalogTask.difficulty, estimatedMinutes: catalogTask.estimatedMinutes)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.background, in: RoundedRectangle(cornerRadius: 12))
+        .shadow(color: .black.opacity(0.06), radius: 4, y: 2)
+    }
+}
+#endif
 
 // MARK: - Filter Chip
 
