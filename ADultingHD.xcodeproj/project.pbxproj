@@ -131,7 +131,7 @@
 		4F0201C1F9CC0080AB9AE3DF /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		5396E4C1C4C3ECF26BB2EAFA /* DashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardView.swift; sourceTree = "<group>"; };
 		549CB63F51BACCA54F498F61 /* ProUpgradeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProUpgradeView.swift; sourceTree = "<group>"; };
-		57C8C629738FF18C6D7FC2F7 /* ADultingHDWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = ADultingHDWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		57C8C629738FF18C6D7FC2F7 /* ADultingHDWidget.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = ADultingHDWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		595B8FFDEAA880BB683CE951 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		5EAA3948D9FC1F50504D54B1 /* ADultingHDApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ADultingHDApp.swift; sourceTree = "<group>"; };
 		695F786CFF2DBB9CFFC3FB57 /* HouseholdView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HouseholdView.swift; sourceTree = "<group>"; };
@@ -143,26 +143,26 @@
 		854942DD593A8ECA221E1EBA /* FeedbackManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedbackManager.swift; sourceTree = "<group>"; };
 		8E4E23E901E5476ADB2336D1 /* AvatarModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AvatarModels.swift; sourceTree = "<group>"; };
 		8EE3AD45631FE25F14C022B1 /* StatsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatsView.swift; sourceTree = "<group>"; };
-		94BE46FE41B7C1EA8E502F61 /* Products.storekit */ = {isa = PBXFileReference; lastKnownFileType = text; path = Products.storekit; sourceTree = "<group>"; };
+		94BE46FE41B7C1EA8E502F61 /* Products.storekit */ = {isa = PBXFileReference; path = Products.storekit; sourceTree = "<group>"; };
 		9842B7EFD24606C323FF2B0A /* TaskListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskListView.swift; sourceTree = "<group>"; };
 		A7A30BDBD828F7148288710C /* DataStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DataStore.swift; sourceTree = "<group>"; };
 		AB0B77A6011E1BFCF8CBD20D /* SeasonalTasks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SeasonalTasks.swift; sourceTree = "<group>"; };
 		AC0D49B9607490BDBDF8E190 /* CloudKitSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitSync.swift; sourceTree = "<group>"; };
 		AC655FB6ECD683EFB08D9D2A /* StorageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageTests.swift; sourceTree = "<group>"; };
 		ADEF2B5DEB9BCCF7E7E71E62 /* ADultingHDWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ADultingHDWidget.swift; sourceTree = "<group>"; };
-		AE96F106523C9887126C1272 /* ADultingHD.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ADultingHD.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		AE96F106523C9887126C1272 /* ADultingHD.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = ADultingHD.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B54CC3BCB4829D7DA2F17D3B /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
 		B5605C177F218758D1F3CCD8 /* ADultingHDTests_macOS.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ADultingHDTests_macOS.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		BBF9F9EF33AED52C9BCD464D /* TaskCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskCatalog.swift; sourceTree = "<group>"; };
 		BC09792564158736721A229E /* AddTaskView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddTaskView.swift; sourceTree = "<group>"; };
 		BC4F1A84FF71C986EBEC3197 /* ScreenshotTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenshotTests.swift; sourceTree = "<group>"; };
 		C83482BE393F043CC98D85D5 /* CelebrationOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CelebrationOverlay.swift; sourceTree = "<group>"; };
-		D26760093C603E0412FAC1FA /* ADultingHDUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ADultingHDUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		D26760093C603E0412FAC1FA /* ADultingHDUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = ADultingHDUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		D6FBFA6567C2B1A40A60A5E2 /* ProfileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileView.swift; sourceTree = "<group>"; };
 		E301F5BC8F6566FA177AF157 /* TaskStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskStore.swift; sourceTree = "<group>"; };
 		E47DD27D62AD23DAEE39C772 /* NewFeatureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewFeatureTests.swift; sourceTree = "<group>"; };
 		E5F315AD0A00703DCF818D81 /* NotificationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationManager.swift; sourceTree = "<group>"; };
-		E9884417AB73CB97FADC3F3C /* ADultingHDTests_iOS.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ADultingHDTests_iOS.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		E9884417AB73CB97FADC3F3C /* ADultingHDTests_iOS.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = ADultingHDTests_iOS.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		EC7C1D393BEF1BD66D303071 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -221,6 +221,7 @@
 				8E439030822775F35198C774 /* Data */,
 				F44B3CAC9344BC7F063555FE /* Models */,
 				8F0D62B6FB64A7B00213BE52 /* Services */,
+				11FBB908C9AB35B09E744F35 /* Storage */,
 				172F6EF1C8853B3BA50BFF89 /* Theme */,
 				9BE0804DE1FCD1C71A90ECBF /* Views */,
 			);
@@ -516,7 +517,7 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = YES;
-				LastUpgradeCheck = 2630;
+				LastUpgradeCheck = 1600;
 				TargetAttributes = {
 					241DB83DB6F78743CFFD2257 = {
 						DevelopmentTeam = TYQ32QCF6K;
@@ -752,9 +753,6 @@
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = TYQ32QCF6K;
-				ENABLE_APP_SANDBOX = YES;
-				ENABLE_FILE_ACCESS_DOWNLOADS_FOLDER = readwrite;
-				ENABLE_USER_SELECTED_FILES = readwrite;
 				INFOPLIST_FILE = ADultingHD/App/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = ADultingHD;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
@@ -781,9 +779,6 @@
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = TYQ32QCF6K;
-				ENABLE_APP_SANDBOX = YES;
-				ENABLE_FILE_ACCESS_DOWNLOADS_FOLDER = readwrite;
-				ENABLE_USER_SELECTED_FILES = readwrite;
 				INFOPLIST_FILE = ADultingHD/App/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = ADultingHD;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
@@ -880,7 +875,6 @@
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
@@ -975,7 +969,6 @@
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
@@ -991,7 +984,6 @@
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				DEVELOPMENT_TEAM = TYQ32QCF6K;
-				ENABLE_APP_SANDBOX = YES;
 				INFOPLIST_FILE = ADultingHD/App/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = ADultingHD;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
@@ -1091,7 +1083,6 @@
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				DEVELOPMENT_TEAM = TYQ32QCF6K;
-				ENABLE_APP_SANDBOX = YES;
 				INFOPLIST_FILE = ADultingHD/App/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = ADultingHD;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
