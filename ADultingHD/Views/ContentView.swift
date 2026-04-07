@@ -73,6 +73,13 @@ struct MacContentView: View {
                     .tag(tab)
             }
             .navigationTitle("ADultingHD")
+            .safeAreaInset(edge: .top, spacing: 0) {
+                HouseholdSwitcher()
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(.bar)
+            }
         } detail: {
             NavigationStack {
                 switch selectedTab {

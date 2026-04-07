@@ -5,6 +5,7 @@ final class StorageTests: XCTestCase {
 
     func testTaskRoundTrip() async {
         let store = TaskStore()
+        let householdId = UUID()
         let tasks = [
             HouseholdTask(
                 id: UUID(), name: "Test Task", description: "A test",
@@ -14,8 +15,8 @@ final class StorageTests: XCTestCase {
             )
         ]
 
-        await store.saveTasks(tasks)
-        let loaded = await store.loadTasks()
+        await store.saveTasks(tasks, for: householdId)
+        let loaded = await store.loadTasks(for: householdId)
 
         XCTAssertEqual(loaded.count, tasks.count)
         XCTAssertEqual(loaded.first?.name, "Test Task")
@@ -61,25 +62,26 @@ final class StorageTests: XCTestCase {
 
     func testBackupRoundTrip() async {
         let store = TaskStore()
+        let householdId = UUID()
         let tasks = Array(defaultHouseholdTasks.prefix(5))
         var profile = UserProfile()
         profile.totalXP = 250
         profile.totalTasksCompleted = 10
 
-        await store.saveTasks(tasks)
+        await store.saveTasks(tasks, for: householdId)
         await store.saveProfile(profile)
 
-        guard let backupData = await store.exportBackup() else {
+        guard let backupData = await store.exportBackup(householdId: householdId) else {
             XCTFail("Export returned nil")
             return
         }
 
         // Reset and reimport
         await store.resetAllData()
-        let success = await store.importBackup(from: backupData)
+        let success = await store.importBackup(from: backupData, householdId: householdId)
 
         XCTAssertTrue(success)
-        let loadedTasks = await store.loadTasks()
+        let loadedTasks = await store.loadTasks(for: householdId)
         let loadedProfile = await store.loadProfile()
         XCTAssertEqual(loadedTasks.count, tasks.count)
         XCTAssertEqual(loadedProfile.totalXP, 250)

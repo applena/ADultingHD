@@ -7,10 +7,13 @@ struct SettingsView: View {
     @Environment(DataStore.self) private var dataStore
     @Environment(NotificationManager.self) private var notificationManager
     @Environment(StoreManager.self) private var storeManager
+
+    @SceneStorage("settingsTab") private var selectedTab: SettingsTab = .general
     @State private var showResetConfirm = false
     @State private var showImportPicker = false
     @State private var importMessage: String?
     @State private var showProUpgrade = false
+    @State private var showWelcomeTour = false
     #if os(iOS)
     @State private var showingMailComposer = false
     #endif
@@ -18,6 +21,19 @@ struct SettingsView: View {
     private static let feedbackEmail = "adultinghd@shadowpuppet.net"
     private static let privacyURL = URL(string: "https://adultinghd.shadowpuppet.net/privacy.html")!
     private static let termsURL = URL(string: "https://adultinghd.shadowpuppet.net/terms.html")!
+
+    enum SettingsTab: String, CaseIterable, Identifiable {
+        case general, household, pro, about
+        var id: String { rawValue }
+        var label: String {
+            switch self {
+            case .general: "General"
+            case .household: "Household"
+            case .pro: "Pro"
+            case .about: "About"
+            }
+        }
+    }
 
     private var appVersion: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—"
@@ -44,12 +60,301 @@ struct SettingsView: View {
     }
 
     var body: some View {
-        #if os(macOS)
-        macBody
+        VStack(spacing: 0) {
+            Picker("Settings Tab", selection: $selectedTab) {
+                ForEach(SettingsTab.allCases) { tab in
+                    Text(tab.label).tag(tab)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .padding(.horizontal)
+            .padding(.top, 8)
+            .padding(.bottom, 4)
+
+            Group {
+                switch selectedTab {
+                case .general: generalTab
+                case .household: householdTab
+                case .pro: proTab
+                case .about: aboutTab
+                }
+            }
+        }
+        .navigationTitle("Settings")
+        .confirmationDialog("Reset All Data?", isPresented: $showResetConfirm) {
+            Button("Reset Everything", role: .destructive) {
+                Task { await dataStore.resetAll() }
+            }
+        } message: {
+            Text("This will delete all your tasks, completions, XP, and achievements. This cannot be undone.")
+        }
+        .fileImporter(isPresented: $showImportPicker, allowedContentTypes: [.json]) { result in
+            handleImport(result)
+        }
+        .sheet(isPresented: $showProUpgrade) { ProUpgradeView() }
+        #if os(iOS)
+        .fullScreenCover(isPresented: $showWelcomeTour) {
+            WelcomeView(onComplete: { showWelcomeTour = false })
+        }
+        .sheet(isPresented: $showingMailComposer) {
+            MailComposer(
+                recipient: Self.feedbackEmail,
+                subject: "ADultingHD Feedback",
+                body: "\n\n---\nApp: ADultingHD v\(appVersion) (\(buildNumber))\nDevice: \(UIDevice.current.model), iOS \(UIDevice.current.systemVersion)",
+                onDismiss: { showingMailComposer = false }
+            )
+            .ignoresSafeArea()
+        }
         #else
-        iosList
+        .sheet(isPresented: $showWelcomeTour) {
+            WelcomeView(onComplete: { showWelcomeTour = false })
+                .frame(minWidth: 520, minHeight: 640)
+        }
         #endif
     }
+
+    // MARK: - General Tab
+
+    private var generalTab: some View {
+        Form {
+            Section("Notifications") {
+                if notificationManager.isAuthorized {
+                    @Bindable var nm = notificationManager
+                    Toggle("Daily Reminder", isOn: $nm.dailyReminderEnabled)
+                    if notificationManager.dailyReminderEnabled {
+                        DatePicker("Reminder Time", selection: reminderTime, displayedComponents: .hourAndMinute)
+                    }
+                    Toggle("Household Activity", isOn: $nm.householdActivityEnabled)
+                    Text("Get notified when household members complete tasks or move up the leaderboard")
+                        .font(.caption).foregroundStyle(.secondary)
+                } else {
+                    Button {
+                        Task { await notificationManager.requestAuthorization() }
+                    } label: {
+                        Label("Enable Notifications", systemImage: "bell.badge")
+                    }
+                    Text("Get daily reminders about due tasks")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
+
+            Section("iCloud Sync") {
+                HStack(spacing: 10) {
+                    Image(systemName: ICloudMonitor.shared.isICloud ? "icloud.fill" : "icloud.slash")
+                        .foregroundStyle(ICloudMonitor.shared.isICloud ? Color.accentColor : .secondary)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(ICloudMonitor.shared.isICloud ? "Syncing across devices" : "Sign in to iCloud to sync")
+                            .font(.subheadline)
+                    }
+                    Spacer()
+                    if ICloudMonitor.shared.isICloud {
+                        Button {
+                            Task { await ICloudMonitor.shared.syncNow() }
+                        } label: {
+                            if ICloudMonitor.shared.isSyncing {
+                                ProgressView().controlSize(.small)
+                            } else {
+                                Image(systemName: "arrow.triangle.2.circlepath.icloud")
+                            }
+                        }
+                        .disabled(ICloudMonitor.shared.isSyncing)
+                    }
+                }
+            }
+
+            Section("Stats") {
+                LabeledContent("Tasks Completed", value: "\(dataStore.profile.totalTasksCompleted)")
+                LabeledContent("Total XP", value: "\(dataStore.profile.totalXP)")
+                LabeledContent("Level", value: "\(dataStore.profile.level) — \(dataStore.profile.levelTitle)")
+                LabeledContent("Active / Total Tasks", value: "\(dataStore.activeTasks.count) / \(dataStore.tasks.count)")
+                if let joinDate = dataStore.profile.joinDate as Date? {
+                    LabeledContent("Member Since") { Text(joinDate, style: .date) }
+                }
+            }
+
+            Section("Task Management") {
+                NavigationLink { ManageTasksView() } label: {
+                    Label("Manage Active Tasks", systemImage: "checklist")
+                }
+            }
+        }
+        .formStyle(.grouped)
+    }
+
+    // MARK: - Household Tab
+
+    private var householdTab: some View {
+        Form {
+            Section("Current") {
+                LabeledContent("Active Household", value: dataStore.activeHousehold.name)
+                LabeledContent("Active Profile", value: dataStore.profile.name)
+            }
+
+            Section("Members") {
+                NavigationLink {
+                    HouseholdView()
+                } label: {
+                    Label("Members & Leaderboard", systemImage: "person.3.fill")
+                }
+            }
+
+            if storeManager.isPro {
+                Section("Your Households") {
+                    NavigationLink {
+                        HouseholdListView()
+                    } label: {
+                        Label {
+                            HStack {
+                                Text("Manage Households")
+                                Spacer()
+                                Text("\(dataStore.listHouseholds().count)")
+                                    .foregroundStyle(.secondary)
+                            }
+                        } icon: {
+                            Image(systemName: "house.lodge.fill")
+                        }
+                    }
+                }
+            } else {
+                Section("Multiple Households") {
+                    ProPromptCard(title: "Manage Multiple Households", icon: "house.lodge.fill")
+                    Button { showProUpgrade = true } label: {
+                        Label("Unlock with Pro", systemImage: "crown.fill")
+                            .foregroundStyle(Theme.xpGold)
+                    }
+                }
+            }
+        }
+        .formStyle(.grouped)
+    }
+
+    // MARK: - Pro Tab
+
+    private var proTab: some View {
+        Form {
+            if storeManager.isPro {
+                Section("Pro Membership") {
+                    Label("You're a Pro member!", systemImage: "crown.fill")
+                        .foregroundStyle(Theme.xpGold)
+                }
+
+                Section("Backup") {
+                    Button { exportData() } label: {
+                        Label("Export Backup", systemImage: "square.and.arrow.up")
+                    }
+                    Button { showImportPicker = true } label: {
+                        Label("Import Backup", systemImage: "square.and.arrow.down")
+                    }
+                    if let msg = importMessage {
+                        Text(msg)
+                            .font(.caption)
+                            .foregroundStyle(msg.contains("Error") ? .red : .green)
+                    }
+                }
+            } else {
+                Section {
+                    Button { showProUpgrade = true } label: {
+                        HStack(spacing: 12) {
+                            Image(systemName: "crown.fill")
+                                .font(.title2)
+                                .foregroundStyle(Theme.xpGold)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Upgrade to Pro")
+                                    .font(.headline)
+                                Text("One-time purchase \u{2014} unlock all features")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.caption).foregroundStyle(.tertiary)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                Section("Backup") {
+                    ProPromptCard(title: "Data Export & Import", icon: "square.and.arrow.up")
+                }
+            }
+
+            Section("Tour") {
+                Button { showWelcomeTour = true } label: {
+                    Label("Show Welcome Tour", systemImage: "sparkles")
+                }
+                Text("Replay the introduction to see how ADultingHD works.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+        }
+        .formStyle(.grouped)
+    }
+
+    // MARK: - About Tab
+
+    private var aboutTab: some View {
+        Form {
+            Section {
+                HStack(spacing: 14) {
+                    Image(systemName: "clipboard.fill")
+                        .font(.system(size: 36))
+                        .foregroundStyle(Theme.accent)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("ADultingHD")
+                            .font(.title3.bold())
+                        Text("Gamified household task management")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Text("Version \(appVersion) (\(buildNumber))")
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                    }
+                }
+                .padding(.vertical, 4)
+            }
+
+            Section("Feedback") {
+                #if os(iOS)
+                if MFMailComposeViewController.canSendMail() {
+                    Button { showingMailComposer = true } label: {
+                        Label("Send Feedback", systemImage: "envelope")
+                    }
+                } else if let url = URL(string: "mailto:\(Self.feedbackEmail)?subject=ADultingHD%20Feedback") {
+                    Link(destination: url) {
+                        Label("Send Feedback", systemImage: "envelope")
+                    }
+                }
+                #else
+                if let url = URL(string: "mailto:\(Self.feedbackEmail)?subject=ADultingHD%20Feedback") {
+                    Link(destination: url) {
+                        Label("Send Feedback", systemImage: "envelope")
+                    }
+                }
+                #endif
+            }
+
+            Section("Legal") {
+                Link(destination: Self.privacyURL) {
+                    Label("Privacy Policy", systemImage: "hand.raised")
+                }
+                Link(destination: Self.termsURL) {
+                    Label("Terms of Use", systemImage: "doc.text")
+                }
+            }
+
+            Section("Danger Zone") {
+                Button(role: .destructive) {
+                    showResetConfirm = true
+                } label: {
+                    Label("Reset All Data", systemImage: "trash")
+                        .foregroundStyle(.red)
+                }
+            }
+        }
+        .formStyle(.grouped)
+    }
+
+    // MARK: - Helpers
 
     private func exportData() {
         Task {
@@ -90,407 +395,6 @@ struct SettingsView: View {
         }
     }
 }
-
-// MARK: - macOS: Responsive Column Layout
-
-#if os(macOS)
-extension SettingsView {
-    private var macBody: some View {
-        GeometryReader { geo in
-            let w = geo.size.width
-            ScrollView {
-                Group {
-                    if w >= 860 {
-                        HStack(alignment: .top, spacing: 16) {
-                            col1.frame(maxWidth: .infinity)
-                            col2.frame(maxWidth: .infinity)
-                            col3.frame(maxWidth: .infinity)
-                        }
-                    } else if w >= 540 {
-                        HStack(alignment: .top, spacing: 16) {
-                            VStack(spacing: 16) { col1; col3 }.frame(maxWidth: .infinity)
-                            col2.frame(maxWidth: .infinity)
-                        }
-                    } else {
-                        VStack(spacing: 16) { col1; col2; col3 }
-                    }
-                }
-                .padding()
-            }
-        }
-        .navigationTitle("Settings")
-        .confirmationDialog("Reset All Data?", isPresented: $showResetConfirm) {
-            Button("Reset Everything", role: .destructive) {
-                Task { await dataStore.resetAll() }
-            }
-        } message: {
-            Text("This will delete all your tasks, completions, XP, and achievements. This cannot be undone.")
-        }
-        .fileImporter(isPresented: $showImportPicker, allowedContentTypes: [.json]) { result in
-            handleImport(result)
-        }
-        .sheet(isPresented: $showProUpgrade) { ProUpgradeView() }
-    }
-
-    private var col1: some View {
-        Form {
-            Section("Notifications") {
-                if notificationManager.isAuthorized {
-                    @Bindable var nm = notificationManager
-                    Toggle("Daily Reminder", isOn: $nm.dailyReminderEnabled)
-                    if notificationManager.dailyReminderEnabled {
-                        DatePicker("Reminder Time", selection: reminderTime, displayedComponents: .hourAndMinute)
-                    }
-                    Toggle("Household Activity", isOn: $nm.householdActivityEnabled)
-                    Text("Get notified when household members complete tasks or move up the leaderboard")
-                        .font(.caption).foregroundStyle(.secondary)
-                } else {
-                    Button {
-                        Task { await notificationManager.requestAuthorization() }
-                    } label: {
-                        Label("Enable Notifications", systemImage: "bell.badge")
-                    }
-                    Text("Get daily reminders about due tasks")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
-            }
-            Section("iCloud Sync") {
-                HStack(spacing: 10) {
-                    Image(systemName: ICloudMonitor.shared.isICloud ? "icloud.fill" : "icloud.slash")
-                        .foregroundStyle(ICloudMonitor.shared.isICloud ? Color.accentColor : .secondary)
-                    Text(ICloudMonitor.shared.isICloud ? "Syncing across devices" : "Sign in to iCloud to sync")
-                        .font(.subheadline)
-                    Spacer()
-                    if ICloudMonitor.shared.isICloud {
-                        Button {
-                            Task { await ICloudMonitor.shared.syncNow() }
-                        } label: {
-                            if ICloudMonitor.shared.isSyncing {
-                                ProgressView().controlSize(.small)
-                            } else {
-                                Image(systemName: "arrow.triangle.2.circlepath.icloud")
-                            }
-                        }
-                        .disabled(ICloudMonitor.shared.isSyncing)
-                    }
-                }
-            }
-            Section("Stats") {
-                LabeledContent("Tasks Completed", value: "\(dataStore.profile.totalTasksCompleted)")
-                LabeledContent("Total XP", value: "\(dataStore.profile.totalXP)")
-                LabeledContent("Level", value: "\(dataStore.profile.level) — \(dataStore.profile.levelTitle)")
-                LabeledContent("Active / Total Tasks", value: "\(dataStore.activeTasks.count) / \(dataStore.tasks.count)")
-                if let joinDate = dataStore.profile.joinDate as Date? {
-                    LabeledContent("Member Since") { Text(joinDate, style: .date) }
-                }
-            }
-        }
-        .formStyle(.grouped)
-    }
-
-    private var col2: some View {
-        Form {
-            if storeManager.isPro {
-                Section("Pro Membership") {
-                    Label("You're a Pro member!", systemImage: "crown.fill")
-                        .foregroundStyle(Theme.xpGold)
-                }
-            } else {
-                Section {
-                    Button { showProUpgrade = true } label: {
-                        HStack(spacing: 12) {
-                            Image(systemName: "crown.fill")
-                                .font(.title2)
-                                .foregroundStyle(Theme.xpGold)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("Upgrade to Pro")
-                                    .font(.headline)
-                                Text("One-time purchase \u{2014} unlock all features")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            Image(systemName: "chevron.right")
-                                .font(.caption).foregroundStyle(.tertiary)
-                        }
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            if storeManager.isPro {
-                Section("Household") {
-                    NavigationLink { HouseholdView() } label: {
-                        Label("Manage Household", systemImage: "person.3.fill")
-                    }
-                    LabeledContent("Current Profile", value: dataStore.profile.name)
-                }
-            } else {
-                Section("Household") {
-                    ProPromptCard(title: "Household Profiles", icon: "person.3.fill")
-                }
-            }
-            Section("Task Management") {
-                NavigationLink { ManageTasksView() } label: {
-                    Label("Manage Active Tasks", systemImage: "checklist")
-                }
-            }
-        }
-        .formStyle(.grouped)
-    }
-
-    private var col3: some View {
-        Form {
-            if storeManager.isPro {
-                Section("Backup") {
-                    Button { exportData() } label: {
-                        Label("Export Backup", systemImage: "square.and.arrow.up")
-                    }
-                    Button { showImportPicker = true } label: {
-                        Label("Import Backup", systemImage: "square.and.arrow.down")
-                    }
-                    if let msg = importMessage {
-                        Text(msg)
-                            .font(.caption)
-                            .foregroundStyle(msg.contains("Error") ? .red : .green)
-                    }
-                }
-            } else {
-                Section("Backup") {
-                    ProPromptCard(title: "Data Export & Import", icon: "square.and.arrow.up")
-                }
-            }
-            Section {
-                HStack(spacing: 14) {
-                    Image(systemName: "clipboard.fill")
-                        .font(.system(size: 36))
-                        .foregroundStyle(Theme.accent)
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("ADultingHD")
-                            .font(.title3.bold())
-                        Text("Gamified household task management")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        Text("Version \(appVersion) (\(buildNumber))")
-                            .font(.caption2)
-                            .foregroundStyle(.tertiary)
-                    }
-                }
-                .padding(.vertical, 4)
-            }
-            Section("Support") {
-                if let url = URL(string: "mailto:\(Self.feedbackEmail)?subject=ADultingHD%20Feedback") {
-                    Link(destination: url) {
-                        Label("Send Feedback", systemImage: "envelope")
-                    }
-                }
-            }
-            Section("Legal") {
-                Link(destination: Self.privacyURL) {
-                    Label("Privacy Policy", systemImage: "hand.raised")
-                }
-                Link(destination: Self.termsURL) {
-                    Label("Terms of Use", systemImage: "doc.text")
-                }
-            }
-            Section("Danger Zone") {
-                Button(role: .destructive) {
-                    showResetConfirm = true
-                } label: {
-                    Label("Reset All Data", systemImage: "trash")
-                        .foregroundStyle(.red)
-                }
-            }
-        }
-        .formStyle(.grouped)
-    }
-}
-#endif
-
-// MARK: - iOS: Scrolling List Layout
-
-#if os(iOS)
-extension SettingsView {
-    private var iosList: some View {
-        List {
-            Section("iCloud Sync") {
-                HStack(spacing: 12) {
-                    Image(systemName: ICloudMonitor.shared.isICloud ? "icloud.fill" : "icloud.slash")
-                        .foregroundStyle(ICloudMonitor.shared.isICloud ? Color.accentColor : .secondary)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("iCloud")
-                            .font(.subheadline).fontWeight(.medium)
-                        Text(ICloudMonitor.shared.isICloud ? "Syncing across devices" : "Sign in to iCloud to sync")
-                            .font(.caption).foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                    if ICloudMonitor.shared.isICloud {
-                        Button {
-                            Task { await ICloudMonitor.shared.syncNow() }
-                        } label: {
-                            if ICloudMonitor.shared.isSyncing {
-                                ProgressView().controlSize(.small)
-                            } else {
-                                Image(systemName: "arrow.triangle.2.circlepath.icloud")
-                            }
-                        }
-                        .disabled(ICloudMonitor.shared.isSyncing)
-                    }
-                }
-            }
-
-            Section("Notifications") {
-                if notificationManager.isAuthorized {
-                    @Bindable var nm = notificationManager
-                    Toggle("Daily Reminder", isOn: $nm.dailyReminderEnabled)
-                    if notificationManager.dailyReminderEnabled {
-                        DatePicker("Reminder Time", selection: reminderTime, displayedComponents: .hourAndMinute)
-                    }
-                    Toggle("Household Activity", isOn: $nm.householdActivityEnabled)
-                    Text("Get notified when household members complete tasks or move up the leaderboard")
-                        .font(.caption).foregroundStyle(.secondary)
-                } else {
-                    Button {
-                        Task { await notificationManager.requestAuthorization() }
-                    } label: {
-                        Label("Enable Notifications", systemImage: "bell.badge")
-                    }
-                    Text("Get daily reminders about due tasks")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
-            }
-
-            if !storeManager.isPro {
-                Section {
-                    Button { showProUpgrade = true } label: {
-                        HStack(spacing: 12) {
-                            Image(systemName: "crown.fill")
-                                .font(.title2).foregroundStyle(Theme.xpGold)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("Upgrade to Pro")
-                                    .font(.headline).foregroundStyle(.primary)
-                                Text("One-time purchase \u{2014} unlock all features")
-                                    .font(.caption).foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            Image(systemName: "chevron.right")
-                                .font(.caption).foregroundStyle(.tertiary)
-                        }
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-
-            Section("Stats") {
-                LabeledContent("Total Tasks", value: "\(dataStore.tasks.count)")
-                LabeledContent("Active Tasks", value: "\(dataStore.activeTasks.count)")
-                LabeledContent("Tasks Completed", value: "\(dataStore.profile.totalTasksCompleted)")
-                LabeledContent("Total XP", value: "\(dataStore.profile.totalXP)")
-                LabeledContent("Level", value: "\(dataStore.profile.level)")
-                if let joinDate = dataStore.profile.joinDate as Date? {
-                    LabeledContent("Member Since") { Text(joinDate, style: .date) }
-                }
-            }
-
-            Section("Task Management") {
-                NavigationLink { ManageTasksView() } label: {
-                    Label("Manage Active Tasks", systemImage: "checklist")
-                }
-            }
-
-            if storeManager.isPro {
-                Section("Household") {
-                    NavigationLink { HouseholdView() } label: {
-                        Label("Manage Household", systemImage: "person.3.fill")
-                    }
-                    LabeledContent("Current Profile", value: dataStore.profile.name)
-                }
-            } else {
-                Section("Household") {
-                    ProPromptCard(title: "Household Profiles", icon: "person.3.fill")
-                }
-            }
-
-            if storeManager.isPro {
-                Section("Data") {
-                    Button { exportData() } label: {
-                        Label("Export Backup", systemImage: "square.and.arrow.up")
-                    }
-                    Button { showImportPicker = true } label: {
-                        Label("Import Backup", systemImage: "square.and.arrow.down")
-                    }
-                    if let msg = importMessage {
-                        Text(msg)
-                            .font(.caption)
-                            .foregroundStyle(msg.contains("Error") ? .red : .green)
-                    }
-                }
-            } else {
-                Section("Data") {
-                    ProPromptCard(title: "Data Export & Import", icon: "square.and.arrow.up")
-                }
-            }
-
-            Section("Feedback") {
-                if MFMailComposeViewController.canSendMail() {
-                    Button { showingMailComposer = true } label: {
-                        Label("Send Feedback", systemImage: "envelope")
-                    }
-                } else if let url = URL(string: "mailto:\(Self.feedbackEmail)?subject=ADultingHD%20Feedback") {
-                    Link(destination: url) {
-                        Label("Send Feedback", systemImage: "envelope")
-                    }
-                }
-            }
-
-            Section {
-                Link(destination: Self.privacyURL) {
-                    Label("Privacy Policy", systemImage: "hand.raised")
-                }
-                Link(destination: Self.termsURL) {
-                    Label("Terms of Use", systemImage: "doc.text")
-                }
-            }
-
-            Section {
-                Text("Version \(appVersion) (\(buildNumber))")
-                    .font(.footnote).foregroundStyle(.tertiary)
-                    .frame(maxWidth: .infinity)
-                    .listRowBackground(Color.clear)
-            }
-
-            Section("Danger Zone") {
-                Button(role: .destructive) {
-                    showResetConfirm = true
-                } label: {
-                    Label("Reset All Data", systemImage: "trash")
-                        .foregroundStyle(.red)
-                }
-            }
-        }
-        .navigationTitle("Settings")
-        .confirmationDialog("Reset All Data?", isPresented: $showResetConfirm) {
-            Button("Reset Everything", role: .destructive) {
-                Task { await dataStore.resetAll() }
-            }
-        } message: {
-            Text("This will delete all your tasks, completions, XP, and achievements. This cannot be undone.")
-        }
-        .fileImporter(isPresented: $showImportPicker, allowedContentTypes: [.json]) { result in
-            handleImport(result)
-        }
-        .sheet(isPresented: $showProUpgrade) { ProUpgradeView() }
-        .sheet(isPresented: $showingMailComposer) {
-            MailComposer(
-                recipient: Self.feedbackEmail,
-                subject: "ADultingHD Feedback",
-                body: "\n\n---\nApp: ADultingHD v\(appVersion) (\(buildNumber))\nDevice: \(UIDevice.current.model), iOS \(UIDevice.current.systemVersion)",
-                onDismiss: { showingMailComposer = false }
-            )
-            .ignoresSafeArea()
-        }
-    }
-}
-#endif
 
 // MARK: - Manage Tasks View
 

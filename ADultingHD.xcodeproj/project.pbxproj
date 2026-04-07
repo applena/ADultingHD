@@ -19,6 +19,7 @@
 		192D8A1B3C12ABF4EB2B4D27 /* FeedbackManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 854942DD593A8ECA221E1EBA /* FeedbackManager.swift */; };
 		1A414DB4EF6A72C1C2BB593C /* TaskStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = E301F5BC8F6566FA177AF157 /* TaskStore.swift */; };
 		1B89BFD27BDC7BF01730F544 /* HouseholdView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 695F786CFF2DBB9CFFC3FB57 /* HouseholdView.swift */; };
+		2136E85F041B701A3FC3A6F8 /* HouseholdSwitcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0393A2B006DEC68B74588B38 /* HouseholdSwitcher.swift */; };
 		217DCA6798A2B5FEBC6F3F36 /* CelebrationOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = C83482BE393F043CC98D85D5 /* CelebrationOverlay.swift */; };
 		27FFD28F0F6424E3309F598A /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 3A3517C461E95902B75B83EC /* Assets.xcassets */; };
 		29CCC391251B81468E3C4D89 /* DashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5396E4C1C4C3ECF26BB2EAFA /* DashboardView.swift */; };
@@ -27,14 +28,18 @@
 		32B2A2B1C0D0C060D199A5F0 /* TaskListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9842B7EFD24606C323FF2B0A /* TaskListView.swift */; };
 		32F0A7EC40BD37AD900B9FCB /* ProUpgradeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 549CB63F51BACCA54F498F61 /* ProUpgradeView.swift */; };
 		335B5655E85ADF9E3F7F1561 /* StoreManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82F1A54B24D8CEE886570DD5 /* StoreManager.swift */; };
+		35007C115034710A7F9A0B67 /* Household.swift in Sources */ = {isa = PBXBuildFile; fileRef = D11A106E8C2F206C19D308D2 /* Household.swift */; };
 		39B3C852206DB89E94730D9B /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 595B8FFDEAA880BB683CE951 /* Theme.swift */; };
 		3BAB900BC70ACCDC13B6DFAA /* ADultingHDApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5EAA3948D9FC1F50504D54B1 /* ADultingHDApp.swift */; };
 		3DC91DE434871AB06678003F /* StorageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC655FB6ECD683EFB08D9D2A /* StorageTests.swift */; };
+		464FA6A8B7D4398D40560971 /* HouseholdListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D2415835B6B9246CBCB2B51 /* HouseholdListView.swift */; };
 		4686ADD3BCC33DFE1FAEE9F5 /* StoreManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82F1A54B24D8CEE886570DD5 /* StoreManager.swift */; };
+		48878A87FE9D74C9795083DA /* CreateHouseholdSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3727978FB1D9851E994C4EA1 /* CreateHouseholdSheet.swift */; };
 		495799BA75ED31C99A35E9B3 /* TaskCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBF9F9EF33AED52C9BCD464D /* TaskCatalog.swift */; };
 		4BFE807B0EA0A3A6DE64775E /* TaskStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = E301F5BC8F6566FA177AF157 /* TaskStore.swift */; };
 		4E200ACE0644D64B1C8E12FE /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = B54CC3BCB4829D7DA2F17D3B /* Models.swift */; };
 		5637B3F78F27EE081972C443 /* TaskDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 317D978794EB297B3B1016C3 /* TaskDetailView.swift */; };
+		5705FDAC1189CAA5B5DC2C51 /* HouseholdSwitcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0393A2B006DEC68B74588B38 /* HouseholdSwitcher.swift */; };
 		58806CAFF4D1779134CED3F5 /* ScheduleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1404A4A0405FEE3627DCF6ED /* ScheduleView.swift */; };
 		5895179F1F076F7052A0B844 /* StatsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8EE3AD45631FE25F14C022B1 /* StatsView.swift */; };
 		58C58D45E74445C1C27CC48F /* TaskDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 317D978794EB297B3B1016C3 /* TaskDetailView.swift */; };
@@ -55,6 +60,7 @@
 		7E5F65F8C2955E1677436850 /* AvatarShopView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4757FDAA2BA9BF7C4FCF13EF /* AvatarShopView.swift */; };
 		81EE3B8055126ADDA86D97FA /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = B54CC3BCB4829D7DA2F17D3B /* Models.swift */; };
 		8421DBE651D8B024824035F0 /* StatsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8EE3AD45631FE25F14C022B1 /* StatsView.swift */; };
+		851ED2E5B6ED0A4222C4260C /* CreateHouseholdSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3727978FB1D9851E994C4EA1 /* CreateHouseholdSheet.swift */; };
 		85DEF4BA984FD4CCFE3F7F3E /* MailComposer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0948809977CA170CA42D9648 /* MailComposer.swift */; };
 		86B63C6F7C5A3B9F2B5A9977 /* AddTaskView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC09792564158736721A229E /* AddTaskView.swift */; };
 		86DD9FFAA1C3CE68FC44EA78 /* SharedDefaults.swift in Sources */ = {isa = PBXBuildFile; fileRef = 237812D11116F8AC3958C169 /* SharedDefaults.swift */; };
@@ -63,6 +69,7 @@
 		8DE2F629284ED770D3B2D48B /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81CDE793214D211A1B6C4124 /* ContentView.swift */; };
 		903A1FCACE9EB8111F170CA6 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC7C1D393BEF1BD66D303071 /* AppDelegate.swift */; };
 		9C1DEBF4250D2976DB2BB016 /* AvatarShopView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4757FDAA2BA9BF7C4FCF13EF /* AvatarShopView.swift */; };
+		9F85CA4BB8D941A50064BBDD /* Household.swift in Sources */ = {isa = PBXBuildFile; fileRef = D11A106E8C2F206C19D308D2 /* Household.swift */; };
 		A1AE097D34F2C2F96302AE42 /* SharedDefaults.swift in Sources */ = {isa = PBXBuildFile; fileRef = 237812D11116F8AC3958C169 /* SharedDefaults.swift */; };
 		A749CF0FE2A205BA72AC5B7D /* AddTaskView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC09792564158736721A229E /* AddTaskView.swift */; };
 		AB9CED694A786AED0A665721 /* Products.storekit in Resources */ = {isa = PBXBuildFile; fileRef = 94BE46FE41B7C1EA8E502F61 /* Products.storekit */; };
@@ -70,6 +77,7 @@
 		AE9A26A486ADF8D8C308066E /* DefaultTasks.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04D1D6ED759D2E2C16961F3F /* DefaultTasks.swift */; };
 		B2E33766E6A443E258D27C8E /* AvatarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1090F574CE8B557B631AA05C /* AvatarView.swift */; };
 		B719C8440B8AA15C2D29DE11 /* StorageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC655FB6ECD683EFB08D9D2A /* StorageTests.swift */; };
+		BB5FC43B97E81E7B705F1E50 /* HouseholdListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D2415835B6B9246CBCB2B51 /* HouseholdListView.swift */; };
 		C0BA3A041B6A36D4DB2AA8C5 /* SeasonalTasks.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0B77A6011E1BFCF8CBD20D /* SeasonalTasks.swift */; };
 		C19DB4BB11AB785EE04F0097 /* SuppliesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4625924B07ADFBF1008BB9A7 /* SuppliesView.swift */; };
 		C580DDA7F993E8F55A55996C /* TaskCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBF9F9EF33AED52C9BCD464D /* TaskCatalog.swift */; };
@@ -115,6 +123,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		0393A2B006DEC68B74588B38 /* HouseholdSwitcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HouseholdSwitcher.swift; sourceTree = "<group>"; };
 		04D1D6ED759D2E2C16961F3F /* DefaultTasks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DefaultTasks.swift; sourceTree = "<group>"; };
 		0948809977CA170CA42D9648 /* MailComposer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MailComposer.swift; sourceTree = "<group>"; };
 		1090F574CE8B557B631AA05C /* AvatarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AvatarView.swift; sourceTree = "<group>"; };
@@ -125,6 +134,7 @@
 		2F5B0036B4BFEAB2320CF8F3 /* ADultingHD.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ADultingHD.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		317D978794EB297B3B1016C3 /* TaskDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskDetailView.swift; sourceTree = "<group>"; };
 		3657A503A8E12F538794820B /* ICloudMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ICloudMonitor.swift; sourceTree = "<group>"; };
+		3727978FB1D9851E994C4EA1 /* CreateHouseholdSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreateHouseholdSheet.swift; sourceTree = "<group>"; };
 		3A3517C461E95902B75B83EC /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		4625924B07ADFBF1008BB9A7 /* SuppliesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SuppliesView.swift; sourceTree = "<group>"; };
 		4757FDAA2BA9BF7C4FCF13EF /* AvatarShopView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AvatarShopView.swift; sourceTree = "<group>"; };
@@ -137,6 +147,7 @@
 		695F786CFF2DBB9CFFC3FB57 /* HouseholdView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HouseholdView.swift; sourceTree = "<group>"; };
 		7459F3A8C4313CF430C5F9C3 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		76526EBCE81380FCFDA75143 /* ADultingHD.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = ADultingHD.entitlements; sourceTree = "<group>"; };
+		7D2415835B6B9246CBCB2B51 /* HouseholdListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HouseholdListView.swift; sourceTree = "<group>"; };
 		7FA39F5B9D5EB44665C21D60 /* DemoData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoData.swift; sourceTree = "<group>"; };
 		81CDE793214D211A1B6C4124 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		82F1A54B24D8CEE886570DD5 /* StoreManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StoreManager.swift; sourceTree = "<group>"; };
@@ -157,6 +168,7 @@
 		BC09792564158736721A229E /* AddTaskView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddTaskView.swift; sourceTree = "<group>"; };
 		BC4F1A84FF71C986EBEC3197 /* ScreenshotTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenshotTests.swift; sourceTree = "<group>"; };
 		C83482BE393F043CC98D85D5 /* CelebrationOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CelebrationOverlay.swift; sourceTree = "<group>"; };
+		D11A106E8C2F206C19D308D2 /* Household.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Household.swift; sourceTree = "<group>"; };
 		D26760093C603E0412FAC1FA /* ADultingHDUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = ADultingHDUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		D6FBFA6567C2B1A40A60A5E2 /* ProfileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileView.swift; sourceTree = "<group>"; };
 		E301F5BC8F6566FA177AF157 /* TaskStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskStore.swift; sourceTree = "<group>"; };
@@ -343,6 +355,7 @@
 			children = (
 				A46949C2CED4D43F466D4C9F /* Avatar */,
 				47FC797128B97CFE3B779F82 /* Dashboard */,
+				FEA2CB3DF1B19FB0A3F73FF4 /* Household */,
 				0534FD6446FE7CC883C0D65F /* Profile */,
 				0C1F054EC56F31970B76D76E /* Schedule */,
 				96E67A683C80AE14B75B15B6 /* Settings */,
@@ -395,9 +408,20 @@
 			isa = PBXGroup;
 			children = (
 				8E4E23E901E5476ADB2336D1 /* AvatarModels.swift */,
+				D11A106E8C2F206C19D308D2 /* Household.swift */,
 				B54CC3BCB4829D7DA2F17D3B /* Models.swift */,
 			);
 			path = Models;
+			sourceTree = "<group>";
+		};
+		FEA2CB3DF1B19FB0A3F73FF4 /* Household */ = {
+			isa = PBXGroup;
+			children = (
+				3727978FB1D9851E994C4EA1 /* CreateHouseholdSheet.swift */,
+				7D2415835B6B9246CBCB2B51 /* HouseholdListView.swift */,
+				0393A2B006DEC68B74588B38 /* HouseholdSwitcher.swift */,
+			);
+			path = Household;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -620,11 +644,15 @@
 				012E7B188D2A57AC62E22D61 /* CelebrationOverlay.swift in Sources */,
 				AD649BB11A09F94907291EA6 /* CloudKitSync.swift in Sources */,
 				F98B81C6A4D7E11C87DE2424 /* ContentView.swift in Sources */,
+				851ED2E5B6ED0A4222C4260C /* CreateHouseholdSheet.swift in Sources */,
 				29CCC391251B81468E3C4D89 /* DashboardView.swift in Sources */,
 				72C9E74018875C9858192642 /* DataStore.swift in Sources */,
 				65B1424603726E76E01DCDE2 /* DefaultTasks.swift in Sources */,
 				E613C7B7E0929774AD26EFA3 /* DemoData.swift in Sources */,
 				E0A6C9DCEA16B498614C0660 /* FeedbackManager.swift in Sources */,
+				35007C115034710A7F9A0B67 /* Household.swift in Sources */,
+				464FA6A8B7D4398D40560971 /* HouseholdListView.swift in Sources */,
+				2136E85F041B701A3FC3A6F8 /* HouseholdSwitcher.swift in Sources */,
 				EAD9D9ED183F29BF6113503F /* HouseholdView.swift in Sources */,
 				68ECBCF85C1FBDB970904EA3 /* ICloudMonitor.swift in Sources */,
 				85DEF4BA984FD4CCFE3F7F3E /* MailComposer.swift in Sources */,
@@ -661,11 +689,15 @@
 				217DCA6798A2B5FEBC6F3F36 /* CelebrationOverlay.swift in Sources */,
 				08AA7BF41F5C829B9CD76EE5 /* CloudKitSync.swift in Sources */,
 				8DE2F629284ED770D3B2D48B /* ContentView.swift in Sources */,
+				48878A87FE9D74C9795083DA /* CreateHouseholdSheet.swift in Sources */,
 				EF2F578B0B23F18F8F82CBB8 /* DashboardView.swift in Sources */,
 				8D0F4534D07BA76C6387C53A /* DataStore.swift in Sources */,
 				AE9A26A486ADF8D8C308066E /* DefaultTasks.swift in Sources */,
 				63BACBDA0B80E661879BD3DE /* DemoData.swift in Sources */,
 				192D8A1B3C12ABF4EB2B4D27 /* FeedbackManager.swift in Sources */,
+				9F85CA4BB8D941A50064BBDD /* Household.swift in Sources */,
+				BB5FC43B97E81E7B705F1E50 /* HouseholdListView.swift in Sources */,
+				5705FDAC1189CAA5B5DC2C51 /* HouseholdSwitcher.swift in Sources */,
 				1B89BFD27BDC7BF01730F544 /* HouseholdView.swift in Sources */,
 				D01170ED32D390FC87CD5772 /* ICloudMonitor.swift in Sources */,
 				0EBCCB3952C73766A7550BB1 /* MailComposer.swift in Sources */,

@@ -63,6 +63,13 @@ struct DashboardView: View {
             #endif
         }
         .navigationTitle("")
+        #if os(iOS)
+        .toolbar {
+            ToolbarItem(placement: .principal) {
+                HouseholdSwitcher()
+            }
+        }
+        #endif
     }
 
     #if os(iOS)

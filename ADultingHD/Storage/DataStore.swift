@@ -1,6 +1,7 @@
 import Foundation
 import SwiftUI
 import WidgetKit
+import CloudKit
 import os
 
 private let logger = Logger(subsystem: "net.shadowpuppet.ADultingHD", category: "DataStore")
@@ -13,6 +14,15 @@ final class DataStore {
     var completions: [TaskCompletion] = []
     var supplyStock: [String: SupplyStock] = [:]
     var isLoaded = false
+
+    /// Multi-household index. After `load()` always contains at least one
+    /// household with a valid `activeHouseholdId`. Mutated only via household
+    /// management methods — kept `private(set)` so views can't bypass save/sync.
+    private(set) var householdIndex: HouseholdIndex = HouseholdIndex(
+        households: [],
+        activeHouseholdId: UUID(),
+        schemaVersion: HouseholdIndex.currentSchemaVersion
+    )
 
     var celebrationType: CelebrationOverlay.CelebrationType?
     var householdActivityFeed: [HouseholdActivity] = []
@@ -63,22 +73,51 @@ final class DataStore {
         return result
     }
 
+    // MARK: - Household Index Convenience
+
+    /// The UUID of the currently active household. Always valid after `load()`.
+    var activeHouseholdId: UUID { householdIndex.activeHouseholdId }
+
+    /// The currently active household, or a synthesized fallback if the index
+    /// is empty (only possible during migration or after reset).
+    var activeHousehold: Household {
+        householdIndex.activeHousehold
+            ?? Household.newLocal(id: householdIndex.activeHouseholdId, name: "My Household", members: [])
+    }
+
+    var householdProfiles: [UserProfile] {
+        activeHousehold.members
+    }
+
+    var leaderboard: [UserProfile] {
+        householdProfiles.sorted { $0.totalXP > $1.totalXP }
+    }
+
     // MARK: - Load
 
     func load() async {
         #if DEBUG
         if ProcessInfo.processInfo.arguments.contains("-demo") {
             let demo = DemoData.generate()
+            let demoHousehold = Household.newLocal(name: "Demo House", members: demo.householdProfiles)
+            householdIndex = HouseholdIndex(
+                households: [demoHousehold],
+                activeHouseholdId: demoHousehold.id,
+                schemaVersion: HouseholdIndex.currentSchemaVersion
+            )
             tasks = demo.tasks
             profile = demo.profile
             completions = demo.completions
             supplyStock = demo.supplyStock
-            householdProfiles = demo.householdProfiles
             isLoaded = true
             logger.info("🎬 Demo data loaded")
             return
         }
         #endif
+
+        // Run the one-time layout migration before any reads so subsequent
+        // scoped loads see the new directory structure.
+        await migrateToHouseholdsLayoutIfNeeded()
 
         // Snapshot household state before reload for change detection on subsequent loads
         let wasLoaded = isLoaded
@@ -86,10 +125,20 @@ final class DataStore {
         let preCompletionIDs = wasLoaded ? Set(completions.map(\.id)) : []
         let preRank = wasLoaded ? leaderboard.firstIndex(where: { $0.id == profile.id }).map { $0 + 1 } : nil
 
-        let loadedTasks = await store.loadTasks()
+        // Load the household index. If it's missing (e.g. very first install
+        // with no legacy data), synthesize a fresh default household.
+        if let loadedIndex = await store.loadHouseholdIndex() {
+            householdIndex = loadedIndex
+        } else if householdIndex.households.isEmpty {
+            householdIndex = makeFreshDefaultIndex()
+            await store.saveHouseholdIndex(householdIndex)
+        }
+
+        let activeId = householdIndex.activeHouseholdId
+        let loadedTasks = await store.loadTasks(for: activeId)
         let loadedProfile = await store.loadProfile()
         let loadedCompletions = await store.loadCompletions()
-        let loadedStock = await store.loadSupplyStock()
+        let loadedStock = await store.loadSupplyStock(for: activeId)
 
         tasks = loadedTasks
         profile = loadedProfile
@@ -97,9 +146,16 @@ final class DataStore {
         supplyStock = loadedStock
         isLoaded = true
 
+        // Make sure the device user is in the active household's member list,
+        // and persist if we had to add them.
+        let memberWasMissing = !activeHousehold.members.contains(where: { $0.id == profile.id })
+        syncDeviceUserIntoActiveHousehold()
+        if memberWasMissing {
+            await store.saveHouseholdIndex(householdIndex)
+        }
+
         updateStreak()
-        await loadHouseholdProfiles()
-        logger.info("DataStore loaded: \(self.tasks.count) tasks, level \(self.profile.level)")
+        logger.info("DataStore loaded: \(self.tasks.count) tasks, level \(self.profile.level), household '\(self.activeHousehold.name, privacy: .public)'")
 
         if wasLoaded {
             detectHouseholdChanges(preProfiles: preProfiles, preCompletionIDs: preCompletionIDs, preRank: preRank)
@@ -113,6 +169,87 @@ final class DataStore {
                 await ckSync.setupSubscriptions()
             }
         }
+    }
+
+    private func makeFreshDefaultIndex() -> HouseholdIndex {
+        let name = UserDefaults.standard.string(forKey: "onboardingHouseholdName") ?? "My Household"
+        let household = Household.newLocal(name: name, members: [profile])
+        return HouseholdIndex(
+            households: [household],
+            activeHouseholdId: household.id,
+            schemaVersion: HouseholdIndex.currentSchemaVersion
+        )
+    }
+
+    // MARK: - Multi-household migration
+
+    /// One-time migration from the legacy flat file layout (tasks.json +
+    /// supply_stock.json + household.json at the Documents root) into the new
+    /// per-household directory tree. Idempotent; gated on a UserDefaults flag
+    /// so it runs at most once per device. Legacy files are left in place so
+    /// a crash mid-migration cleanly retries on the next launch.
+    private func migrateToHouseholdsLayoutIfNeeded() async {
+        let flagKey = "householdsLayoutMigratedV2"
+        let defaults = UserDefaults.standard
+        if defaults.bool(forKey: flagKey) { return }
+
+        // If another device already migrated and iCloud synced households.json
+        // to us, just adopt it without touching local legacy files.
+        if let existing = await store.loadHouseholdIndex() {
+            householdIndex = existing
+            defaults.set(true, forKey: flagKey)
+            logger.info("🏠 Adopted migrated HouseholdIndex from iCloud")
+            return
+        }
+
+        let legacyTasks = await store.loadTasksLegacy()
+        let legacyStock = await store.loadSupplyStockLegacy()
+        let legacyMembers = await store.loadLegacyHouseholdProfiles() ?? []
+
+        // Determine a stable default household id. Reuse one we persisted
+        // earlier if present, otherwise mint a new one and store it so any
+        // retry on the next launch picks the same id.
+        let defaultIdString = defaults.string(forKey: "defaultHouseholdId") ?? UUID().uuidString
+        defaults.set(defaultIdString, forKey: "defaultHouseholdId")
+        let defaultId = UUID(uuidString: defaultIdString) ?? UUID()
+
+        let householdName = defaults.string(forKey: "onboardingHouseholdName") ?? "My Household"
+
+        // Load current profile so the device user is always in the household's
+        // member list even if legacy household.json didn't include them.
+        let currentProfile = await store.loadProfile()
+        var members = legacyMembers
+        if !members.contains(where: { $0.id == currentProfile.id }) {
+            members.append(currentProfile)
+        }
+
+        // Reuse the legacy CloudKit zone name (default for newLocal) so
+        // existing TestFlight users don't lose their records — CloudKit
+        // doesn't support zone rename.
+        let defaultHousehold = Household.newLocal(id: defaultId, name: householdName, members: members)
+
+        // Copy (not move) legacy files into the per-household directory. Copy
+        // rather than move so a crash mid-migration leaves legacy files intact
+        // and next launch retries cleanly.
+        if let legacyTasks {
+            await store.saveTasks(legacyTasks, for: defaultId)
+        }
+        if let legacyStock {
+            await store.saveSupplyStock(legacyStock, for: defaultId)
+        }
+
+        let index = HouseholdIndex(
+            households: [defaultHousehold],
+            activeHouseholdId: defaultId,
+            schemaVersion: HouseholdIndex.currentSchemaVersion
+        )
+        await store.saveHouseholdIndex(index)
+        householdIndex = index
+
+        // Single commit point — only flip the flag once the new layout is
+        // fully written.
+        defaults.set(true, forKey: flagKey)
+        logger.info("🏠 Migrated legacy layout into household \(defaultId.uuidString, privacy: .public) '\(householdName, privacy: .public)'")
     }
 
     // MARK: - Complete Task
@@ -186,24 +323,24 @@ final class DataStore {
     func toggleTask(_ task: HouseholdTask) async {
         if let idx = tasks.firstIndex(where: { $0.id == task.id }) {
             tasks[idx].isActive.toggle()
-            await store.saveTasks(tasks)
+            await store.saveTasks(tasks, for: activeHouseholdId)
         }
     }
 
     func addCustomTask(_ task: HouseholdTask) async {
         tasks.append(task)
-        await store.saveTasks(tasks)
+        await store.saveTasks(tasks, for: activeHouseholdId)
     }
 
     func deleteTask(_ task: HouseholdTask) async {
         tasks.removeAll { $0.id == task.id }
-        await store.saveTasks(tasks)
+        await store.saveTasks(tasks, for: activeHouseholdId)
     }
 
     func updateTask(_ task: HouseholdTask) async {
         if let idx = tasks.firstIndex(where: { $0.id == task.id }) {
             tasks[idx] = task
-            await store.saveTasks(tasks)
+            await store.saveTasks(tasks, for: activeHouseholdId)
         }
     }
 
@@ -236,7 +373,7 @@ final class DataStore {
 
     func setSupplyStock(_ supply: String, stock: SupplyStock) async {
         supplyStock[supply] = stock
-        await store.saveSupplyStock(supplyStock)
+        await store.saveSupplyStock(supplyStock, for: activeHouseholdId)
     }
 
     // MARK: - Streak
@@ -316,13 +453,26 @@ final class DataStore {
     // MARK: - Persistence
 
     private func save() async {
-        await store.saveTasks(tasks)
+        await store.saveTasks(tasks, for: activeHouseholdId)
         await store.saveProfile(profile)
         await store.saveCompletions(completions)
+        // Mirror the device user's latest progression into the active
+        // household's member list so the leaderboard reflects current XP.
+        syncDeviceUserIntoActiveHousehold()
+        await store.saveHouseholdIndex(householdIndex)
         updateWidgetData()
         if isHouseholdSharingEnabled && ckSync.isAvailable {
             await ckSync.pushTasks(tasks)
             await ckSync.pushProfile(profile)
+        }
+    }
+
+    private func syncDeviceUserIntoActiveHousehold() {
+        guard let hIdx = householdIndex.households.firstIndex(where: { $0.id == activeHouseholdId }) else { return }
+        if let mIdx = householdIndex.households[hIdx].members.firstIndex(where: { $0.id == profile.id }) {
+            householdIndex.households[hIdx].members[mIdx] = profile
+        } else {
+            householdIndex.households[hIdx].members.append(profile)
         }
     }
 
@@ -411,48 +561,103 @@ final class DataStore {
         return "bonus_awarded_\(period)_\(stamp)"
     }
 
-    // MARK: - Household Profiles
-
-    var householdProfiles: [UserProfile] = []
-
-    func loadHouseholdProfiles() async {
-        householdProfiles = await store.loadHouseholdProfiles()
-        // Ensure current profile is in the list
-        if !householdProfiles.contains(where: { $0.id == profile.id }) {
-            householdProfiles.append(profile)
-            await store.saveHouseholdProfiles(householdProfiles)
-        }
-    }
+    // MARK: - Household Members
 
     func addHouseholdMember(name: String, avatar: String) async {
         var newProfile = UserProfile()
         newProfile.name = name
         newProfile.avatar = avatar
-        householdProfiles.append(newProfile)
-        await store.saveHouseholdProfiles(householdProfiles)
+        if let idx = householdIndex.households.firstIndex(where: { $0.id == activeHouseholdId }) {
+            householdIndex.households[idx].members.append(newProfile)
+            await store.saveHouseholdIndex(householdIndex)
+        }
     }
 
     func switchProfile(to profileId: UUID) async {
-        // Save current profile back to household list
-        if let idx = householdProfiles.firstIndex(where: { $0.id == profile.id }) {
-            householdProfiles[idx] = profile
-        }
+        // Save current profile's latest state back into the active household
+        syncDeviceUserIntoActiveHousehold()
         // Switch to new profile
         if let newProfile = householdProfiles.first(where: { $0.id == profileId }) {
             profile = newProfile
             await store.saveProfile(profile)
-            await store.saveHouseholdProfiles(householdProfiles)
+            await store.saveHouseholdIndex(householdIndex)
         }
     }
 
     func removeHouseholdMember(_ profileId: UUID) async {
         guard profileId != profile.id else { return } // Can't remove active profile
-        householdProfiles.removeAll { $0.id == profileId }
-        await store.saveHouseholdProfiles(householdProfiles)
+        if let idx = householdIndex.households.firstIndex(where: { $0.id == activeHouseholdId }) {
+            householdIndex.households[idx].members.removeAll { $0.id == profileId }
+            await store.saveHouseholdIndex(householdIndex)
+        }
     }
 
-    var leaderboard: [UserProfile] {
-        householdProfiles.sorted { $0.totalXP > $1.totalXP }
+    // MARK: - Multi-household management
+
+    /// Creates a new household with default tasks and makes it active. UI gates
+    /// this on Pro for the 2nd+ household.
+    func createHousehold(name: String) async {
+        let id = UUID()
+        let household = Household.newLocal(
+            id: id,
+            name: name.isEmpty ? "New Household" : name,
+            members: [profile],
+            zoneName: "Household-\(id.uuidString)"
+        )
+        householdIndex.households.append(household)
+        householdIndex.activeHouseholdId = id
+        // Seed scoped state directly instead of loading from disk (which would
+        // fall through to defaults + write anyway, costing a wasted read).
+        tasks = defaultHouseholdTasks
+        supplyStock = [:]
+        await store.saveTasks(tasks, for: id)
+        await store.saveHouseholdIndex(householdIndex)
+        logger.info("🏠 Created household '\(name, privacy: .public)' \(id.uuidString, privacy: .public)")
+    }
+
+    func switchHousehold(to id: UUID) async {
+        guard householdIndex.households.contains(where: { $0.id == id }) else { return }
+        guard id != activeHouseholdId else { return }
+        // Persist current household's state before swapping so nothing is lost
+        await save()
+        householdIndex.activeHouseholdId = id
+        await store.saveHouseholdIndex(householdIndex)
+        async let loadedTasks = store.loadTasks(for: id)
+        async let loadedStock = store.loadSupplyStock(for: id)
+        tasks = await loadedTasks
+        supplyStock = await loadedStock
+        logger.info("🏠 Switched to household \(id.uuidString, privacy: .public)")
+    }
+
+    func renameHousehold(_ id: UUID, to newName: String) async {
+        let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        if let idx = householdIndex.households.firstIndex(where: { $0.id == id }) {
+            householdIndex.households[idx].name = trimmed
+            await store.saveHouseholdIndex(householdIndex)
+        }
+    }
+
+    /// Delete a household. Refuses to delete the last remaining household. If
+    /// the active household is deleted, falls back to the first remaining one.
+    func deleteHousehold(_ id: UUID) async {
+        guard householdIndex.households.count > 1 else {
+            logger.info("🏠 Refusing to delete last household")
+            return
+        }
+        householdIndex.households.removeAll { $0.id == id }
+        if activeHouseholdId == id, let firstRemaining = householdIndex.households.first {
+            householdIndex.activeHouseholdId = firstRemaining.id
+            tasks = await store.loadTasks(for: firstRemaining.id)
+            supplyStock = await store.loadSupplyStock(for: firstRemaining.id)
+        }
+        await store.saveHouseholdIndex(householdIndex)
+        await store.deleteHouseholdDirectory(id)
+        logger.info("🏠 Deleted household \(id.uuidString, privacy: .public)")
+    }
+
+    func listHouseholds() -> [Household] {
+        householdIndex.households
     }
 
     // MARK: - CloudKit Migration & Sync
@@ -488,16 +693,19 @@ final class DataStore {
         let newCompletions = payload.completions.filter { !preCompletionIDs.contains($0.id) }
         completions = (completions + newCompletions).sorted { $0.completedAt > $1.completedAt }
 
-        // Merge profiles: prefer higher XP version
-        for cloudProfile in payload.profiles {
-            if cloudProfile.id == profile.id {
-                if cloudProfile.totalXP > profile.totalXP { profile = cloudProfile }
-            } else if let idx = householdProfiles.firstIndex(where: { $0.id == cloudProfile.id }) {
-                if cloudProfile.totalXP > householdProfiles[idx].totalXP {
-                    householdProfiles[idx] = cloudProfile
+        // Merge profiles into the active household's members list, preferring
+        // the higher-XP version for conflicts on the same profile id.
+        if let hIdx = householdIndex.households.firstIndex(where: { $0.id == activeHouseholdId }) {
+            for cloudProfile in payload.profiles {
+                if cloudProfile.id == profile.id {
+                    if cloudProfile.totalXP > profile.totalXP { profile = cloudProfile }
+                } else if let mIdx = householdIndex.households[hIdx].members.firstIndex(where: { $0.id == cloudProfile.id }) {
+                    if cloudProfile.totalXP > householdIndex.households[hIdx].members[mIdx].totalXP {
+                        householdIndex.households[hIdx].members[mIdx] = cloudProfile
+                    }
+                } else {
+                    householdIndex.households[hIdx].members.append(cloudProfile)
                 }
-            } else {
-                householdProfiles.append(cloudProfile)
             }
         }
 
@@ -607,25 +815,55 @@ final class DataStore {
                 }
             }
         )
+
+        syncObserverTokens.append(
+            NotificationCenter.default.addObserver(forName: .cloudKitShareAccepted, object: nil, queue: .main) { [weak self] notification in
+                guard let metadata = notification.object as? CKShare.Metadata else { return }
+                Task { @MainActor in
+                    await self?.registerJoinedHousehold(from: metadata)
+                }
+            }
+        )
+    }
+
+    /// Handle acceptance of a CKShare invite. Joins the shared zone and
+    /// pulls its data into the active household.
+    func registerJoinedHousehold(from metadata: CKShare.Metadata) async {
+        do {
+            try await ckSync.acceptShare(from: metadata)
+            UserDefaults.standard.set(true, forKey: "householdSharingEnabled")
+            await ckSync.setup()
+            await pullFromCloudKit()
+            logger.info("🏠 Joined shared household via CKShare")
+        } catch {
+            logger.error("🏠 Failed to accept share: \(error.localizedDescription)")
+        }
     }
 
     // MARK: - Export/Import
 
     func exportData() async -> Data? {
-        await store.exportBackup()
+        await store.exportBackup(householdId: activeHouseholdId)
     }
 
     func importData(_ data: Data) async -> Bool {
-        let success = await store.importBackup(from: data)
+        let success = await store.importBackup(from: data, householdId: activeHouseholdId)
         if success { await load() }
         return success
     }
 
     func resetAll() async {
         await store.resetAllData()
+        // Also clear the one-shot migration flag so a fresh load seeds a new
+        // default household (otherwise we'd end up with an empty index).
+        UserDefaults.standard.removeObject(forKey: "householdsLayoutMigratedV2")
+        UserDefaults.standard.removeObject(forKey: "defaultHouseholdId")
+        UserDefaults.standard.removeObject(forKey: "ckMigrationDone_v1")
         tasks = defaultHouseholdTasks
         profile = UserProfile()
         completions = []
+        supplyStock = [:]
+        householdIndex = makeFreshDefaultIndex()
         await save()
     }
 }

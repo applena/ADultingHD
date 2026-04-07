@@ -1,7 +1,12 @@
 import Foundation
+import CloudKit
 
 extension Notification.Name {
     static let cloudKitRemoteChange = Notification.Name("ADHDCloudKitRemoteChange")
+    /// Posted when the user accepts a CKShare invite for a household. The
+    /// `object` is the `CKShare.Metadata`. Observed by `DataStore` to trigger
+    /// acceptance + pull + local household registration.
+    static let cloudKitShareAccepted = Notification.Name("ADHDCloudKitShareAccepted")
 }
 
 #if os(iOS)
@@ -27,6 +32,15 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         }
         completionHandler(.newData)
     }
+
+    nonisolated func application(
+        _ application: UIApplication,
+        userDidAcceptCloudKitShareWith metadata: CKShare.Metadata
+    ) {
+        Task { @MainActor in
+            NotificationCenter.default.post(name: .cloudKitShareAccepted, object: metadata)
+        }
+    }
 }
 
 #elseif os(macOS)
@@ -44,6 +58,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     ) {
         Task { @MainActor in
             NotificationCenter.default.post(name: .cloudKitRemoteChange, object: nil)
+        }
+    }
+
+    nonisolated func application(
+        _ application: NSApplication,
+        userDidAcceptCloudKitShareWith metadata: CKShare.Metadata
+    ) {
+        Task { @MainActor in
+            NotificationCenter.default.post(name: .cloudKitShareAccepted, object: metadata)
         }
     }
 }

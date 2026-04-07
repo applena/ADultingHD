@@ -12,7 +12,7 @@ private enum RecordType {
     static let profile    = "MemberProfile"
 }
 
-private enum ZoneName {
+enum ZoneName {
     static let household = "HouseholdZone"
 }
 
