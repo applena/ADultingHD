@@ -30,7 +30,12 @@ final class CloudKitSync: ObservableObject {
     @Published var isAvailable = false
     @Published var syncError: String?
 
-    private let container = CKContainer(identifier: "iCloud.net.shadowpuppet.ADultingHD")
+    // Lazy so the CKContainer is only constructed when CloudKit is actually used.
+    // CKContainer(identifier:) traps when the iCloud entitlement is missing
+    // (e.g. unsigned builds for tests with CODE_SIGNING_ALLOWED=NO), so eager
+    // construction would crash the host app at launch during test runs even
+    // though all real CloudKit code paths are gated behind isHouseholdSharingEnabled.
+    private lazy var container = CKContainer(identifier: "iCloud.net.shadowpuppet.ADultingHD")
     private var privateDB: CKDatabase { container.privateCloudDatabase }
     private var sharedDB: CKDatabase { container.sharedCloudDatabase }
 

@@ -76,7 +76,7 @@ if ! $SKIP_TESTS; then
     )
     xcodebuild test \
         -project "$PROJECT" \
-        -scheme ADultingHDTests_iOS \
+        -scheme ADultingHD_iOS \
         -destination "$DESTINATION" \
         -configuration Debug \
         CODE_SIGNING_ALLOWED=NO \
