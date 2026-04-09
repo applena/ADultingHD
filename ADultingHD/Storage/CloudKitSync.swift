@@ -10,6 +10,15 @@ private enum RecordType {
     static let task       = "HouseholdTask"
     static let completion = "TaskCompletion"
     static let profile    = "MemberProfile"
+    /// Root record for the shared household zone. CKShare needs a concrete
+    /// root record to hang off of; this is that placeholder. Record type
+    /// names must NOT start with `_` — those are reserved by CloudKit and
+    /// saving one will fail.
+    static let householdRoot = "HouseholdRoot"
+}
+
+private enum RootRecordName {
+    static let household = "household-root"
 }
 
 enum ZoneName {
@@ -112,12 +121,9 @@ final class CloudKitSync: ObservableObject {
 
     private func saveRecords(_ records: [CKRecord]) async {
         guard !records.isEmpty else { return }
-        let op = CKModifyRecordsOperation(recordsToSave: records, recordIDsToDelete: nil)
-        op.savePolicy = .changedKeys
-        op.isAtomic = false
         do {
             let db = try await resolveDatabase()
-            db.add(op)
+            _ = try await db.modifyRecords(saving: records, deleting: [])
             logger.info("☁️ Pushed \(records.count) records")
         } catch {
             logger.error("☁️ Push failed: \(error.localizedDescription)")
@@ -181,21 +187,32 @@ final class CloudKitSync: ObservableObject {
 
     // MARK: - Sharing (household invite)
 
+    /// Returns a CKShare for the household root record, creating one the
+    /// first time and reusing it thereafter. Root record and share are
+    /// always saved together — CloudKit requires both in the same operation.
     func createOrFetchShare() async throws -> CKShare {
-        // Check for existing share on the zone
-        let shares = try await privateDB.fetchAllRecordZoneChanges()
-        if let existing = shares.first(where: { $0.recordType == "cloudkit.share" }) {
-            return existing as! CKShare // swiftlint:disable:this force_cast
+        let rootID = CKRecord.ID(recordName: RootRecordName.household, zoneID: zone.zoneID)
+
+        // If the root already exists, it carries a reference to its share.
+        // Pull the share through that reference rather than guessing IDs.
+        if let existingRoot = try? await privateDB.record(for: rootID),
+           let shareReference = existingRoot.share,
+           let existingShare = try? await privateDB.record(for: shareReference.recordID) as? CKShare {
+            shareURL = existingShare.url
+            logger.info("☁️ Reusing household share: \(existingShare.url?.absoluteString ?? "no url")")
+            return existingShare
         }
 
-        let share = CKShare(rootRecord: CKRecord(recordType: "_householdRoot",
-                                                  recordID: CKRecord.ID(recordName: "root",
-                                                                         zoneID: zone.zoneID)))
+        // First-time setup: create the root record and its share atomically.
+        let rootRecord = CKRecord(recordType: RecordType.householdRoot, recordID: rootID)
+        rootRecord["title"] = "ADultingHD Household" as CKRecordValue
+
+        let share = CKShare(rootRecord: rootRecord)
         share[CKShare.SystemFieldKey.title] = "ADultingHD Household" as CKRecordValue
         share.publicPermission = .none
 
-        let (savedRecords, _) = try await privateDB.modifyRecords(saving: [share], deleting: [])
-        guard let savedShare = savedRecords.first(where: { $0 is CKShare }) as? CKShare else {
+        let (savedRecords, _) = try await privateDB.modifyRecords(saving: [rootRecord, share], deleting: [])
+        guard let savedShare = savedRecords.compactMap({ $0 as? CKShare }).first else {
             throw CloudKitSyncError.shareCreationFailed
         }
         shareURL = savedShare.url
@@ -255,13 +272,6 @@ private extension CKDatabase {
             }
             self.add(op)
         }
-    }
-
-    func fetchAllRecordZoneChanges() async throws -> [CKRecord] {
-        // Lightweight share lookup — just fetch root record
-        let id = CKRecord.ID(recordName: "root",
-                              zoneID: CKRecordZone(zoneName: ZoneName.household).zoneID)
-        return (try? await self.record(for: id)).map { [$0] } ?? []
     }
 
     func save(_ zone: CKRecordZone) async throws -> CKRecordZone {

@@ -34,20 +34,30 @@ struct HouseholdListView: View {
                 }
             }
 
-            Section("Invite Collaborators") {
-                Button {
-                    Task { await generateInvite() }
-                } label: {
-                    Label("Invite someone to this household", systemImage: "square.and.arrow.up")
-                }
-                if let inviteError {
-                    Text(inviteError)
+            if Features.cloudKitSharing {
+                Section("Invite Collaborators") {
+                    Button {
+                        Task { await generateInvite() }
+                    } label: {
+                        Label("Invite someone to this household", systemImage: "square.and.arrow.up")
+                    }
+                    if let inviteError {
+                        Text(inviteError)
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                    }
+                    Text("Share the generated link via Messages, Mail, or AirDrop. They'll accept in their own ADultingHD app to join.")
                         .font(.caption)
-                        .foregroundStyle(.red)
+                        .foregroundStyle(.secondary)
                 }
-                Text("Share the generated link via Messages, Mail, or AirDrop. They'll accept in their own ADultingHD app to join.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+            } else {
+                Section("Invite Collaborators") {
+                    Label("Coming soon", systemImage: "clock.badge")
+                        .foregroundStyle(.secondary)
+                    Text("Cross-device household sharing is in development. For now, each device manages its own household list locally.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
         }
         .navigationTitle("Households")
