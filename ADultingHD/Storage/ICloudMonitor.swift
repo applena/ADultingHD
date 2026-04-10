@@ -1,4 +1,7 @@
 import Foundation
+import os
+
+private let logger = Logger(subsystem: "net.shadowpuppet.ADultingHD", category: "ICloudMonitor")
 
 extension Notification.Name {
     static let dataDidSync = Notification.Name("dataDidSync")
@@ -45,7 +48,7 @@ final class ICloudMonitor {
 
         q.start()
         query = q
-        print("☁️ iCloud monitor started, isICloud=\(isICloud)")
+        logger.info("☁️ iCloud monitor started, isICloud=\(self.isICloud)")
     }
 
     func stop() {
@@ -56,7 +59,7 @@ final class ICloudMonitor {
     }
 
     func syncNow() async {
-        print("☁️ manual sync triggered")
+        logger.info("☁️ manual sync triggered")
         isSyncing = true
         NotificationCenter.default.post(name: .dataDidSync, object: nil)
         isSyncing = false
@@ -68,11 +71,11 @@ final class ICloudMonitor {
 
     @objc private func queryDidFinishGathering(_ notification: Notification) {
         query?.enableUpdates()
-        print("☁️ initial iCloud gather complete")
+        logger.info("☁️ initial iCloud gather complete")
     }
 
     @objc private func queryDidUpdate(_ notification: Notification) {
-        print("☁️ iCloud files changed, scheduling reload")
+        logger.info("☁️ iCloud files changed, scheduling reload")
         scheduleReload()
     }
 
@@ -84,14 +87,14 @@ final class ICloudMonitor {
 
             let sinceLastWrite = Date().timeIntervalSince(lastWriteDate)
             guard sinceLastWrite > writeSuppressionWindow else {
-                print("☁️ skipping reload, local write was \(String(format: "%.1f", sinceLastWrite))s ago")
+                logger.info("☁️ skipping reload, local write was \(String(format: "%.1f", sinceLastWrite))s ago")
                 return
             }
 
             isSyncing = true
             NotificationCenter.default.post(name: .dataDidSync, object: nil)
             isSyncing = false
-            print("☁️ remote sync: triggered data reload")
+            logger.info("☁️ remote sync: triggered data reload")
         }
     }
 }

@@ -7,7 +7,9 @@ actor TaskStore {
     private let fileManager = FileManager.default
 
     private var documentsURL: URL {
-        let docs = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first!
+        guard let docs = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first else {
+            return fileManager.temporaryDirectory.appendingPathComponent("ADultingHD", isDirectory: true)
+        }
         let appDir = docs.appendingPathComponent("ADultingHD", isDirectory: true)
         try? fileManager.createDirectory(at: appDir, withIntermediateDirectories: true)
         return appDir

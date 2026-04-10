@@ -27,6 +27,7 @@
 		29CCC391251B81468E3C4D89 /* DashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5396E4C1C4C3ECF26BB2EAFA /* DashboardView.swift */; };
 		2A7E63B6DE2268ADD3EA7169 /* NotificationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5F315AD0A00703DCF818D81 /* NotificationManager.swift */; };
 		2C4F273A0464A9E089084803 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F0201C1F9CC0080AB9AE3DF /* SettingsView.swift */; };
+		2C5B731A60B6CFCC003AB5B4 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 730BB50D556F5975680168A8 /* PrivacyInfo.xcprivacy */; };
 		32B2A2B1C0D0C060D199A5F0 /* TaskListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9842B7EFD24606C323FF2B0A /* TaskListView.swift */; };
 		32F0A7EC40BD37AD900B9FCB /* ProUpgradeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 549CB63F51BACCA54F498F61 /* ProUpgradeView.swift */; };
 		335B5655E85ADF9E3F7F1561 /* StoreManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82F1A54B24D8CEE886570DD5 /* StoreManager.swift */; };
@@ -86,6 +87,7 @@
 		CCE73807F751779BBA12F2D4 /* SharedDefaults.swift in Sources */ = {isa = PBXBuildFile; fileRef = 237812D11116F8AC3958C169 /* SharedDefaults.swift */; };
 		CE5D9208158614C478A57CF1 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC7C1D393BEF1BD66D303071 /* AppDelegate.swift */; };
 		D01170ED32D390FC87CD5772 /* ICloudMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3657A503A8E12F538794820B /* ICloudMonitor.swift */; };
+		D174FED66D5EF21EF209C0E3 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 730BB50D556F5975680168A8 /* PrivacyInfo.xcprivacy */; };
 		D34A296E21D0680E7FD36A53 /* ScheduleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1404A4A0405FEE3627DCF6ED /* ScheduleView.swift */; };
 		D5ED0D8A6525358B05C0F0B6 /* WelcomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 124C98670AF61F31F83E9446 /* WelcomeView.swift */; };
 		DCBFC7323C498C4BCACA07F2 /* WelcomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 124C98670AF61F31F83E9446 /* WelcomeView.swift */; };
@@ -139,6 +141,7 @@
 		3657A503A8E12F538794820B /* ICloudMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ICloudMonitor.swift; sourceTree = "<group>"; };
 		3727978FB1D9851E994C4EA1 /* CreateHouseholdSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreateHouseholdSheet.swift; sourceTree = "<group>"; };
 		3A3517C461E95902B75B83EC /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		3B51D6E54A733EEE1D5052CB /* ADultingHDWidget.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = ADultingHDWidget.entitlements; sourceTree = "<group>"; };
 		4625924B07ADFBF1008BB9A7 /* SuppliesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SuppliesView.swift; sourceTree = "<group>"; };
 		4757FDAA2BA9BF7C4FCF13EF /* AvatarShopView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AvatarShopView.swift; sourceTree = "<group>"; };
 		4F0201C1F9CC0080AB9AE3DF /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
@@ -148,6 +151,7 @@
 		595B8FFDEAA880BB683CE951 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		5EAA3948D9FC1F50504D54B1 /* ADultingHDApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ADultingHDApp.swift; sourceTree = "<group>"; };
 		695F786CFF2DBB9CFFC3FB57 /* HouseholdView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HouseholdView.swift; sourceTree = "<group>"; };
+		730BB50D556F5975680168A8 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		7459F3A8C4313CF430C5F9C3 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		76526EBCE81380FCFDA75143 /* ADultingHD.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = ADultingHD.entitlements; sourceTree = "<group>"; };
 		7D2415835B6B9246CBCB2B51 /* HouseholdListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HouseholdListView.swift; sourceTree = "<group>"; };
@@ -239,6 +243,7 @@
 				11FBB908C9AB35B09E744F35 /* Storage */,
 				172F6EF1C8853B3BA50BFF89 /* Theme */,
 				9BE0804DE1FCD1C71A90ECBF /* Views */,
+				730BB50D556F5975680168A8 /* PrivacyInfo.xcprivacy */,
 			);
 			path = ADultingHD;
 			sourceTree = "<group>";
@@ -274,6 +279,7 @@
 		65948700BFF42DD01BCF6148 /* ADultingHDWidget */ = {
 			isa = PBXGroup;
 			children = (
+				3B51D6E54A733EEE1D5052CB /* ADultingHDWidget.entitlements */,
 				ADEF2B5DEB9BCCF7E7E71E62 /* ADultingHDWidget.swift */,
 			);
 			path = ADultingHDWidget;
@@ -601,6 +607,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				89E2EACB56230C51F30C983D /* Assets.xcassets in Resources */,
+				2C5B731A60B6CFCC003AB5B4 /* PrivacyInfo.xcprivacy in Resources */,
 				AB9CED694A786AED0A665721 /* Products.storekit in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -610,6 +617,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				27FFD28F0F6424E3309F598A /* Assets.xcassets in Resources */,
+				D174FED66D5EF21EF209C0E3 /* PrivacyInfo.xcprivacy in Resources */,
 				E865E299882ABD017C32E765 /* Products.storekit in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -1074,6 +1082,7 @@
 		F1C55A954A74636F3634EDD0 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = ADultingHDWidget/ADultingHDWidget.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 19;
 				DEVELOPMENT_TEAM = TYQ32QCF6K;
@@ -1095,6 +1104,7 @@
 		FB854DF0D2996A1F722D2B97 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = ADultingHDWidget/ADultingHDWidget.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 19;
 				DEVELOPMENT_TEAM = TYQ32QCF6K;
