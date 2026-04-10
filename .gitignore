@@ -25,3 +25,6 @@ ipad_screenshots.xcresult/
 screenshots/
 ipad_screenshots/
 asc_screenshots_uploaded.png
+
+# Claude Code local settings
+.claude/settings.local.json
