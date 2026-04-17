@@ -231,19 +231,45 @@ final class CloudKitSync: ObservableObject {
         share.publicPermission = .none
         logger.info("☁️ Saving root + share atomically (share.recordID=\(share.recordID.recordName, privacy: .public))")
 
-        let savedRecords: [CKRecord]
+        // Use Apple's native async API directly — it returns per-record
+        // Result values so we can surface the individual server error for
+        // whichever record (root or share) fails. Our custom wrapper was
+        // collapsing failures into a silent empty-success.
+        let saveResults: [CKRecord.ID: Result<CKRecord, Error>]
         do {
-            (savedRecords, _) = try await privateDB.modifyRecords(saving: [rootRecord, share], deleting: [])
+            let results = try await privateDB.modifyRecords(
+                saving: [rootRecord, share],
+                deleting: [],
+                savePolicy: .allKeys,      // new CKShare needs allKeys, not changedKeys
+                atomically: true           // both-or-nothing, matches CloudKit's share rules
+            )
+            saveResults = results.saveResults
         } catch {
-            logger.error("☁️ modifyRecords threw: \(error.localizedDescription, privacy: .public)")
+            logger.error("☁️ modifyRecords top-level threw: \(error.localizedDescription, privacy: .public)")
             logger.error("☁️ underlying: \(String(describing: error), privacy: .public)")
             throw CloudKitSyncError.shareCreationFailed(underlying: error)
         }
-        let typeList = savedRecords.map(\.recordType).joined(separator: ",")
-        logger.info("☁️ modifyRecords returned \(savedRecords.count) records: [\(typeList, privacy: .public)]")
+
+        // Log every per-record result so we can see which one failed and why.
+        var savedRecords: [CKRecord] = []
+        var failures: [String] = []
+        for (recordID, result) in saveResults {
+            switch result {
+            case .success(let record):
+                savedRecords.append(record)
+                logger.info("☁️ saved \(record.recordType, privacy: .public) id=\(recordID.recordName, privacy: .public)")
+            case .failure(let error):
+                let msg = "\(recordID.recordName): \(error.localizedDescription)"
+                failures.append(msg)
+                logger.error("☁️ save failed for \(msg, privacy: .public) — \(String(describing: error), privacy: .public)")
+            }
+        }
+
         guard let savedShare = savedRecords.compactMap({ $0 as? CKShare }).first else {
+            let typeList = savedRecords.map(\.recordType).joined(separator: ",")
+            let failureList = failures.isEmpty ? "no per-record failures reported" : failures.joined(separator: " | ")
             throw CloudKitSyncError.shareCreationFailed(
-                detail: "saved \(savedRecords.count) records but none were CKShare (types: \(typeList))"
+                detail: "saved=[\(typeList)] failures=[\(failureList)]"
             )
         }
         shareURL = savedShare.url
