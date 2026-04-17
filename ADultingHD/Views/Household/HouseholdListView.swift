@@ -1,9 +1,5 @@
 import SwiftUI
-#if os(iOS)
-import UIKit
-#else
-import AppKit
-#endif
+import CloudKit
 
 /// Pro-gated management screen for listing and managing all households the
 /// device user owns or has joined. Supports rename, delete (refuses the last
@@ -16,9 +12,18 @@ struct HouseholdListView: View {
     @State private var renameText: String = ""
     @State private var deleteTarget: Household?
     @State private var showCreateSheet = false
-    @State private var inviteURL: URL?
     @State private var inviteError: String?
     @State private var isGeneratingInvite = false
+    @State private var shareSheetPayload: ShareSheetPayload?
+
+    /// Wraps the CKShare + container so we can present `.sheet(item:)`
+    /// (which requires Identifiable) in a single binding update.
+    private struct ShareSheetPayload: Identifiable {
+        let id = UUID()
+        let share: CKShare
+        let container: CKContainer
+        let householdName: String
+    }
 
     var body: some View {
         let households = dataStore.listHouseholds()
@@ -42,16 +47,16 @@ struct HouseholdListView: View {
             if Features.cloudKitSharing {
                 Section("Invite Collaborators") {
                     Button {
-                        Task { await generateInvite() }
+                        Task { await presentShareSheet() }
                     } label: {
                         HStack {
                             if isGeneratingInvite {
                                 ProgressView()
                                     .controlSize(.small)
                             } else {
-                                Image(systemName: "square.and.arrow.up")
+                                Image(systemName: "person.crop.circle.badge.plus")
                             }
-                            Text(isGeneratingInvite ? "Generating…" : "Invite someone to this household")
+                            Text(isGeneratingInvite ? "Preparing…" : "Invite someone to this household")
                         }
                     }
                     .disabled(isGeneratingInvite)
@@ -60,33 +65,7 @@ struct HouseholdListView: View {
                             .font(.caption)
                             .foregroundStyle(.red)
                     }
-                    if let url = inviteURL {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Invite link")
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(.secondary)
-                            Text(url.absoluteString)
-                                .font(.caption.monospaced())
-                                .textSelection(.enabled)
-                                .lineLimit(nil)
-                                .multilineTextAlignment(.leading)
-                            HStack {
-                                #if os(iOS)
-                                ShareLink(item: url) {
-                                    Label("Share", systemImage: "square.and.arrow.up")
-                                }
-                                #endif
-                                Button {
-                                    copyInviteURL(url)
-                                } label: {
-                                    Label("Copy Link", systemImage: "doc.on.doc")
-                                }
-                                .buttonStyle(.bordered)
-                            }
-                        }
-                        .padding(.vertical, 4)
-                    }
-                    Text("Share the generated link via Messages, Mail, or AirDrop. They'll accept in their own ADultingHD app to join.")
+                    Text("Pick contacts by email or phone, or send via Messages, Mail, or AirDrop. They'll tap the invite and land straight in your household.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -131,6 +110,14 @@ struct HouseholdListView: View {
             Button("Cancel", role: .cancel) { deleteTarget = nil }
         } message: { _ in
             Text("This deletes the household's task list and supply stock. Members will be removed. Your XP, level, and streak are unaffected.")
+        }
+        .sheet(item: $shareSheetPayload) { payload in
+            CloudShareSheet(
+                share: payload.share,
+                container: payload.container,
+                householdName: payload.householdName,
+                onDismiss: { shareSheetPayload = nil }
+            )
         }
     }
 
@@ -199,23 +186,19 @@ struct HouseholdListView: View {
         .padding(.vertical, 4)
     }
 
-    private func generateInvite() async {
+    private func presentShareSheet() async {
         isGeneratingInvite = true
         defer { isGeneratingInvite = false }
         inviteError = nil
-        let result = await dataStore.generateHouseholdInvite()
-        inviteError = result.errorMessage
-        if let url = result.url {
-            inviteURL = url
+        do {
+            let (share, container) = try await dataStore.prepareHouseholdShare()
+            shareSheetPayload = ShareSheetPayload(
+                share: share,
+                container: container,
+                householdName: dataStore.activeHousehold.name
+            )
+        } catch {
+            inviteError = error.localizedDescription
         }
-    }
-
-    private func copyInviteURL(_ url: URL) {
-        #if os(iOS)
-        UIPasteboard.general.string = url.absoluteString
-        #else
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(url.absoluteString, forType: .string)
-        #endif
     }
 }

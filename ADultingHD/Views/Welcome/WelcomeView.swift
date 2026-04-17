@@ -1,4 +1,5 @@
 import SwiftUI
+import CloudKit
 
 struct WelcomeView: View {
     @Environment(DataStore.self) private var dataStore
@@ -8,10 +9,18 @@ struct WelcomeView: View {
     @State private var starterXPMessage: String?
     @State private var showProUpgrade = false
     @State private var selectedCategories: Set<TaskCategory> = Set(TaskCategory.allCases)
-    @State private var inviteURL: URL?
     @State private var inviteError: String?
     @State private var isGeneratingInvite = false
+    @State private var shareSheetPayload: ShareSheetPayload?
+    @State private var hasSentInvite = false
     @AppStorage(PrefKey.onboardingHouseholdName) private var householdName: String = "My Household"
+
+    private struct ShareSheetPayload: Identifiable {
+        let id = UUID()
+        let share: CKShare
+        let container: CKContainer
+        let householdName: String
+    }
 
     let onComplete: () -> Void
 
@@ -193,6 +202,17 @@ struct WelcomeView: View {
             .animation(.easeInOut(duration: 0.5), value: currentPageIndex)
         }
         .sheet(isPresented: $showProUpgrade) { ProUpgradeView() }
+        .sheet(item: $shareSheetPayload) { payload in
+            CloudShareSheet(
+                share: payload.share,
+                container: payload.container,
+                householdName: payload.householdName,
+                onDismiss: {
+                    hasSentInvite = true
+                    shareSheetPayload = nil
+                }
+            )
+        }
     }
 
     // MARK: - Per-page content
@@ -340,44 +360,38 @@ struct WelcomeView: View {
     @ViewBuilder
     private var inviteContent: some View {
         VStack(spacing: 12) {
-            if let url = inviteURL {
-                ShareLink(
-                    item: url,
-                    subject: Text("Join my household in ADultingHD"),
-                    message: Text("Tap this link to join my household. We'll share chores, XP, and the leaderboard.")
-                ) {
-                    Label("Share invite link", systemImage: "square.and.arrow.up")
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
-                        .background(Theme.accent.opacity(0.15), in: RoundedRectangle(cornerRadius: 12))
-                        .foregroundStyle(Theme.accent)
-                }
-                .buttonStyle(.plain)
-            } else {
-                Button {
-                    Task { await generateInvite() }
-                } label: {
-                    HStack {
-                        if isGeneratingInvite {
-                            ProgressView()
-                        } else {
-                            Image(systemName: "link.badge.plus")
-                        }
-                        Text("Generate invite link").fontWeight(.semibold)
+            Button {
+                Task { await presentShareSheet() }
+            } label: {
+                HStack {
+                    if isGeneratingInvite {
+                        ProgressView()
+                    } else {
+                        Image(systemName: hasSentInvite ? "checkmark.circle.fill" : "person.crop.circle.badge.plus")
                     }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
-                    .background(Color.secondary.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
+                    Text(inviteButtonTitle).fontWeight(.semibold)
                 }
-                .buttonStyle(.plain)
-                .disabled(isGeneratingInvite)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+                .background(
+                    (hasSentInvite ? Theme.successGreen.opacity(0.15) : Color.secondary.opacity(0.12)),
+                    in: RoundedRectangle(cornerRadius: 12)
+                )
             }
+            .buttonStyle(.plain)
+            .disabled(isGeneratingInvite)
             if let inviteError {
                 Text(inviteError)
                     .font(.caption)
                     .foregroundStyle(.red)
             }
         }
+    }
+
+    private var inviteButtonTitle: String {
+        if isGeneratingInvite { return "Preparing…" }
+        if hasSentInvite { return "Invite sent — send another?" }
+        return "Pick someone to invite"
     }
 
     private var starterTaskContent: some View {
@@ -473,7 +487,7 @@ struct WelcomeView: View {
     private var secondaryLabel: String {
         // Allow skipping the invite step entirely — cross-device invites are
         // optional and the user can do it later from Households.
-        if currentPage == .invite { return inviteURL == nil ? "Skip for now" : "Done, Next" }
+        if currentPage == .invite { return hasSentInvite ? "Done, Next" : "Skip for now" }
         return currentPageIndex > 0 ? "Back" : "Skip"
     }
 
@@ -490,13 +504,20 @@ struct WelcomeView: View {
         }
     }
 
-    private func generateInvite() async {
+    private func presentShareSheet() async {
         inviteError = nil
         isGeneratingInvite = true
         defer { isGeneratingInvite = false }
-        let result = await dataStore.generateHouseholdInvite()
-        inviteURL = result.url
-        inviteError = result.errorMessage
+        do {
+            let (share, container) = try await dataStore.prepareHouseholdShare()
+            shareSheetPayload = ShareSheetPayload(
+                share: share,
+                container: container,
+                householdName: dataStore.activeHousehold.name
+            )
+        } catch {
+            inviteError = error.localizedDescription
+        }
     }
 
     private func completeStarterTask() {

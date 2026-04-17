@@ -35,6 +35,7 @@
 		39B3C852206DB89E94730D9B /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 595B8FFDEAA880BB683CE951 /* Theme.swift */; };
 		3BAB900BC70ACCDC13B6DFAA /* ADultingHDApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5EAA3948D9FC1F50504D54B1 /* ADultingHDApp.swift */; };
 		3DC91DE434871AB06678003F /* StorageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC655FB6ECD683EFB08D9D2A /* StorageTests.swift */; };
+		40EB5B76C13D61C37F3B012B /* CloudShareSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50B7A549DD9609592F8E379E /* CloudShareSheet.swift */; };
 		464FA6A8B7D4398D40560971 /* HouseholdListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D2415835B6B9246CBCB2B51 /* HouseholdListView.swift */; };
 		4686ADD3BCC33DFE1FAEE9F5 /* StoreManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82F1A54B24D8CEE886570DD5 /* StoreManager.swift */; };
 		48878A87FE9D74C9795083DA /* CreateHouseholdSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3727978FB1D9851E994C4EA1 /* CreateHouseholdSheet.swift */; };
@@ -90,6 +91,7 @@
 		D174FED66D5EF21EF209C0E3 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 730BB50D556F5975680168A8 /* PrivacyInfo.xcprivacy */; };
 		D34A296E21D0680E7FD36A53 /* ScheduleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1404A4A0405FEE3627DCF6ED /* ScheduleView.swift */; };
 		D5ED0D8A6525358B05C0F0B6 /* WelcomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 124C98670AF61F31F83E9446 /* WelcomeView.swift */; };
+		D897D7C3E7496EC9CF18BE21 /* CloudShareSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50B7A549DD9609592F8E379E /* CloudShareSheet.swift */; };
 		DCBFC7323C498C4BCACA07F2 /* WelcomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 124C98670AF61F31F83E9446 /* WelcomeView.swift */; };
 		E0A6C9DCEA16B498614C0660 /* FeedbackManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 854942DD593A8ECA221E1EBA /* FeedbackManager.swift */; };
 		E3DF2EB293C94F7A4C2CDD8F /* AvatarModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E4E23E901E5476ADB2336D1 /* AvatarModels.swift */; };
@@ -145,6 +147,7 @@
 		4625924B07ADFBF1008BB9A7 /* SuppliesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SuppliesView.swift; sourceTree = "<group>"; };
 		4757FDAA2BA9BF7C4FCF13EF /* AvatarShopView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AvatarShopView.swift; sourceTree = "<group>"; };
 		4F0201C1F9CC0080AB9AE3DF /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		50B7A549DD9609592F8E379E /* CloudShareSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudShareSheet.swift; sourceTree = "<group>"; };
 		5396E4C1C4C3ECF26BB2EAFA /* DashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardView.swift; sourceTree = "<group>"; };
 		549CB63F51BACCA54F498F61 /* ProUpgradeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProUpgradeView.swift; sourceTree = "<group>"; };
 		57C8C629738FF18C6D7FC2F7 /* ADultingHDWidget.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = ADultingHDWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -427,6 +430,7 @@
 		FEA2CB3DF1B19FB0A3F73FF4 /* Household */ = {
 			isa = PBXGroup;
 			children = (
+				50B7A549DD9609592F8E379E /* CloudShareSheet.swift */,
 				3727978FB1D9851E994C4EA1 /* CreateHouseholdSheet.swift */,
 				7D2415835B6B9246CBCB2B51 /* HouseholdListView.swift */,
 				0393A2B006DEC68B74588B38 /* HouseholdSwitcher.swift */,
@@ -655,6 +659,7 @@
 				71179E1595419332759B5383 /* AvatarView.swift in Sources */,
 				012E7B188D2A57AC62E22D61 /* CelebrationOverlay.swift in Sources */,
 				AD649BB11A09F94907291EA6 /* CloudKitSync.swift in Sources */,
+				40EB5B76C13D61C37F3B012B /* CloudShareSheet.swift in Sources */,
 				F98B81C6A4D7E11C87DE2424 /* ContentView.swift in Sources */,
 				851ED2E5B6ED0A4222C4260C /* CreateHouseholdSheet.swift in Sources */,
 				29CCC391251B81468E3C4D89 /* DashboardView.swift in Sources */,
@@ -701,6 +706,7 @@
 				B2E33766E6A443E258D27C8E /* AvatarView.swift in Sources */,
 				217DCA6798A2B5FEBC6F3F36 /* CelebrationOverlay.swift in Sources */,
 				08AA7BF41F5C829B9CD76EE5 /* CloudKitSync.swift in Sources */,
+				D897D7C3E7496EC9CF18BE21 /* CloudShareSheet.swift in Sources */,
 				8DE2F629284ED770D3B2D48B /* ContentView.swift in Sources */,
 				48878A87FE9D74C9795083DA /* CreateHouseholdSheet.swift in Sources */,
 				EF2F578B0B23F18F8F82CBB8 /* DashboardView.swift in Sources */,

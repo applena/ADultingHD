@@ -844,6 +844,28 @@ final class DataStore {
         return share.url
     }
 
+    /// Prepare a CKShare + container for presentation in UICloudSharingController.
+    /// The share is saved (creating root + share atomically on first call, or
+    /// reusing the existing one) so the share sheet has everything it needs
+    /// to drive participant invites. Background data migration is kicked off
+    /// after the share is ready so the share sheet opens immediately.
+    func prepareHouseholdShare() async throws -> (share: CKShare, container: CKContainer) {
+        guard Features.cloudKitSharing else {
+            throw CloudKitSyncError.shareCreationFailed(detail: "cloudKitSharing feature flag is off")
+        }
+        UserDefaults.standard.set(true, forKey: PrefKey.householdSharingEnabled)
+        AppDelegate.registerForRemoteNotifications()
+        await ckSync.setup()
+        guard ckSync.isAvailable else {
+            throw CloudKitSyncError.iCloudUnavailable(status: ckSync.syncError ?? "unknown")
+        }
+        let share = try await ckSync.createOrFetchShare()
+        Task { [weak self] in
+            await self?.migrateToCloudKitIfNeeded()
+        }
+        return (share, ckSync.cloudContainer)
+    }
+
     /// Result envelope for invite-link generation so both the onboarding flow
     /// and the Households settings screen use the same error wording.
     struct InviteResult {

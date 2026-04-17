@@ -48,6 +48,10 @@ final class CloudKitSync: ObservableObject {
     private var privateDB: CKDatabase { container.privateCloudDatabase }
     private var sharedDB: CKDatabase { container.sharedCloudDatabase }
 
+    /// Expose the container so SwiftUI share-sheet wrappers (UICloudSharingController)
+    /// can be constructed. Safe to read only after setup() has marked `isAvailable`.
+    var cloudContainer: CKContainer { container }
+
     private var zone: CKRecordZone { CKRecordZone(zoneName: ZoneName.household) }
 
     private var subscriptionsConfigured = false
