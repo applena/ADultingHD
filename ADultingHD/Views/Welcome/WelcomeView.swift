@@ -420,6 +420,15 @@ struct WelcomeView: View {
 
     private func handlePrimaryAction() {
         switch currentPage {
+        case .nameHousehold:
+            // The household was created with a default name at first launch,
+            // before the user saw this screen. Push the entered name onto it
+            // so the header and Settings reflect their choice.
+            let entered = householdName
+            Task {
+                await dataStore.renameHousehold(dataStore.activeHouseholdId, to: entered)
+                advance()
+            }
         case .pickRooms:
             // Await the filter so the starter-task step sees the final
             // task list — otherwise a fast tapper could hit the starter

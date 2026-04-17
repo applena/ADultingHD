@@ -19,7 +19,7 @@ enum Features {
     ///      and App Store both use the Production environment).
     ///   4. `CloudKitSync.createOrFetchShare` verified end-to-end in a
     ///      signed build on a device signed into iCloud.
-    static let cloudKitSharing: Bool = false
+    static let cloudKitSharing: Bool = true
 }
 
 /// Keys for values stored in the shared `UserDefaults`. A typo at any call
