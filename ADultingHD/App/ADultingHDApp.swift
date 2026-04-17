@@ -21,7 +21,7 @@ struct ADultingHDApp: App {
                 .task {
                     #if DEBUG
                     if ProcessInfo.processInfo.arguments.contains("-demo") {
-                        UserDefaults.standard.set(true, forKey: "hasCompletedOnboarding")
+                        UserDefaults.standard.set(true, forKey: PrefKey.hasCompletedOnboarding)
                         storeManager.enableDemoMode()
                     }
                     #endif

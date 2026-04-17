@@ -27,4 +27,9 @@ enum Features {
 /// `@AppStorage` should route through here.
 enum PrefKey {
     static let householdSharingEnabled = "householdSharingEnabled"
+    static let hasCompletedOnboarding = "hasCompletedOnboarding"
+    static let onboardingHouseholdName = "onboardingHouseholdName"
+    static let householdsLayoutMigratedV2 = "householdsLayoutMigratedV2"
+    static let defaultHouseholdId = "defaultHouseholdId"
+    static let ckMigrationDone = "ckMigrationDone_v1"
 }

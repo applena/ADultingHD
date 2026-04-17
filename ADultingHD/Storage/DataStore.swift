@@ -51,8 +51,15 @@ final class DataStore {
 
     private enum PendingReload { case local, cloudKit }
 
+    /// True only when the compile-time `Features.cloudKitSharing` is on AND the
+    /// user has explicitly opted into sharing. The compile-time gate matters
+    /// because `CKContainer(identifier:)` traps at launch if the container
+    /// isn't deployed to Production on CloudKit Console — which is the case
+    /// until the prerequisites listed in `Features.cloudKitSharing` are met.
+    /// Persisted flags from older builds (where the UI was reachable without
+    /// the compile gate) would otherwise still trigger that trap here.
     private var isHouseholdSharingEnabled: Bool {
-        UserDefaults.standard.bool(forKey: PrefKey.householdSharingEnabled)
+        Features.cloudKitSharing && UserDefaults.standard.bool(forKey: PrefKey.householdSharingEnabled)
     }
 
     func configure(notificationManager: NotificationManager) {
@@ -207,7 +214,7 @@ final class DataStore {
     }
 
     private func makeFreshDefaultIndex() -> HouseholdIndex {
-        let name = UserDefaults.standard.string(forKey: "onboardingHouseholdName") ?? "My Household"
+        let name = UserDefaults.standard.string(forKey: PrefKey.onboardingHouseholdName) ?? "My Household"
         let household = Household.newLocal(name: name, members: [profile])
         return HouseholdIndex(
             households: [household],
@@ -224,7 +231,7 @@ final class DataStore {
     /// so it runs at most once per device. Legacy files are left in place so
     /// a crash mid-migration cleanly retries on the next launch.
     private func migrateToHouseholdsLayoutIfNeeded() async {
-        let flagKey = "householdsLayoutMigratedV2"
+        let flagKey = PrefKey.householdsLayoutMigratedV2
         let defaults = UserDefaults.standard
         if defaults.bool(forKey: flagKey) { return }
 
@@ -244,11 +251,11 @@ final class DataStore {
         // Determine a stable default household id. Reuse one we persisted
         // earlier if present, otherwise mint a new one and store it so any
         // retry on the next launch picks the same id.
-        let defaultIdString = defaults.string(forKey: "defaultHouseholdId") ?? UUID().uuidString
-        defaults.set(defaultIdString, forKey: "defaultHouseholdId")
+        let defaultIdString = defaults.string(forKey: PrefKey.defaultHouseholdId) ?? UUID().uuidString
+        defaults.set(defaultIdString, forKey: PrefKey.defaultHouseholdId)
         let defaultId = UUID(uuidString: defaultIdString) ?? UUID()
 
-        let householdName = defaults.string(forKey: "onboardingHouseholdName") ?? "My Household"
+        let householdName = defaults.string(forKey: PrefKey.onboardingHouseholdName) ?? "My Household"
 
         // Load current profile so the device user is always in the household's
         // member list even if legacy household.json didn't include them.
@@ -699,7 +706,7 @@ final class DataStore {
 
     /// One-time migration: push existing JSON data to CloudKit on first launch.
     private func migrateToCloudKitIfNeeded() async {
-        let key = "ckMigrationDone_v1"
+        let key = PrefKey.ckMigrationDone
         guard !UserDefaults.standard.bool(forKey: key) else { return }
         logger.info("☁️ Migrating local data to CloudKit...")
         await ckSync.pushTasks(tasks)
@@ -830,6 +837,11 @@ final class DataStore {
     var cloudKitError: String? { ckSync.syncError }
 
     func createHouseholdShare() async throws -> URL? {
+        // Defensive: CloudKit paths trap if the container isn't deployed.
+        // Callers should already be gated on Features.cloudKitSharing through
+        // the UI; this guard stops a stale UserDefaults flag or a direct
+        // invocation from crashing the app.
+        guard Features.cloudKitSharing else { throw CloudKitSyncError.shareCreationFailed }
         UserDefaults.standard.set(true, forKey: PrefKey.householdSharingEnabled)
         AppDelegate.registerForRemoteNotifications()
         await ckSync.setup()
@@ -875,6 +887,10 @@ final class DataStore {
     /// Handle acceptance of a CKShare invite. Joins the shared zone and
     /// pulls its data into the active household.
     func registerJoinedHousehold(from metadata: CKShare.Metadata) async {
+        guard Features.cloudKitSharing else {
+            logger.error("🏠 Ignoring CKShare acceptance: cloudKitSharing feature is off")
+            return
+        }
         do {
             try await ckSync.acceptShare(from: metadata)
             UserDefaults.standard.set(true, forKey: PrefKey.householdSharingEnabled)
@@ -901,11 +917,16 @@ final class DataStore {
 
     func resetAll() async {
         await store.resetAllData()
-        // Also clear the one-shot migration flag so a fresh load seeds a new
-        // default household (otherwise we'd end up with an empty index).
-        UserDefaults.standard.removeObject(forKey: "householdsLayoutMigratedV2")
-        UserDefaults.standard.removeObject(forKey: "defaultHouseholdId")
-        UserDefaults.standard.removeObject(forKey: "ckMigrationDone_v1")
+        // Clear one-shot migration flags so a fresh load seeds a new default
+        // household; clear onboarding flags so ContentView falls back to the
+        // welcome screen the same way a fresh install would.
+        let defaults = UserDefaults.standard
+        defaults.removeObject(forKey: PrefKey.householdsLayoutMigratedV2)
+        defaults.removeObject(forKey: PrefKey.defaultHouseholdId)
+        defaults.removeObject(forKey: PrefKey.ckMigrationDone)
+        defaults.removeObject(forKey: PrefKey.hasCompletedOnboarding)
+        defaults.removeObject(forKey: PrefKey.onboardingHouseholdName)
+        defaults.removeObject(forKey: PrefKey.householdSharingEnabled)
         tasks = defaultHouseholdTasks
         profile = UserProfile()
         completions = []

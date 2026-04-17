@@ -6,7 +6,7 @@ struct WelcomeView: View {
     @State private var isCompletingStarterTask = false
     @State private var starterXPMessage: String?
     @State private var showProUpgrade = false
-    @AppStorage("onboardingHouseholdName") private var householdName: String = "My Household"
+    @AppStorage(PrefKey.onboardingHouseholdName) private var householdName: String = "My Household"
 
     let onComplete: () -> Void
 

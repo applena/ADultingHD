@@ -2,7 +2,7 @@ import SwiftUI
 
 struct ContentView: View {
     @Environment(DataStore.self) private var dataStore
-    @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
+    @AppStorage(PrefKey.hasCompletedOnboarding) private var hasCompletedOnboarding = false
 
     var body: some View {
         Group {
