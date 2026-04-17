@@ -147,25 +147,65 @@ EOF
         exit 1
     fi
 
-    # Re-sign the app with the profile's full granted entitlements. The
-    # xcodebuild -exportArchive step above embeds the correct provisioning
-    # profile (which grants iCloud/CloudKit/Push via the App ID) but signs
-    # the binary with only a minimal entitlements dict. We extract the
-    # profile's granted entitlements and re-sign so the binary claims every
-    # capability the profile actually allows — specifically so
-    # CKContainer(identifier:) doesn't trap at runtime.
-    echo "🔏 Re-signing with profile's granted entitlements..."
+    # Re-sign the app with entitlements that include CloudKit. The
+    # -exportArchive step above embeds the correct distribution profile (which
+    # grants iCloud via the App ID) but signs the binary with a minimal
+    # entitlements dict — just application-identifier, beta-reports-active,
+    # team-identifier, get-task-allow. CKContainer(identifier:) traps at
+    # runtime on a binary with no icloud entitlements claimed.
+    #
+    # Using the profile's granted Entitlements dict directly doesn't work
+    # either: Apple's App Store validator rejects wildcarded values
+    # (`icloud-services = *`, `ubiquity-kvstore-identifier = TEAMID.*`) and
+    # development-only keys (`icloud-container-development-container-identifiers`).
+    # Xcode normally rewrites these to specific values when signing during
+    # archive — we emulate that rewrite here.
+    echo "🔏 Re-signing with iOS distribution entitlements (CloudKit included)..."
     RESIGN_DIR="$BUILD_DIR/resign_ios"
     rm -rf "$RESIGN_DIR" && mkdir -p "$RESIGN_DIR"
     (cd "$RESIGN_DIR" && unzip -q "$IPA_PATH")
     APP_BUNDLE="$RESIGN_DIR/Payload/ADultingHD.app"
-    EMBEDDED_PROFILE="$APP_BUNDLE/embedded.mobileprovision"
-    # Extract the profile's Entitlements dict to use as the signing entitlements.
-    # PlistBuddy doesn't reliably read `security cms` output from stdin, so
-    # write it to a tempfile first.
-    security cms -D -i "$EMBEDDED_PROFILE" -o "$RESIGN_DIR/profile.plist"
-    /usr/libexec/PlistBuddy -x -c "Print :Entitlements" "$RESIGN_DIR/profile.plist" \
-        > "$RESIGN_DIR/signing.entitlements"
+
+    # Build the production iOS entitlements dict. Must match what the
+    # embedded profile grants, minus any wildcards/development-only keys
+    # that App Store Connect validation rejects.
+    cat > "$RESIGN_DIR/signing.entitlements" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>application-identifier</key>
+    <string>TYQ32QCF6K.net.shadowpuppet.ADultingHD</string>
+    <key>aps-environment</key>
+    <string>production</string>
+    <key>beta-reports-active</key>
+    <true/>
+    <key>com.apple.developer.icloud-container-identifiers</key>
+    <array>
+        <string>iCloud.net.shadowpuppet.ADultingHD</string>
+    </array>
+    <key>com.apple.developer.icloud-services</key>
+    <array>
+        <string>CloudDocuments</string>
+        <string>CloudKit</string>
+    </array>
+    <key>com.apple.developer.team-identifier</key>
+    <string>TYQ32QCF6K</string>
+    <key>com.apple.developer.ubiquity-container-identifiers</key>
+    <array>
+        <string>iCloud.net.shadowpuppet.ADultingHD</string>
+    </array>
+    <key>get-task-allow</key>
+    <false/>
+    <key>keychain-access-groups</key>
+    <array>
+        <string>TYQ32QCF6K.*</string>
+        <string>com.apple.token</string>
+    </array>
+</dict>
+</plist>
+EOF
+
     SIGN_IDENTITY="Apple Distribution: ShadowPuppet, LLC (TYQ32QCF6K)"
     codesign --force --sign "$SIGN_IDENTITY" \
         --entitlements "$RESIGN_DIR/signing.entitlements" \
