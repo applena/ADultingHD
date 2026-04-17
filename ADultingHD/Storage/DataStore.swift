@@ -831,10 +831,16 @@ final class DataStore {
             logger.error("☁️ createHouseholdShare aborting — setup did not mark available. syncError=\(self.ckSync.syncError ?? "nil", privacy: .public)")
             throw CloudKitSyncError.iCloudUnavailable(status: ckSync.syncError ?? "unknown")
         }
-        logger.info("☁️ createHouseholdShare: migrate...")
-        await migrateToCloudKitIfNeeded()
+        // Create the share FIRST so the user gets the invite URL without
+        // waiting for the full task/profile/completion migration — that
+        // migration is a one-shot that can push dozens of records serially
+        // and was making the button feel dead for 10-30s on first use.
+        // Migration happens in the background after we return.
         logger.info("☁️ createHouseholdShare: createOrFetchShare...")
         let share = try await ckSync.createOrFetchShare()
+        Task { [weak self] in
+            await self?.migrateToCloudKitIfNeeded()
+        }
         return share.url
     }
 

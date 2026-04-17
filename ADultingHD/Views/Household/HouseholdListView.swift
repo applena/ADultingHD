@@ -1,4 +1,9 @@
 import SwiftUI
+#if os(iOS)
+import UIKit
+#else
+import AppKit
+#endif
 
 /// Pro-gated management screen for listing and managing all households the
 /// device user owns or has joined. Supports rename, delete (refuses the last
@@ -11,9 +16,9 @@ struct HouseholdListView: View {
     @State private var renameText: String = ""
     @State private var deleteTarget: Household?
     @State private var showCreateSheet = false
-    @State private var showInvitePresenter = false
     @State private var inviteURL: URL?
     @State private var inviteError: String?
+    @State private var isGeneratingInvite = false
 
     var body: some View {
         let households = dataStore.listHouseholds()
@@ -39,12 +44,47 @@ struct HouseholdListView: View {
                     Button {
                         Task { await generateInvite() }
                     } label: {
-                        Label("Invite someone to this household", systemImage: "square.and.arrow.up")
+                        HStack {
+                            if isGeneratingInvite {
+                                ProgressView()
+                                    .controlSize(.small)
+                            } else {
+                                Image(systemName: "square.and.arrow.up")
+                            }
+                            Text(isGeneratingInvite ? "Generating…" : "Invite someone to this household")
+                        }
                     }
+                    .disabled(isGeneratingInvite)
                     if let inviteError {
                         Text(inviteError)
                             .font(.caption)
                             .foregroundStyle(.red)
+                    }
+                    if let url = inviteURL {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Invite link")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                            Text(url.absoluteString)
+                                .font(.caption.monospaced())
+                                .textSelection(.enabled)
+                                .lineLimit(nil)
+                                .multilineTextAlignment(.leading)
+                            HStack {
+                                #if os(iOS)
+                                ShareLink(item: url) {
+                                    Label("Share", systemImage: "square.and.arrow.up")
+                                }
+                                #endif
+                                Button {
+                                    copyInviteURL(url)
+                                } label: {
+                                    Label("Copy Link", systemImage: "doc.on.doc")
+                                }
+                                .buttonStyle(.bordered)
+                            }
+                        }
+                        .padding(.vertical, 4)
                     }
                     Text("Share the generated link via Messages, Mail, or AirDrop. They'll accept in their own ADultingHD app to join.")
                         .font(.caption)
@@ -91,11 +131,6 @@ struct HouseholdListView: View {
             Button("Cancel", role: .cancel) { deleteTarget = nil }
         } message: { _ in
             Text("This deletes the household's task list and supply stock. Members will be removed. Your XP, level, and streak are unaffected.")
-        }
-        .sheet(isPresented: $showInvitePresenter) {
-            if let inviteURL {
-                inviteShareSheet(url: inviteURL)
-            }
         }
     }
 
@@ -165,46 +200,22 @@ struct HouseholdListView: View {
     }
 
     private func generateInvite() async {
+        isGeneratingInvite = true
+        defer { isGeneratingInvite = false }
+        inviteError = nil
         let result = await dataStore.generateHouseholdInvite()
         inviteError = result.errorMessage
         if let url = result.url {
             inviteURL = url
-            showInvitePresenter = true
         }
     }
 
-    @ViewBuilder
-    private func inviteShareSheet(url: URL) -> some View {
+    private func copyInviteURL(_ url: URL) {
         #if os(iOS)
-        ShareLink(
-            item: url,
-            subject: Text("Join my household in ADultingHD"),
-            message: Text("Tap this link to join my household. We'll share chores, XP, and the leaderboard.")
-        ) {
-            Label("Share Invite", systemImage: "square.and.arrow.up")
-        }
-        .padding()
+        UIPasteboard.general.string = url.absoluteString
         #else
-        VStack(spacing: 16) {
-            Text("Invite link")
-                .font(.headline)
-            Text(url.absoluteString)
-                .font(.caption.monospaced())
-                .textSelection(.enabled)
-                .multilineTextAlignment(.center)
-                .padding()
-                .background(Color.secondary.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
-            Button {
-                let pb = NSPasteboard.general
-                pb.clearContents()
-                pb.setString(url.absoluteString, forType: .string)
-            } label: {
-                Label("Copy Link", systemImage: "doc.on.doc")
-            }
-            Button("Done") { showInvitePresenter = false }
-        }
-        .padding()
-        .frame(minWidth: 420, minHeight: 260)
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(url.absoluteString, forType: .string)
         #endif
     }
 }
