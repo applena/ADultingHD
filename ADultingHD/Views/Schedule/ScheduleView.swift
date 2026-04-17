@@ -13,29 +13,35 @@ struct ScheduleView: View {
         return (0..<7).compactMap { calendar.date(byAdding: .day, value: $0, to: start) }
     }
 
-    private func tasksForDate(_ date: Date) -> [HouseholdTask] {
-        dataStore.activeTasks.filter { task in
-            guard let lastCompleted = task.lastCompleted else { return true }
-            let nextDue = calendar.date(byAdding: .day, value: task.frequency.days, to: lastCompleted) ?? date
-            return calendar.isDate(nextDue, inSameDayAs: date) || nextDue < date
+    /// Bucket each active task into every day in `dates` on which it's due.
+    /// Due-on-date semantics live in `HouseholdTask.isDue(on:)`; this is just
+    /// the bucketing wrapper so the view computes it once per render instead
+    /// of once per day-cell.
+    private func tasksByDate(for dates: [Date]) -> [Date: [HouseholdTask]] {
+        var map: [Date: [HouseholdTask]] = Dictionary(uniqueKeysWithValues: dates.map { ($0, []) })
+        for task in dataStore.activeTasks {
+            for date in dates where task.isDue(on: date) {
+                map[date, default: []].append(task)
+            }
         }
-    }
-
-    private var todayTasks: [HouseholdTask] {
-        tasksForDate(calendar.startOfDay(for: Date()))
-    }
-
-    private var todayByCategory: [(TaskCategory, [HouseholdTask])] {
-        Dictionary(grouping: todayTasks, by: \.category)
-            .sorted { $0.key.rawValue < $1.key.rawValue }
+        return map
     }
 
     var body: some View {
-        ScrollView {
+        let today = calendar.startOfDay(for: Date())
+        let dates = weekDates
+        let allDates = dates.contains(today) ? dates : ([today] + dates)
+        let tasksByDate = tasksByDate(for: allDates)
+        let todayTasks = tasksByDate[today] ?? []
+        let todayByCategory = Dictionary(grouping: todayTasks, by: \.category)
+            .sorted { $0.key.rawValue < $1.key.rawValue }
+        let dueCount = dataStore.dueTasks.count
+
+        return ScrollView {
             #if os(macOS)
-            macOSLayout
+            macOSLayout(dates: dates, tasksByDate: tasksByDate, todayTasks: todayTasks, todayByCategory: todayByCategory, dueCount: dueCount)
             #else
-            iOSLayout
+            iOSLayout(dates: dates, tasksByDate: tasksByDate, todayTasks: todayTasks, todayByCategory: todayByCategory, dueCount: dueCount)
             #endif
         }
         .navigationTitle("")
@@ -44,16 +50,21 @@ struct ScheduleView: View {
         }
     }
 
-    private var iOSLayout: some View {
+    private func iOSLayout(
+        dates: [Date],
+        tasksByDate: [Date: [HouseholdTask]],
+        todayTasks: [HouseholdTask],
+        todayByCategory: [(TaskCategory, [HouseholdTask])],
+        dueCount: Int
+    ) -> some View {
         VStack(spacing: Theme.sectionSpacing) {
             DatePicker("Week starting", selection: $selectedDate, displayedComponents: .date)
                 .datePickerStyle(.graphical)
                 .card()
 
-            let due = dataStore.dueTasks.count
-            if due > 0 {
+            if dueCount > 0 {
                 HStack(spacing: 12) {
-                    Label("\(due) due", systemImage: "clock.fill")
+                    Label("\(dueCount) due", systemImage: "clock.fill")
                         .font(.subheadline)
                         .foregroundStyle(Theme.streakOrange)
                 }
@@ -61,10 +72,12 @@ struct ScheduleView: View {
                 .card()
             }
 
-            if !todayByCategory.isEmpty { todayBatchesCard }
+            if !todayByCategory.isEmpty {
+                todayBatchesCard(todayTasks: todayTasks, todayByCategory: todayByCategory)
+            }
 
-            ForEach(weekDates, id: \.self) { date in
-                let tasks = tasksForDate(date)
+            ForEach(dates, id: \.self) { date in
+                let tasks = tasksByDate[date] ?? []
                 if !tasks.isEmpty { weekDayCard(date: date, tasks: tasks) }
             }
         }
@@ -72,7 +85,13 @@ struct ScheduleView: View {
     }
 
     #if os(macOS)
-    private var macOSLayout: some View {
+    private func macOSLayout(
+        dates: [Date],
+        tasksByDate: [Date: [HouseholdTask]],
+        todayTasks: [HouseholdTask],
+        todayByCategory: [(TaskCategory, [HouseholdTask])],
+        dueCount: Int
+    ) -> some View {
         HStack(alignment: .top, spacing: Theme.sectionSpacing) {
             // Left: calendar picker (label hidden — it pushes the calendar off-center)
             DatePicker("", selection: $selectedDate, displayedComponents: .date)
@@ -83,10 +102,9 @@ struct ScheduleView: View {
 
             // Right: summary + batches + week view
             VStack(spacing: Theme.sectionSpacing) {
-                let due = dataStore.dueTasks.count
-                if due > 0 {
+                if dueCount > 0 {
                     HStack(spacing: 12) {
-                        Label("\(due) due", systemImage: "clock.fill")
+                        Label("\(dueCount) due", systemImage: "clock.fill")
                             .font(.subheadline)
                             .foregroundStyle(Theme.streakOrange)
                     }
@@ -94,10 +112,12 @@ struct ScheduleView: View {
                     .card()
                 }
 
-                if !todayByCategory.isEmpty { todayBatchesCard }
+                if !todayByCategory.isEmpty {
+                    todayBatchesCard(todayTasks: todayTasks, todayByCategory: todayByCategory)
+                }
 
-                ForEach(weekDates, id: \.self) { date in
-                    let tasks = tasksForDate(date)
+                ForEach(dates, id: \.self) { date in
+                    let tasks = tasksByDate[date] ?? []
                     if !tasks.isEmpty { weekDayCard(date: date, tasks: tasks) }
                 }
             }
@@ -109,7 +129,10 @@ struct ScheduleView: View {
     }
     #endif
 
-    private var todayBatchesCard: some View {
+    private func todayBatchesCard(
+        todayTasks: [HouseholdTask],
+        todayByCategory: [(TaskCategory, [HouseholdTask])]
+    ) -> some View {
         let completedCount = dataStore.todayCompletions.count
         let totalCount = todayTasks.count + completedCount
         let progress = totalCount == 0 ? 0.0 : min(Double(completedCount) / Double(totalCount), 1.0)

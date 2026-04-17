@@ -158,10 +158,14 @@ struct HouseholdTask: Codable, Identifiable, Hashable {
             .filter { !$0.isEmpty }
     }
 
-    var isDue: Bool {
+    var isDue: Bool { isDue(on: Date()) }
+
+    /// Is this task due on or before the given reference date? Inactive tasks
+    /// are never due; tasks that have never been completed are always due.
+    func isDue(on referenceDate: Date) -> Bool {
         guard isActive else { return false }
         guard let last = lastCompleted else { return true }
-        let daysSince = Calendar.current.dateComponents([.day], from: last, to: Date()).day ?? 0
+        let daysSince = Calendar.current.dateComponents([.day], from: last, to: referenceDate).day ?? 0
         return daysSince >= frequency.days
     }
 

@@ -1,35 +1,40 @@
 import SwiftUI
 import Charts
 
+/// Aggregated stats pre-computed once per body evaluation. Previously each
+/// chart re-ran `Dictionary(grouping: completions)` on render, so three charts
+/// meant three full passes over every completion. Bundling the derived data
+/// into one struct means each dependency is computed once.
+private struct StatsAggregates {
+    let completionsByDay: [Date: [TaskCompletion]]
+    let taskCategoryMap: [UUID: TaskCategory]
+
+    init(completions: [TaskCompletion], tasks: [HouseholdTask]) {
+        let calendar = Calendar.current
+        self.completionsByDay = Dictionary(grouping: completions) { calendar.startOfDay(for: $0.completedAt) }
+        self.taskCategoryMap = Dictionary(uniqueKeysWithValues: tasks.map { ($0.id, $0.category) })
+    }
+}
+
 struct StatsView: View {
     @Environment(DataStore.self) private var dataStore
     @Environment(StoreManager.self) private var storeManager
 
-    // Single-pass grouping of all completions by day — shared across all charts
-    private var completionsByDay: [Date: [TaskCompletion]] {
-        let calendar = Calendar.current
-        return Dictionary(grouping: dataStore.completions) { calendar.startOfDay(for: $0.completedAt) }
-    }
-
-    // Pre-built task ID → category lookup for O(1) category resolution
-    private var taskCategoryMap: [UUID: TaskCategory] {
-        Dictionary(uniqueKeysWithValues: dataStore.tasks.map { ($0.id, $0.category) })
-    }
-
     var body: some View {
+        let aggregates = StatsAggregates(completions: dataStore.completions, tasks: dataStore.tasks)
         ScrollView {
             #if os(macOS)
-            macOSLayout
+            macOSLayout(aggregates: aggregates)
             #else
             VStack(spacing: Theme.sectionSpacing) {
                 if storeManager.isPro {
-                    xpPerDayChart
-                    completionTrendChart
-                    categoryBreakdownChart
+                    xpPerDayChart(aggregates: aggregates)
+                    completionTrendChart(aggregates: aggregates)
+                    categoryBreakdownChart(aggregates: aggregates)
                 } else {
                     ProPromptCard(title: "Pro Analytics", icon: "chart.bar.fill")
                 }
-                streakCalendar
+                streakCalendar(aggregates: aggregates)
             }
             .padding()
             #endif
@@ -38,20 +43,20 @@ struct StatsView: View {
     }
 
     #if os(macOS)
-    private var macOSLayout: some View {
+    private func macOSLayout(aggregates: StatsAggregates) -> some View {
         VStack(spacing: Theme.sectionSpacing) {
             if storeManager.isPro {
                 HStack(alignment: .top, spacing: Theme.sectionSpacing) {
-                    xpPerDayChart.frame(maxWidth: .infinity)
-                    completionTrendChart.frame(maxWidth: .infinity)
+                    xpPerDayChart(aggregates: aggregates).frame(maxWidth: .infinity)
+                    completionTrendChart(aggregates: aggregates).frame(maxWidth: .infinity)
                 }
                 HStack(alignment: .top, spacing: Theme.sectionSpacing) {
-                    categoryBreakdownChart.frame(maxWidth: .infinity)
-                    streakCalendar.frame(maxWidth: .infinity)
+                    categoryBreakdownChart(aggregates: aggregates).frame(maxWidth: .infinity)
+                    streakCalendar(aggregates: aggregates).frame(maxWidth: .infinity)
                 }
             } else {
                 ProPromptCard(title: "Pro Analytics", icon: "chart.bar.fill")
-                streakCalendar
+                streakCalendar(aggregates: aggregates)
             }
         }
         .padding()
@@ -61,10 +66,10 @@ struct StatsView: View {
 
     // MARK: - XP Per Day (last 14 days)
 
-    private var xpPerDay: [(date: Date, xp: Int)] {
+    private func xpPerDay(aggregates: StatsAggregates) -> [(date: Date, xp: Int)] {
         let calendar = Calendar.current
         let today = calendar.startOfDay(for: Date())
-        let grouped = completionsByDay
+        let grouped = aggregates.completionsByDay
         return (0..<14).reversed().compactMap { offset -> (Date, Int)? in
             guard let date = calendar.date(byAdding: .day, value: -offset, to: today) else { return nil }
             let dayXP = (grouped[date] ?? []).reduce(0) { $0 + $1.xpEarned + $1.streakBonus }
@@ -72,8 +77,9 @@ struct StatsView: View {
         }
     }
 
-    private var xpPerDayChart: some View {
-        VStack(alignment: .leading, spacing: 8) {
+    private func xpPerDayChart(aggregates: StatsAggregates) -> some View {
+        let xpPerDay = xpPerDay(aggregates: aggregates)
+        return VStack(alignment: .leading, spacing: 8) {
             Label("XP Earned (Last 14 Days)", systemImage: "star.fill")
                 .font(.headline)
 
@@ -102,18 +108,19 @@ struct StatsView: View {
 
     // MARK: - Completion Trend (last 30 days)
 
-    private var completionsPerDay: [(date: Date, count: Int)] {
+    private func completionsPerDay(aggregates: StatsAggregates) -> [(date: Date, count: Int)] {
         let calendar = Calendar.current
         let today = calendar.startOfDay(for: Date())
-        let grouped = completionsByDay
+        let grouped = aggregates.completionsByDay
         return (0..<30).reversed().compactMap { offset -> (Date, Int)? in
             guard let date = calendar.date(byAdding: .day, value: -offset, to: today) else { return nil }
             return (date, (grouped[date] ?? []).count)
         }
     }
 
-    private var completionTrendChart: some View {
-        VStack(alignment: .leading, spacing: 8) {
+    private func completionTrendChart(aggregates: StatsAggregates) -> some View {
+        let completionsPerDay = completionsPerDay(aggregates: aggregates)
+        return VStack(alignment: .leading, spacing: 8) {
             Label("Completions (Last 30 Days)", systemImage: "chart.line.uptrend.xyaxis")
                 .font(.headline)
 
@@ -149,8 +156,8 @@ struct StatsView: View {
 
     // MARK: - Category Breakdown
 
-    private var categoryData: [(category: TaskCategory, count: Int)] {
-        let categoryMap = taskCategoryMap
+    private func categoryData(aggregates: StatsAggregates) -> [(category: TaskCategory, count: Int)] {
+        let categoryMap = aggregates.taskCategoryMap
         var counts: [TaskCategory: Int] = [:]
         for completion in dataStore.completions {
             if let category = categoryMap[completion.taskId] {
@@ -163,8 +170,9 @@ struct StatsView: View {
         }
     }
 
-    private var categoryBreakdownChart: some View {
-        VStack(alignment: .leading, spacing: 8) {
+    private func categoryBreakdownChart(aggregates: StatsAggregates) -> some View {
+        let categoryData = categoryData(aggregates: aggregates)
+        return VStack(alignment: .leading, spacing: 8) {
             Label("Completions by Category", systemImage: "chart.pie")
                 .font(.headline)
 
@@ -205,8 +213,8 @@ struct StatsView: View {
 
     // MARK: - Streak Calendar (GitHub-style heatmap, last 12 weeks)
 
-    private var streakData: [Date: Int] {
-        completionsByDay.mapValues(\.count)
+    private func streakData(aggregates: StatsAggregates) -> [Date: Int] {
+        aggregates.completionsByDay.mapValues(\.count)
     }
 
     private var calendarWeeks: [[Date]] {
@@ -241,12 +249,12 @@ struct StatsView: View {
         }
     }
 
-    private var streakCalendar: some View {
+    private func streakCalendar(aggregates: StatsAggregates) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Label("Activity (Last 12 Weeks)", systemImage: "square.grid.3x3.fill")
                 .font(.headline)
 
-            let data = streakData
+            let data = streakData(aggregates: aggregates)
             HStack(spacing: 3) {
                 // Day labels
                 VStack(spacing: 3) {

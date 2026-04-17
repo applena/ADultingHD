@@ -21,3 +21,10 @@ enum Features {
     ///      signed build on a device signed into iCloud.
     static let cloudKitSharing: Bool = false
 }
+
+/// Keys for values stored in the shared `UserDefaults`. A typo at any call
+/// site silently disables the gate it controls, so every key read outside
+/// `@AppStorage` should route through here.
+enum PrefKey {
+    static let householdSharingEnabled = "householdSharingEnabled"
+}

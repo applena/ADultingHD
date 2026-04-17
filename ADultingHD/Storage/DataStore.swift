@@ -38,9 +38,21 @@ final class DataStore {
     private var notificationManager: NotificationManager?
     @ObservationIgnored
     private var syncObserverTokens: [NSObjectProtocol] = []
+    /// Reentrancy guard. `load()` and `pullFromCloudKit()` both overwrite all
+    /// `@Observable` state wholesale; allowing them to interleave causes view
+    /// bodies to observe torn state mid-update, which SwiftUI has historically
+    /// crashed on. Both paths early-return when set, but coalesce the dropped
+    /// request through `pendingReload` so a CloudKit push that arrives during
+    /// an in-progress iCloud reload isn't lost.
+    @ObservationIgnored
+    private var isReloading = false
+    @ObservationIgnored
+    private var pendingReload: PendingReload?
+
+    private enum PendingReload { case local, cloudKit }
 
     private var isHouseholdSharingEnabled: Bool {
-        UserDefaults.standard.bool(forKey: "householdSharingEnabled")
+        UserDefaults.standard.bool(forKey: PrefKey.householdSharingEnabled)
     }
 
     func configure(notificationManager: NotificationManager) {
@@ -96,6 +108,18 @@ final class DataStore {
     // MARK: - Load
 
     func load() async {
+        if isReloading {
+            // Upgrade a queued cloudKit reload over a local one; a cloudKit
+            // pull also refreshes the local state after merge.
+            if pendingReload != .cloudKit { pendingReload = .local }
+            return
+        }
+        isReloading = true
+        defer {
+            isReloading = false
+            drainPendingReload()
+        }
+
         #if DEBUG
         if ProcessInfo.processInfo.arguments.contains("-demo") {
             let demo = DemoData.generate()
@@ -135,15 +159,15 @@ final class DataStore {
         }
 
         let activeId = householdIndex.activeHouseholdId
-        let loadedTasks = await store.loadTasks(for: activeId)
-        let loadedProfile = await store.loadProfile()
-        let loadedCompletions = await store.loadCompletions()
-        let loadedStock = await store.loadSupplyStock(for: activeId)
+        async let loadedTasks = store.loadTasks(for: activeId)
+        async let loadedProfile = store.loadProfile()
+        async let loadedCompletions = store.loadCompletions()
+        async let loadedStock = store.loadSupplyStock(for: activeId)
 
-        tasks = loadedTasks
-        profile = loadedProfile
-        completions = loadedCompletions
-        supplyStock = loadedStock
+        tasks = await loadedTasks
+        profile = await loadedProfile
+        completions = await loadedCompletions
+        supplyStock = await loadedStock
         isLoaded = true
 
         // Make sure the device user is in the active household's member list,
@@ -167,6 +191,17 @@ final class DataStore {
             if ckSync.isAvailable {
                 await migrateToCloudKitIfNeeded()
                 await ckSync.setupSubscriptions()
+            }
+        }
+    }
+
+    private func drainPendingReload() {
+        guard let pending = pendingReload else { return }
+        pendingReload = nil
+        Task { @MainActor [weak self] in
+            switch pending {
+            case .local: await self?.load()
+            case .cloudKit: await self?.pullFromCloudKit()
             }
         }
     }
@@ -677,6 +712,16 @@ final class DataStore {
 
     /// Pull latest from CloudKit and merge, preferring higher XP / more recent completions.
     func pullFromCloudKit() async {
+        if isReloading {
+            pendingReload = .cloudKit
+            return
+        }
+        isReloading = true
+        defer {
+            isReloading = false
+            drainPendingReload()
+        }
+
         guard ckSync.isAvailable, let payload = await ckSync.pullAll() else { return }
 
         // Snapshot before merge for change detection
@@ -785,7 +830,8 @@ final class DataStore {
     var cloudKitError: String? { ckSync.syncError }
 
     func createHouseholdShare() async throws -> URL? {
-        UserDefaults.standard.set(true, forKey: "householdSharingEnabled")
+        UserDefaults.standard.set(true, forKey: PrefKey.householdSharingEnabled)
+        AppDelegate.registerForRemoteNotifications()
         await ckSync.setup()
         await migrateToCloudKitIfNeeded()
         let share = try await ckSync.createOrFetchShare()
@@ -831,7 +877,8 @@ final class DataStore {
     func registerJoinedHousehold(from metadata: CKShare.Metadata) async {
         do {
             try await ckSync.acceptShare(from: metadata)
-            UserDefaults.standard.set(true, forKey: "householdSharingEnabled")
+            UserDefaults.standard.set(true, forKey: PrefKey.householdSharingEnabled)
+            AppDelegate.registerForRemoteNotifications()
             await ckSync.setup()
             await pullFromCloudKit()
             logger.info("🏠 Joined shared household via CKShare")

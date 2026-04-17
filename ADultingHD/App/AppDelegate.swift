@@ -18,8 +18,16 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
-        application.registerForRemoteNotifications()
+        if UserDefaults.standard.bool(forKey: PrefKey.householdSharingEnabled) {
+            application.registerForRemoteNotifications()
+        }
         return true
+    }
+
+    /// Call after flipping `householdSharingEnabled` to true so CloudKit silent
+    /// pushes start flowing without waiting for the next launch.
+    static func registerForRemoteNotifications() {
+        UIApplication.shared.registerForRemoteNotifications()
     }
 
     nonisolated func application(
@@ -49,6 +57,14 @@ import AppKit
 @MainActor
 class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
+        if UserDefaults.standard.bool(forKey: PrefKey.householdSharingEnabled) {
+            NSApplication.shared.registerForRemoteNotifications()
+        }
+    }
+
+    /// Call after flipping `householdSharingEnabled` to true so CloudKit silent
+    /// pushes start flowing without waiting for the next launch.
+    static func registerForRemoteNotifications() {
         NSApplication.shared.registerForRemoteNotifications()
     }
 
