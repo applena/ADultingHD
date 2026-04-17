@@ -192,14 +192,14 @@ final class DataStore {
             detectHouseholdChanges(preProfiles: preProfiles, preCompletionIDs: preCompletionIDs, preRank: preRank)
         }
 
-        // CloudKit: only engage if household sharing has been explicitly enabled
-        if isHouseholdSharingEnabled {
-            await ckSync.setup()
-            if ckSync.isAvailable {
-                await migrateToCloudKitIfNeeded()
-                await ckSync.setupSubscriptions()
-            }
-        }
+        // CloudKit setup is deliberately NOT called here. `CKContainer(identifier:)`
+        // traps at runtime if the signed provisioning profile is missing the CloudKit
+        // entitlement even when the entitlements *file* requests it — and the trap
+        // is uncatchable. If a user tapped Invite on a build where that mismatch
+        // existed, `householdSharingEnabled` was already flipped to true, and
+        // calling `ckSync.setup()` here would crash-loop them at launch forever.
+        // Setup now fires only on explicit user actions (Invite tap, share accept)
+        // so a broken provisioning profile fails the action, not the whole app.
     }
 
     private func drainPendingReload() {
