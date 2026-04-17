@@ -140,6 +140,11 @@ struct HouseholdTask: Codable, Identifiable, Hashable {
     var supplies: [String]
     var isActive: Bool
     var lastCompleted: Date?
+    /// Profile id of the member who should complete this task by default.
+    /// Optional: `nil` means "anyone in the household." Populated via the
+    /// assignee picker once the household has more than one member (members
+    /// only arrive via CloudKit share acceptance).
+    var defaultAssigneeId: UUID? = nil
 
     var xpReward: Int {
         Self.computeXP(difficulty: difficulty, frequency: frequency, estimatedMinutes: estimatedMinutes)

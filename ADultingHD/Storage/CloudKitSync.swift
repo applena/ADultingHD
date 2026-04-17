@@ -348,6 +348,7 @@ extension HouseholdTask {
         r["supplies"]         = supplies as CKRecordValue
         r["isActive"]         = (isActive ? 1 : 0) as CKRecordValue
         r["lastCompleted"]    = lastCompleted as CKRecordValue?
+        r["defaultAssigneeId"] = defaultAssigneeId?.uuidString as CKRecordValue?
         return r
     }
 
@@ -374,6 +375,7 @@ extension HouseholdTask {
         self.supplies = record["supplies"] as? [String] ?? []
         self.isActive = (record["isActive"] as? Int ?? 1) == 1
         self.lastCompleted = record["lastCompleted"] as? Date
+        self.defaultAssigneeId = (record["defaultAssigneeId"] as? String).flatMap(UUID.init)
     }
 }
 

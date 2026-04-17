@@ -2,8 +2,6 @@ import SwiftUI
 
 struct HouseholdView: View {
     @Environment(DataStore.self) private var dataStore
-    @State private var showAddMember = false
-    @State private var newName = ""
 
     var body: some View {
         List {
@@ -82,49 +80,17 @@ struct HouseholdView: View {
                 }
             }
 
-            // Switch Profile
-            if dataStore.householdProfiles.count > 1 {
-                Section("Switch Profile") {
-                    ForEach(dataStore.householdProfiles.filter { $0.id != dataStore.profile.id }) { member in
-                        Button {
-                            Task { await dataStore.switchProfile(to: member.id) }
-                        } label: {
-                            HStack {
-                                Image(systemName: member.avatar)
-                                Text(member.name)
-                                Spacer()
-                                Text("Switch")
-                                    .font(.caption)
-                                    .foregroundStyle(Theme.accent)
-                            }
-                        }
-                    }
-                }
-            }
-
-            // Manage
-            Section {
-                Button {
-                    showAddMember = true
-                } label: {
-                    Label("Add Member", systemImage: "person.badge.plus")
+            // Invite hint — CloudKit sharing is the only way to add members;
+            // solo households show a pointer to the Households screen.
+            if dataStore.householdProfiles.count == 1 {
+                Section {
+                    Label("Invite household members from Settings → Households.", systemImage: "person.crop.circle.badge.plus")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
             }
         }
         .navigationTitle("Household")
-        .alert("Add Member", isPresented: $showAddMember) {
-            TextField("Name", text: $newName)
-            Button("Add") {
-                guard !newName.trimmingCharacters(in: .whitespaces).isEmpty else { return }
-                Task {
-                    await dataStore.addHouseholdMember(name: newName, avatar: "person.crop.circle.fill")
-                    newName = ""
-                }
-            }
-            Button("Cancel", role: .cancel) { newName = "" }
-        } message: {
-            Text("Enter a name for the new household member")
-        }
     }
 
     private func activityColor(_ activity: HouseholdActivity) -> Color {

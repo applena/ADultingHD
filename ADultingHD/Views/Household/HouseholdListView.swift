@@ -165,16 +165,11 @@ struct HouseholdListView: View {
     }
 
     private func generateInvite() async {
-        inviteError = nil
-        do {
-            if let url = try await dataStore.createHouseholdShare() {
-                inviteURL = url
-                showInvitePresenter = true
-            } else {
-                inviteError = "Could not generate invite link. Is iCloud available?"
-            }
-        } catch {
-            inviteError = error.localizedDescription
+        let result = await dataStore.generateHouseholdInvite()
+        inviteError = result.errorMessage
+        if let url = result.url {
+            inviteURL = url
+            showInvitePresenter = true
         }
     }
 

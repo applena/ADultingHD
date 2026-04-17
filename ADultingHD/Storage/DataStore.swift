@@ -386,6 +386,16 @@ final class DataStore {
         }
     }
 
+    /// Drop tasks belonging to categories the user deselected during
+    /// onboarding. Run once after the "Pick Your Rooms" step. Any task whose
+    /// category isn't in `allowed` is removed — simplest UX for first-time
+    /// setup; the user can always add tasks back from the catalog later.
+    func filterTasks(toCategories allowed: Set<TaskCategory>) async {
+        guard !allowed.isEmpty, allowed.count < TaskCategory.allCases.count else { return }
+        tasks.removeAll { !allowed.contains($0.category) }
+        await store.saveTasks(tasks, for: activeHouseholdId)
+    }
+
     // MARK: - Avatar
 
     func purchaseAvatarItem(_ item: AvatarItem) async {
@@ -603,37 +613,6 @@ final class DataStore {
         return "bonus_awarded_\(period)_\(stamp)"
     }
 
-    // MARK: - Household Members
-
-    func addHouseholdMember(name: String, avatar: String) async {
-        var newProfile = UserProfile()
-        newProfile.name = name
-        newProfile.avatar = avatar
-        if let idx = householdIndex.households.firstIndex(where: { $0.id == activeHouseholdId }) {
-            householdIndex.households[idx].members.append(newProfile)
-            await store.saveHouseholdIndex(householdIndex)
-        }
-    }
-
-    func switchProfile(to profileId: UUID) async {
-        // Save current profile's latest state back into the active household
-        syncDeviceUserIntoActiveHousehold()
-        // Switch to new profile
-        if let newProfile = householdProfiles.first(where: { $0.id == profileId }) {
-            profile = newProfile
-            await store.saveProfile(profile)
-            await store.saveHouseholdIndex(householdIndex)
-        }
-    }
-
-    func removeHouseholdMember(_ profileId: UUID) async {
-        guard profileId != profile.id else { return } // Can't remove active profile
-        if let idx = householdIndex.households.firstIndex(where: { $0.id == activeHouseholdId }) {
-            householdIndex.households[idx].members.removeAll { $0.id == profileId }
-            await store.saveHouseholdIndex(householdIndex)
-        }
-    }
-
     // MARK: - Multi-household management
 
     /// Creates a new household with default tasks and makes it active. UI gates
@@ -848,6 +827,25 @@ final class DataStore {
         await migrateToCloudKitIfNeeded()
         let share = try await ckSync.createOrFetchShare()
         return share.url
+    }
+
+    /// Result envelope for invite-link generation so both the onboarding flow
+    /// and the Households settings screen use the same error wording.
+    struct InviteResult {
+        let url: URL?
+        let errorMessage: String?
+    }
+
+    func generateHouseholdInvite() async -> InviteResult {
+        do {
+            let url = try await createHouseholdShare()
+            if url == nil {
+                return InviteResult(url: nil, errorMessage: "Couldn't generate a link. Is iCloud available?")
+            }
+            return InviteResult(url: url, errorMessage: nil)
+        } catch {
+            return InviteResult(url: nil, errorMessage: error.localizedDescription)
+        }
     }
 
     // MARK: - iCloud Documents Sync
