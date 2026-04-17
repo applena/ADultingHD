@@ -60,15 +60,23 @@ final class CloudKitSync: ObservableObject {
         do {
             let status = try await container.accountStatus()
             guard status == .available else {
-                logger.info("☁️ iCloud not available: \(String(describing: status))")
+                logger.info("☁️ iCloud not available: \(String(describing: status), privacy: .public)")
+                syncError = "iCloud account status: \(status)"
+                isAvailable = false
                 return
             }
-            isAvailable = true
             try await createZoneIfNeeded()
+            // Only mark available after the zone exists — createOrFetchShare
+            // relies on writes landing in HouseholdZone, and a half-setup
+            // state where accountStatus passes but zone creation failed
+            // would otherwise let the share save run and fail confusingly.
+            isAvailable = true
+            syncError = nil
             logger.info("☁️ CloudKit ready")
         } catch {
-            logger.error("☁️ CloudKit setup failed: \(error.localizedDescription)")
+            logger.error("☁️ CloudKit setup failed: \(error.localizedDescription, privacy: .public)")
             syncError = error.localizedDescription
+            isAvailable = false
         }
     }
 
@@ -191,16 +199,27 @@ final class CloudKitSync: ObservableObject {
     /// first time and reusing it thereafter. Root record and share are
     /// always saved together — CloudKit requires both in the same operation.
     func createOrFetchShare() async throws -> CKShare {
+        guard isAvailable else {
+            logger.error("☁️ createOrFetchShare called but isAvailable=false")
+            throw CloudKitSyncError.iCloudUnavailable(status: syncError ?? "unknown")
+        }
         let rootID = CKRecord.ID(recordName: RootRecordName.household, zoneID: zone.zoneID)
+        logger.info("☁️ createOrFetchShare zone=\(self.zone.zoneID.zoneName, privacy: .public) rootID=\(rootID.recordName, privacy: .public)")
 
         // If the root already exists, it carries a reference to its share.
         // Pull the share through that reference rather than guessing IDs.
-        if let existingRoot = try? await privateDB.record(for: rootID),
-           let shareReference = existingRoot.share,
-           let existingShare = try? await privateDB.record(for: shareReference.recordID) as? CKShare {
-            shareURL = existingShare.url
-            logger.info("☁️ Reusing household share: \(existingShare.url?.absoluteString ?? "no url")")
-            return existingShare
+        if let existingRoot = try? await privateDB.record(for: rootID) {
+            logger.info("☁️ Root record already exists")
+            if let shareReference = existingRoot.share {
+                if let existingShare = try? await privateDB.record(for: shareReference.recordID) as? CKShare {
+                    shareURL = existingShare.url
+                    logger.info("☁️ Reusing household share: \(existingShare.url?.absoluteString ?? "no url", privacy: .public)")
+                    return existingShare
+                }
+                logger.error("☁️ Root has share reference but fetching share failed")
+            } else {
+                logger.error("☁️ Root exists but has no share reference — prior partial save")
+            }
         }
 
         // First-time setup: create the root record and its share atomically.
@@ -210,13 +229,25 @@ final class CloudKitSync: ObservableObject {
         let share = CKShare(rootRecord: rootRecord)
         share[CKShare.SystemFieldKey.title] = "ADultingHD Household" as CKRecordValue
         share.publicPermission = .none
+        logger.info("☁️ Saving root + share atomically (share.recordID=\(share.recordID.recordName, privacy: .public))")
 
-        let (savedRecords, _) = try await privateDB.modifyRecords(saving: [rootRecord, share], deleting: [])
+        let savedRecords: [CKRecord]
+        do {
+            (savedRecords, _) = try await privateDB.modifyRecords(saving: [rootRecord, share], deleting: [])
+        } catch {
+            logger.error("☁️ modifyRecords threw: \(error.localizedDescription, privacy: .public)")
+            logger.error("☁️ underlying: \(String(describing: error), privacy: .public)")
+            throw CloudKitSyncError.shareCreationFailed(underlying: error)
+        }
+        let typeList = savedRecords.map(\.recordType).joined(separator: ",")
+        logger.info("☁️ modifyRecords returned \(savedRecords.count) records: [\(typeList, privacy: .public)]")
         guard let savedShare = savedRecords.compactMap({ $0 as? CKShare }).first else {
-            throw CloudKitSyncError.shareCreationFailed
+            throw CloudKitSyncError.shareCreationFailed(
+                detail: "saved \(savedRecords.count) records but none were CKShare (types: \(typeList))"
+            )
         }
         shareURL = savedShare.url
-        logger.info("☁️ Created household share: \(savedShare.url?.absoluteString ?? "no url")")
+        logger.info("☁️ Created household share: \(savedShare.url?.absoluteString ?? "no url", privacy: .public)")
         return savedShare
     }
 
@@ -249,9 +280,23 @@ struct CloudKitPayload {
 
 // MARK: - Errors
 
-enum CloudKitSyncError: Error {
-    case shareCreationFailed
+enum CloudKitSyncError: Error, LocalizedError {
+    case shareCreationFailed(underlying: Error? = nil, detail: String? = nil)
     case zoneNotFound
+    case iCloudUnavailable(status: String)
+
+    var errorDescription: String? {
+        switch self {
+        case .shareCreationFailed(let underlying, let detail):
+            if let detail { return "Share creation failed: \(detail)" }
+            if let underlying { return "Share creation failed: \(underlying.localizedDescription)" }
+            return "Share creation failed (no detail)"
+        case .zoneNotFound:
+            return "CloudKit zone not found"
+        case .iCloudUnavailable(let status):
+            return "iCloud not available (status: \(status))"
+        }
+    }
 }
 
 // MARK: - CKDatabase convenience
@@ -319,8 +364,12 @@ private extension CKDatabase {
             let op = CKModifyRecordsOperation(recordsToSave: saving, recordIDsToDelete: deleting)
             op.savePolicy = .changedKeys
             var saved: [CKRecord] = []
-            op.perRecordSaveBlock = { _, result in
-                if case .success(let r) = result { saved.append(r) }
+            op.perRecordSaveBlock = { recordID, result in
+                switch result {
+                case .success(let r): saved.append(r)
+                case .failure(let e):
+                    logger.error("☁️ per-record save failed for \(recordID.recordName, privacy: .public): \(e.localizedDescription, privacy: .public)")
+                }
             }
             op.modifyRecordsResultBlock = { result in
                 switch result {

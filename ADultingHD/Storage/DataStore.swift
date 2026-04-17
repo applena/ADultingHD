@@ -820,11 +820,20 @@ final class DataStore {
         // Callers should already be gated on Features.cloudKitSharing through
         // the UI; this guard stops a stale UserDefaults flag or a direct
         // invocation from crashing the app.
-        guard Features.cloudKitSharing else { throw CloudKitSyncError.shareCreationFailed }
+        guard Features.cloudKitSharing else {
+            throw CloudKitSyncError.shareCreationFailed(detail: "cloudKitSharing feature flag is off")
+        }
         UserDefaults.standard.set(true, forKey: PrefKey.householdSharingEnabled)
         AppDelegate.registerForRemoteNotifications()
+        logger.info("☁️ createHouseholdShare: setup...")
         await ckSync.setup()
+        guard ckSync.isAvailable else {
+            logger.error("☁️ createHouseholdShare aborting — setup did not mark available. syncError=\(self.ckSync.syncError ?? "nil", privacy: .public)")
+            throw CloudKitSyncError.iCloudUnavailable(status: ckSync.syncError ?? "unknown")
+        }
+        logger.info("☁️ createHouseholdShare: migrate...")
         await migrateToCloudKitIfNeeded()
+        logger.info("☁️ createHouseholdShare: createOrFetchShare...")
         let share = try await ckSync.createOrFetchShare()
         return share.url
     }
