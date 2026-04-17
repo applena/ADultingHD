@@ -93,6 +93,16 @@ if $BUILD_IOS; then
     EXPORT_IOS="$BUILD_DIR/export_ios"
 
     echo "📦 Archiving iOS..."
+    # CODE_SIGNING_ALLOWED=NO keeps the archive unsigned because the
+    # App Store Connect API key used below for export only has Upload scope,
+    # not Admin/Profile-Management scope. An upload-scope key cannot auto-
+    # register new capabilities via `-allowProvisioningUpdates` during archive,
+    # so any capability mismatch (App Groups, Push, iCloud) fails the archive
+    # outright. Unsigned archive + signed export sidesteps that, but see the
+    # post-export re-sign below that reinjects the real entitlements — the
+    # export step alone produces a binary with only a minimal entitlements
+    # dict (team-id + application-identifier + beta-reports-active +
+    # get-task-allow) which makes CKContainer(identifier:) trap at runtime.
     xcodebuild archive \
         -project "$PROJECT" \
         -scheme "$SCHEME_IOS" \
@@ -136,6 +146,42 @@ EOF
         ls -la "$EXPORT_IOS/"
         exit 1
     fi
+
+    # Re-sign the app with the profile's full granted entitlements. The
+    # xcodebuild -exportArchive step above embeds the correct provisioning
+    # profile (which grants iCloud/CloudKit/Push via the App ID) but signs
+    # the binary with only a minimal entitlements dict. We extract the
+    # profile's granted entitlements and re-sign so the binary claims every
+    # capability the profile actually allows — specifically so
+    # CKContainer(identifier:) doesn't trap at runtime.
+    echo "🔏 Re-signing with profile's granted entitlements..."
+    RESIGN_DIR="$BUILD_DIR/resign_ios"
+    rm -rf "$RESIGN_DIR" && mkdir -p "$RESIGN_DIR"
+    (cd "$RESIGN_DIR" && unzip -q "$IPA_PATH")
+    APP_BUNDLE="$RESIGN_DIR/Payload/ADultingHD.app"
+    EMBEDDED_PROFILE="$APP_BUNDLE/embedded.mobileprovision"
+    # Extract the profile's Entitlements dict to use as the signing entitlements.
+    # PlistBuddy doesn't reliably read `security cms` output from stdin, so
+    # write it to a tempfile first.
+    security cms -D -i "$EMBEDDED_PROFILE" -o "$RESIGN_DIR/profile.plist"
+    /usr/libexec/PlistBuddy -x -c "Print :Entitlements" "$RESIGN_DIR/profile.plist" \
+        > "$RESIGN_DIR/signing.entitlements"
+    SIGN_IDENTITY="Apple Distribution: ShadowPuppet, LLC (TYQ32QCF6K)"
+    codesign --force --sign "$SIGN_IDENTITY" \
+        --entitlements "$RESIGN_DIR/signing.entitlements" \
+        --preserve-metadata=identifier,flags,runtime \
+        "$APP_BUNDLE"
+    # Rebuild the IPA
+    rm -f "$IPA_PATH"
+    (cd "$RESIGN_DIR" && zip -qr "$IPA_PATH" Payload)
+    # Verify CloudKit entitlements now present in the binary
+    if ! codesign -d --entitlements :- "$APP_BUNDLE" 2>/dev/null \
+        | grep -q "com.apple.developer.icloud-container-identifiers"; then
+        echo "❌ Re-sign did not include CloudKit entitlements — aborting"
+        codesign -d --entitlements :- "$APP_BUNDLE" 2>&1 | head -20
+        exit 1
+    fi
+    echo "✅ Re-signed with full entitlements"
 
     echo "🚀 Uploading iOS to TestFlight..."
     IOS_UPLOAD_LOG="$BUILD_DIR/ios_upload.log"
