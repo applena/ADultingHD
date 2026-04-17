@@ -180,6 +180,8 @@ EOF
     <string>production</string>
     <key>beta-reports-active</key>
     <true/>
+    <key>com.apple.developer.icloud-container-environment</key>
+    <string>Production</string>
     <key>com.apple.developer.icloud-container-identifiers</key>
     <array>
         <string>iCloud.net.shadowpuppet.ADultingHD</string>
