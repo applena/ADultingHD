@@ -46,6 +46,17 @@ All files in `TaskStore` are dual-written: once to the local Documents directory
 
 This is the same pattern used in MortalLoom and EscapeMint-Swift.
 
+## CloudKit Household Sharing
+
+Cross-Apple-ID household sharing via `CKShare` + `UICloudSharingController`. See [`docs/cloudkit-sharing.md`](docs/cloudkit-sharing.md) for the full architecture, setup prerequisites, deploy.sh re-sign dance, and known gotchas (TestFlight share-URL routing, schema deploy ordering, entitlement wildcards App Store Connect rejects).
+
+Quick map:
+- `Features.cloudKitSharing` — compile-time gate; `CKContainer(identifier:)` traps if entitlements aren't in the signed profile
+- `CloudKitSync.shared` — zone + share management
+- `DataStore.prepareHouseholdShare()` — entry point for the invite UI
+- `Views/Household/CloudShareSheet.swift` — native iOS share sheet wrapper
+- `deploy.sh` — post-export `codesign` re-sign to reinject entitlements the archive/export dance strips
+
 ## Workflow
 
 **Always run `/simplify` before building.** Any time changed code is about to be built (`xcodebuild`, `./deploy.sh`, or a test run), first invoke `/simplify` to review the diff for reuse, quality, and efficiency. Fix anything it flags, then build. This catches redundancy, dead state, and perf regressions while they're cheap to address — not after they've shipped.
