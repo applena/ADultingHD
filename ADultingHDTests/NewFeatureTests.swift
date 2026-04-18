@@ -34,8 +34,7 @@ final class NewFeatureTests: XCTestCase {
         taskName: String = "Test Task",
         date: Date = Date(),
         xpEarned: Int = 20,
-        streakBonus: Int = 0,
-        quality: CompletionQuality? = .normal
+        streakBonus: Int = 0
     ) -> TaskCompletion {
         TaskCompletion(
             id: UUID(),
@@ -44,8 +43,7 @@ final class NewFeatureTests: XCTestCase {
             completedAt: date,
             xpEarned: xpEarned,
             streakBonus: streakBonus,
-            notes: nil,
-            quality: quality
+            notes: nil
         )
     }
 
@@ -206,71 +204,6 @@ final class NewFeatureTests: XCTestCase {
         let productive = allAchievements.first { $0.id == "five_in_day" }!
         let progress = productive.currentProgress(profile: profile, completions: completions)
         XCTAssertEqual(progress, 3)
-    }
-
-    // MARK: - Idea 6: Completion Quality
-
-    func testCompletionQualityXPMultiplier() {
-        XCTAssertEqual(CompletionQuality.quick.xpMultiplier, 0.75)
-        XCTAssertEqual(CompletionQuality.normal.xpMultiplier, 1.0)
-        XCTAssertEqual(CompletionQuality.deep.xpMultiplier, 1.5)
-    }
-
-    func testCompletionQualityLabels() {
-        XCTAssertEqual(CompletionQuality.quick.label, "Quick")
-        XCTAssertEqual(CompletionQuality.normal.label, "Normal")
-        XCTAssertEqual(CompletionQuality.deep.label, "Deep Clean")
-    }
-
-    func testCompletionQualityIcons() {
-        XCTAssertFalse(CompletionQuality.quick.icon.isEmpty)
-        XCTAssertFalse(CompletionQuality.normal.icon.isEmpty)
-        XCTAssertFalse(CompletionQuality.deep.icon.isEmpty)
-    }
-
-    func testCompletionQualityXPCalculation() {
-        let task = makeTask(difficulty: .hard) // 3*10=30 base
-        let baseXP = task.xpReward
-
-        let quickXP = Int(Double(baseXP) * CompletionQuality.quick.xpMultiplier)
-        let normalXP = Int(Double(baseXP) * CompletionQuality.normal.xpMultiplier)
-        let deepXP = Int(Double(baseXP) * CompletionQuality.deep.xpMultiplier)
-
-        XCTAssertLessThan(quickXP, normalXP)
-        XCTAssertLessThan(normalXP, deepXP)
-    }
-
-    func testCompletionQualityAllCases() {
-        XCTAssertEqual(CompletionQuality.allCases.count, 3)
-    }
-
-    func testCompletionQualityCodable() throws {
-        let encoder = JSONEncoder()
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        encoder.dateEncodingStrategy = .iso8601
-
-        let completion = makeCompletion(quality: .deep)
-        let data = try encoder.encode(completion)
-        let decoded = try decoder.decode(TaskCompletion.self, from: data)
-
-        XCTAssertEqual(decoded.quality, .deep)
-    }
-
-    func testCompletionQualityNilBackwardsCompat() throws {
-        let encoder = JSONEncoder()
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        encoder.dateEncodingStrategy = .iso8601
-
-        // Old completions without quality field should decode fine
-        let completion = TaskCompletion(
-            id: UUID(), taskId: UUID(), taskName: "Test",
-            completedAt: Date(), xpEarned: 10, streakBonus: 0, notes: nil
-        )
-        let data = try encoder.encode(completion)
-        let decoded = try decoder.decode(TaskCompletion.self, from: data)
-        XCTAssertNil(decoded.quality)
     }
 
     // MARK: - Idea 7: Smart Scheduling
@@ -457,7 +390,6 @@ final class NewFeatureTests: XCTestCase {
         XCTAssertEqual(profiles.count, 3)
         XCTAssertEqual(profiles.sorted(by: { $0.totalXP > $1.totalXP }).first?.name, "Alice")
 
-        // Create completions over 30 days with quality ratings
         let calendar = Calendar.current
         var completions: [TaskCompletion] = []
         for dayOffset in 0..<30 {
@@ -465,13 +397,10 @@ final class NewFeatureTests: XCTestCase {
             let taskCount = Int.random(in: 0...5)
             for _ in 0..<taskCount {
                 let task = tasks.randomElement()!
-                let quality = CompletionQuality.allCases.randomElement()!
-                let xp = Int(Double(task.xpReward) * quality.xpMultiplier)
                 let completion = TaskCompletion(
                     id: UUID(), taskId: task.id, taskName: task.name,
-                    completedAt: date, xpEarned: xp, streakBonus: 0,
-                    notes: dayOffset % 3 == 0 ? "Test note for \(task.name)" : nil,
-                    quality: quality
+                    completedAt: date, xpEarned: task.xpReward, streakBonus: 0,
+                    notes: dayOffset % 3 == 0 ? "Test note for \(task.name)" : nil
                 )
                 completions.append(completion)
             }
