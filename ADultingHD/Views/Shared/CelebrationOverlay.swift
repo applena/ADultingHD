@@ -75,12 +75,16 @@ struct CelebrationOverlay: View {
                 VStack(spacing: 12) {
                     Image(systemName: type.icon)
                         .font(.system(size: 50))
+                        .dynamicTypeSize(...DynamicTypeSize.accessibility1)
                         .foregroundStyle(type.color)
                         .scaleEffect(scale)
 
                     Text(type.title)
                         .font(.title.bold())
                         .foregroundStyle(type.color)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.horizontal, 24)
                         .opacity(textOpacity)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)

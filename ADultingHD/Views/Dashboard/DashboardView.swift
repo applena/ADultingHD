@@ -131,34 +131,38 @@ struct DashboardView: View {
         VStack(spacing: 16) {
             VStack(alignment: .leading, spacing: 4) {
                 Text(greeting)
-                    .font(.system(size: 28, weight: .bold, design: .rounded))
+                    .font(.system(.title, design: .rounded).weight(.bold))
+                    .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 Text(subtitle)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
 
-            HStack(spacing: 12) {
+            HStack(alignment: .top, spacing: 12) {
                 CompactAvatarView(avatarState: dataStore.profile.avatarState, size: 44)
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(dataStore.profile.levelTitle)
                         .font(.subheadline.weight(.medium))
+                        .fixedSize(horizontal: false, vertical: true)
                     ProgressView(value: dataStore.profile.xpProgress)
                         .tint(Theme.levelPurple)
                 }
-                .frame(maxWidth: .infinity)
-
-                Spacer()
+                .frame(maxWidth: .infinity, alignment: .leading)
 
                 VStack(alignment: .trailing, spacing: 2) {
                     Text("\(dataStore.profile.totalXP)")
                         .font(.title3.bold())
                         .foregroundStyle(Theme.xpGold)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
                     Text("Total XP")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
         }
@@ -176,6 +180,7 @@ struct DashboardView: View {
             Text(currentTip)
                 .font(.caption)
                 .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(12)
@@ -335,6 +340,7 @@ struct DueTaskRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(task.name)
                     .font(.subheadline.weight(.medium))
+                    .fixedSize(horizontal: false, vertical: true)
                 HStack(spacing: 6) {
                     Text("\(task.estimatedMinutes)m")
                         .font(.caption)
@@ -543,9 +549,13 @@ struct StatCard: View {
                 .foregroundStyle(color)
             Text(value)
                 .font(.headline.bold())
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
             Text(title)
                 .font(.caption)
                 .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity)
         .card()

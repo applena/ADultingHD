@@ -12,6 +12,7 @@ struct WelcomeView: View {
     @State private var shareSheetPayload: ShareSheetPayload?
     @State private var hasSentInvite = false
     @AppStorage(PrefKey.onboardingHouseholdName) private var householdName: String = "My Household"
+    @AppStorage(PrefKey.onboardingPlayerName) private var playerName: String = ""
 
     private struct ShareSheetPayload: Identifiable {
         let id = UUID()
@@ -45,7 +46,7 @@ struct WelcomeView: View {
         case .welcome:
             return PageMeta(
                 icon: "house.fill", color: Theme.coral,
-                title: "Welcome to\nADultingHD!",
+                title: "Welcome to ADultingHD!",
                 subtitle: "We keep day one simple: just a couple daily tasks so you can build momentum, not stress.",
                 primaryButtonTitle: "Show Me How"
             )
@@ -66,8 +67,8 @@ struct WelcomeView: View {
         case .nameHousehold:
             return PageMeta(
                 icon: "person.3.fill", color: Theme.accent,
-                title: "Name Your Household",
-                subtitle: "Give it a name. This is where you'll track your adulting wins.",
+                title: "Who's Adulting?",
+                subtitle: "Your name shows up on the leaderboard. The household name is where you track your wins together.",
                 primaryButtonTitle: "Create Household"
             )
         case .pickRooms:
@@ -108,75 +109,88 @@ struct WelcomeView: View {
     // MARK: - Body
 
     var body: some View {
-        VStack(spacing: 0) {
-            Spacer(minLength: 24)
+        GeometryReader { geo in
+            ScrollView {
+                VStack(spacing: 0) {
+                    Spacer(minLength: 24)
 
-            Image(systemName: page.icon)
-                .font(.system(size: 74))
-                .foregroundStyle(page.color)
-                .contentTransition(.symbolEffect(.replace))
-                .padding(.bottom, 24)
+                    Image(systemName: page.icon)
+                        .font(.system(size: 74, weight: .regular))
+                        .dynamicTypeSize(...DynamicTypeSize.accessibility1)
+                        .foregroundStyle(page.color)
+                        .contentTransition(.symbolEffect(.replace))
+                        .padding(.bottom, 24)
 
-            Text(page.title)
-                .font(.system(size: 30, weight: .bold, design: .rounded))
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 32)
-                .padding(.bottom, 10)
+                    Text(page.title)
+                        .font(.system(.largeTitle, design: .rounded).weight(.bold))
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.horizontal, 32)
+                        .padding(.bottom, 10)
 
-            Text(page.subtitle)
-                .font(.body)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 44)
+                    Text(page.subtitle)
+                        .font(.body)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.horizontal, 44)
 
-            pageContent
-                .frame(maxWidth: 360)
-                .padding(.top, 18)
-                .padding(.horizontal, 24)
+                    pageContent
+                        .frame(maxWidth: 360)
+                        .padding(.top, 18)
+                        .padding(.horizontal, 24)
 
-            Spacer(minLength: 24)
+                    Spacer(minLength: 24)
 
-            Button {
-                handlePrimaryAction()
-            } label: {
-                Group {
-                    if currentPage == .proPitch && storeManager.isPurchasing {
-                        ProgressView().tint(.white)
-                    } else {
-                        Text(page.primaryButtonTitle).font(.headline)
+                    Button {
+                        handlePrimaryAction()
+                    } label: {
+                        Group {
+                            if currentPage == .proPitch && storeManager.isPurchasing {
+                                ProgressView().tint(.white)
+                            } else {
+                                Text(page.primaryButtonTitle)
+                                    .font(.headline)
+                                    .multilineTextAlignment(.center)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                        }
+                        .frame(maxWidth: 280)
+                        .padding(.vertical, 16)
+                        .padding(.horizontal, 12)
+                        .background(page.color, in: RoundedRectangle(cornerRadius: Theme.cornerRadius))
+                        .foregroundStyle(.white)
                     }
-                }
-                .frame(maxWidth: 280)
-                .padding(.vertical, 16)
-                .background(page.color, in: RoundedRectangle(cornerRadius: Theme.cornerRadius))
-                .foregroundStyle(.white)
-            }
-            .buttonStyle(.plain)
-            .disabled(primaryButtonDisabled)
+                    .buttonStyle(.plain)
+                    .disabled(primaryButtonDisabled)
 
-            HStack(spacing: 8) {
-                ForEach(0..<pages.count, id: \.self) { i in
-                    Circle()
-                        .fill(i == currentPageIndex ? page.color : Color.secondary.opacity(0.25))
-                        .frame(width: 8, height: 8)
-                        .scaleEffect(i == currentPageIndex ? 1.2 : 1.0)
-                }
-            }
-            .padding(.top, 18)
-            .animation(.spring(response: 0.3), value: currentPageIndex)
+                    HStack(spacing: 8) {
+                        ForEach(0..<pages.count, id: \.self) { i in
+                            Circle()
+                                .fill(i == currentPageIndex ? page.color : Color.secondary.opacity(0.25))
+                                .frame(width: 8, height: 8)
+                                .scaleEffect(i == currentPageIndex ? 1.2 : 1.0)
+                        }
+                    }
+                    .padding(.top, 18)
+                    .animation(.spring(response: 0.3), value: currentPageIndex)
 
-            Button {
-                handleSecondaryAction()
-            } label: {
-                Text(secondaryLabel)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    Button {
+                        handleSecondaryAction()
+                    } label: {
+                        Text(secondaryLabel)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.top, 12)
+                    .padding(.bottom, 40)
+                }
+                .frame(minHeight: geo.size.height)
+                .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.plain)
-            .padding(.top, 12)
-            .padding(.bottom, 40)
+            .scrollBounceBehavior(.basedOnSize)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background {
             LinearGradient(
                 colors: [page.color.opacity(0.10), .clear],
@@ -233,10 +247,14 @@ struct WelcomeView: View {
             Image(systemName: icon)
                 .font(.title2)
                 .foregroundStyle(color)
-                .frame(width: 36)
+                .frame(minWidth: 36)
             VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(.subheadline.weight(.semibold))
-                Text(subtitle).font(.caption).foregroundStyle(.secondary)
+                Text(title)
+                    .font(.subheadline.weight(.semibold))
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(subtitle)
+                    .font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             Spacer()
         }
@@ -264,12 +282,27 @@ struct WelcomeView: View {
 
     private var householdSetupContent: some View {
         VStack(spacing: 12) {
+            TextField("Your name", text: $playerName)
+                .textFieldStyle(.roundedBorder)
+                .font(.body)
+                #if os(iOS)
+                .textContentType(.givenName)
+                .autocorrectionDisabled(true)
+                #endif
+                .onAppear {
+                    if playerName.isEmpty {
+                        let suggested = UserProfile.defaultPlayerName()
+                        let current = dataStore.profile.name
+                        playerName = !current.isEmpty && current != "Player 1" ? current : suggested
+                    }
+                }
             TextField("Household name", text: $householdName)
                 .textFieldStyle(.roundedBorder)
                 .font(.body)
-            Text("You can rename this anytime from Settings.")
+            Text("You can change either of these anytime from Settings.")
                 .font(.caption).foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
@@ -351,10 +384,11 @@ struct WelcomeView: View {
             Image(systemName: icon)
                 .font(.body)
                 .foregroundStyle(Theme.xpGold)
-                .frame(width: 26)
+                .frame(minWidth: 26)
             Text(text)
                 .font(.subheadline)
                 .multilineTextAlignment(.leading)
+                .fixedSize(horizontal: false, vertical: true)
             Spacer()
         }
     }
@@ -366,6 +400,7 @@ struct WelcomeView: View {
                 .font(.caption)
                 .foregroundStyle(.red)
                 .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
         } else if hasSentInvite {
             Label("Invite sent", systemImage: "checkmark.circle.fill")
                 .font(.subheadline.weight(.semibold))
@@ -384,9 +419,11 @@ struct WelcomeView: View {
     private func handlePrimaryAction() {
         switch currentPage {
         case .nameHousehold:
-            let entered = householdName
+            let enteredHousehold = householdName
+            let enteredPlayer = playerName
             Task {
-                await dataStore.renameHousehold(dataStore.activeHouseholdId, to: entered)
+                await dataStore.renameActiveProfile(to: enteredPlayer)
+                await dataStore.renameHousehold(dataStore.activeHouseholdId, to: enteredHousehold)
                 advanceOrComplete()
             }
         case .pickRooms:
@@ -441,6 +478,9 @@ struct WelcomeView: View {
 
     private var primaryButtonDisabled: Bool {
         switch currentPage {
+        case .nameHousehold:
+            return playerName.trimmingCharacters(in: .whitespaces).isEmpty
+                || householdName.trimmingCharacters(in: .whitespaces).isEmpty
         case .pickRooms: return selectedCategories.isEmpty
         case .proPitch:
             // Disable only while a purchase is actively in flight. When the

@@ -81,11 +81,13 @@ struct ProfileView: View {
                         .fill(Theme.levelPurple.opacity(0.15))
                         .frame(width: 36, height: 36)
                     Text("\(dataStore.profile.level)")
-                        .font(.system(size: 16, weight: .bold, design: .rounded))
+                        .font(.system(.subheadline, design: .rounded).weight(.bold))
                         .foregroundStyle(Theme.levelPurple)
+                        .dynamicTypeSize(...DynamicTypeSize.xLarge)
                 }
                 Text(dataStore.profile.levelTitle)
                     .font(.headline)
+                    .fixedSize(horizontal: false, vertical: true)
                 Spacer()
                 HStack(spacing: 4) {
                     Image(systemName: "dollarsign.circle.fill")
@@ -237,12 +239,14 @@ struct AchievementCard: View {
                 Text(achievement.name)
                     .font(.caption.bold())
                     .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
 
                 if unlocked {
                     Text(achievement.requirement)
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
                 } else {
                     ProgressView(value: progress)
                         .tint(Theme.xpGold)
@@ -270,47 +274,55 @@ struct AchievementDetailView: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 24) {
-                Spacer()
+            ScrollView {
+                VStack(spacing: 24) {
+                    Spacer(minLength: 24)
 
-                Image(systemName: achievement.icon)
-                    .font(.system(size: 60))
-                    .foregroundStyle(unlocked ? Theme.xpGold : .gray.opacity(0.4))
+                    Image(systemName: achievement.icon)
+                        .font(.system(size: 60))
+                        .dynamicTypeSize(...DynamicTypeSize.accessibility1)
+                        .foregroundStyle(unlocked ? Theme.xpGold : .gray.opacity(0.4))
 
-                Text(achievement.name)
-                    .font(.title.bold())
+                    Text(achievement.name)
+                        .font(.title.bold())
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
 
-                Text(achievement.description)
-                    .font(.body)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
+                    Text(achievement.description)
+                        .font(.body)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
 
-                Text(achievement.flavorText)
-                    .font(.subheadline.italic())
-                    .foregroundStyle(.tertiary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 32)
+                    Text(achievement.flavorText)
+                        .font(.subheadline.italic())
+                        .foregroundStyle(.tertiary)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.horizontal, 32)
 
-                VStack(spacing: 8) {
-                    ProgressView(value: unlocked ? 1.0 : progress)
-                        .tint(Theme.xpGold)
-                        .scaleEffect(y: 2)
-                        .padding(.horizontal, 40)
+                    VStack(spacing: 8) {
+                        ProgressView(value: unlocked ? 1.0 : progress)
+                            .tint(Theme.xpGold)
+                            .scaleEffect(y: 2)
+                            .padding(.horizontal, 40)
 
-                    if unlocked {
-                        Label("Unlocked", systemImage: "checkmark.seal.fill")
-                            .font(.headline)
-                            .foregroundStyle(Theme.successGreen)
-                    } else {
-                        Text("\(Int(progress * 100))% complete")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                        if unlocked {
+                            Label("Unlocked", systemImage: "checkmark.seal.fill")
+                                .font(.headline)
+                                .foregroundStyle(Theme.successGreen)
+                        } else {
+                            Text("\(Int(progress * 100))% complete")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
                     }
-                }
 
-                Spacer()
+                    Spacer(minLength: 24)
+                }
+                .padding()
+                .frame(maxWidth: .infinity)
             }
-            .padding()
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") { dismiss() }

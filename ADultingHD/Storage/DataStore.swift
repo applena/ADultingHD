@@ -648,6 +648,13 @@ final class DataStore {
         logger.info("🏠 Switched to household \(id.uuidString, privacy: .public)")
     }
 
+    func renameActiveProfile(to newName: String) async {
+        let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, trimmed != profile.name else { return }
+        profile.name = trimmed
+        await save()
+    }
+
     func renameHousehold(_ id: UUID, to newName: String) async {
         let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }

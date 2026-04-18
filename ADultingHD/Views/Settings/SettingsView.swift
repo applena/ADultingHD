@@ -1,4 +1,5 @@
 import SwiftUI
+import StoreKit
 #if os(iOS)
 import MessageUI
 #endif
@@ -14,6 +15,8 @@ struct SettingsView: View {
     @State private var importMessage: String?
     @State private var showProUpgrade = false
     @State private var showWelcomeTour = false
+    @State private var showRedeemCode = false
+    @State private var editingPlayerName: String = ""
     #if os(iOS)
     @State private var showingMailComposer = false
     #endif
@@ -94,6 +97,11 @@ struct SettingsView: View {
         }
         .sheet(isPresented: $showProUpgrade) { ProUpgradeView() }
         #if os(iOS)
+        .offerCodeRedemption(isPresented: $showRedeemCode) { result in
+            Task { await storeManager.restorePurchases() }
+        }
+        #endif
+        #if os(iOS)
         .fullScreenCover(isPresented: $showWelcomeTour) {
             WelcomeView(onComplete: { showWelcomeTour = false })
         }
@@ -128,6 +136,7 @@ struct SettingsView: View {
                     Toggle("Household Activity", isOn: $nm.householdActivityEnabled)
                     Text("Get notified when household members complete tasks or move up the leaderboard")
                         .font(.caption).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 } else {
                     Button {
                         Task { await notificationManager.requestAuthorization() }
@@ -136,6 +145,7 @@ struct SettingsView: View {
                     }
                     Text("Get daily reminders about due tasks")
                         .font(.caption).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
 
@@ -186,9 +196,12 @@ struct SettingsView: View {
 
     private var householdTab: some View {
         Form {
+            Section("You") {
+                playerNameField
+            }
+
             Section("Current") {
                 LabeledContent("Active Household", value: dataStore.activeHousehold.name)
-                LabeledContent("Active Profile", value: dataStore.profile.name)
             }
 
             Section("Members") {
@@ -250,6 +263,7 @@ struct SettingsView: View {
                         Text(msg)
                             .font(.caption)
                             .foregroundStyle(msg.contains("Error") ? .red : .green)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                 }
             } else {
@@ -265,6 +279,7 @@ struct SettingsView: View {
                                 Text("One-time purchase \u{2014} unlock all features")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
+                                    .fixedSize(horizontal: false, vertical: true)
                             }
                             Spacer()
                             Image(systemName: "chevron.right")
@@ -272,6 +287,14 @@ struct SettingsView: View {
                         }
                     }
                     .buttonStyle(.plain)
+
+                    redeemCodeRow
+
+                    Button {
+                        Task { await storeManager.restorePurchases() }
+                    } label: {
+                        Label("Restore Purchase", systemImage: "arrow.clockwise")
+                    }
                 }
 
                 Section("Backup") {
@@ -285,9 +308,51 @@ struct SettingsView: View {
                 }
                 Text("Replay the introduction to see how ADultingHD works.")
                     .font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
         .formStyle(.grouped)
+    }
+
+    private var playerNameField: some View {
+        HStack {
+            Text("Your Name")
+            Spacer()
+            TextField("Your name", text: $editingPlayerName)
+                .multilineTextAlignment(.trailing)
+                #if os(iOS)
+                .textContentType(.givenName)
+                .autocorrectionDisabled(true)
+                #endif
+                .onAppear {
+                    if editingPlayerName.isEmpty {
+                        editingPlayerName = dataStore.profile.name
+                    }
+                }
+                .onSubmit { commitPlayerName() }
+        }
+        .onDisappear { commitPlayerName() }
+    }
+
+    private func commitPlayerName() {
+        let trimmed = editingPlayerName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, trimmed != dataStore.profile.name else { return }
+        Task { await dataStore.renameActiveProfile(to: trimmed) }
+    }
+
+    @ViewBuilder
+    private var redeemCodeRow: some View {
+        #if os(iOS)
+        Button {
+            showRedeemCode = true
+        } label: {
+            Label("Redeem Promo Code", systemImage: "ticket")
+        }
+        #else
+        Link(destination: URL(string: "macappstore://apps.apple.com/redeem")!) {
+            Label("Redeem Promo Code…", systemImage: "ticket")
+        }
+        #endif
     }
 
     // MARK: - About Tab
@@ -298,6 +363,7 @@ struct SettingsView: View {
                 HStack(spacing: 14) {
                     Image(systemName: "clipboard.fill")
                         .font(.system(size: 36))
+                        .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
                         .foregroundStyle(Theme.accent)
                     VStack(alignment: .leading, spacing: 4) {
                         Text("ADultingHD")
@@ -305,9 +371,11 @@ struct SettingsView: View {
                         Text("Gamified household task management")
                             .font(.caption)
                             .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
                         Text("Version \(appVersion) (\(buildNumber))")
                             .font(.caption2)
                             .foregroundStyle(.tertiary)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                 }
                 .padding(.vertical, 4)

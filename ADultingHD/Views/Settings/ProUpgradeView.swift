@@ -39,16 +39,22 @@ struct ProUpgradeView: View {
         VStack(spacing: 12) {
             Image(systemName: "crown.fill")
                 .font(.system(size: 50))
+                .dynamicTypeSize(...DynamicTypeSize.accessibility1)
                 .foregroundStyle(Theme.xpGold)
 
             Text("Upgrade to Pro")
-                .font(.system(size: 28, weight: .bold, design: .rounded))
+                .font(.system(.title, design: .rounded).weight(.bold))
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
 
             Text("One-time purchase. No subscription. Ever.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .padding(.top, 20)
+        .padding(.horizontal, 24)
     }
 
     // MARK: - Feature List
@@ -60,14 +66,16 @@ struct ProUpgradeView: View {
                     Image(systemName: feature.icon)
                         .font(.title3)
                         .foregroundStyle(Theme.levelPurple)
-                        .frame(width: 30)
+                        .frame(minWidth: 30)
 
                     VStack(alignment: .leading, spacing: 2) {
                         Text(feature.title)
                             .font(.subheadline.weight(.semibold))
+                            .fixedSize(horizontal: false, vertical: true)
                         Text(feature.detail)
                             .font(.caption)
                             .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
 
                     Spacer()
@@ -98,13 +106,18 @@ struct ProUpgradeView: View {
                     } else if let product = storeManager.proProduct {
                         Text("Unlock Pro \u{2014} \(product.displayPrice)")
                             .font(.headline)
+                            .multilineTextAlignment(.center)
+                            .fixedSize(horizontal: false, vertical: true)
                     } else {
                         Text("Unlock Pro \u{2014} $9.99")
                             .font(.headline)
+                            .multilineTextAlignment(.center)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 14)
+                .padding(.horizontal, 12)
                 .background(Theme.levelPurple, in: RoundedRectangle(cornerRadius: 14))
                 .foregroundStyle(.white)
             }
@@ -124,6 +137,8 @@ struct ProUpgradeView: View {
                 Text(message)
                     .font(.caption)
                     .foregroundStyle(.red)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
         .padding(.horizontal)
@@ -148,9 +163,11 @@ struct ProPromptCard: View {
                     Text(title)
                         .font(.subheadline.weight(.medium))
                         .foregroundStyle(.primary)
+                        .fixedSize(horizontal: false, vertical: true)
                     Text("Upgrade to Pro to unlock")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer()
                 Image(systemName: "lock.fill")

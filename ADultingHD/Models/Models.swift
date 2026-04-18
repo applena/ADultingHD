@@ -427,7 +427,7 @@ enum SupplyStock: String, Codable, CaseIterable {
 
 struct UserProfile: Codable, Identifiable {
     var id: UUID = UUID()
-    var name: String = "Player 1"
+    var name: String = ""
     var avatar: String = "person.crop.circle.fill"
     var totalXP: Int = 0
     var coins: Int = 0
@@ -481,6 +481,19 @@ struct UserProfile: Codable, Identifiable {
         case 65...99: "Adulting Master"
         default: "Adulting Legend"
         }
+    }
+
+    /// Best-effort name for a fresh profile. macOS exposes the logged-in
+    /// user's full name; iOS does not surface the iCloud name to third-party
+    /// apps, so we return an empty string and rely on the onboarding prompt
+    /// or Settings field to fill it in.
+    static func defaultPlayerName() -> String {
+        #if os(macOS)
+        let full = NSFullUserName().trimmingCharacters(in: .whitespacesAndNewlines)
+        return full.isEmpty ? "" : full
+        #else
+        return ""
+        #endif
     }
 }
 

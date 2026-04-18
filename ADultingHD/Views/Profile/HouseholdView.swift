@@ -64,6 +64,7 @@ struct HouseholdView: View {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(activity.displayTitle)
                                     .font(.subheadline)
+                                    .fixedSize(horizontal: false, vertical: true)
                                 Text(activity.timestamp, style: .relative)
                                     .font(.caption)
                                     .foregroundStyle(.secondary)

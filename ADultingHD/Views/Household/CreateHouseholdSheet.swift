@@ -16,6 +16,7 @@ struct CreateHouseholdSheet: View {
                 Text("Each household has its own task list and supply stock. Your XP, level, and streak are shared across every household you manage.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             .formStyle(.grouped)
             .navigationTitle("Add Household")

@@ -80,7 +80,7 @@ struct TaskDetailView: View {
 
     private func headerCard(_ task: HouseholdTask) -> some View {
         VStack(spacing: 12) {
-            HStack {
+            HStack(alignment: .top) {
                 Image(systemName: task.category.icon)
                     .font(.largeTitle)
                     .foregroundStyle(Theme.categoryColor(task.category))
@@ -88,6 +88,7 @@ struct TaskDetailView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(task.name)
                         .font(.title2.bold())
+                        .fixedSize(horizontal: false, vertical: true)
                     Text(task.category.rawValue)
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
@@ -113,6 +114,7 @@ struct TaskDetailView: View {
             Text(task.description)
                 .font(.body)
                 .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         .card()
@@ -168,11 +170,13 @@ struct TaskDetailView: View {
                             .foregroundStyle(.secondary)
                         Text(step.text)
                             .font(.subheadline)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                     if !step.instructions.isEmpty {
                         Text(step.instructions)
                             .font(.caption)
                             .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
                             .padding(.leading, 24)
                     }
                 }
@@ -207,6 +211,8 @@ struct TaskDetailView: View {
         } label: {
             Label("Mark Complete", systemImage: "checkmark.circle.fill")
                 .font(.headline)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity)
                 .padding()
                 .background(Theme.successGreen, in: RoundedRectangle(cornerRadius: Theme.cornerRadius))
@@ -243,6 +249,7 @@ struct TaskDetailView: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .italic()
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                 }
             }

@@ -155,6 +155,7 @@ struct ScheduleView: View {
                     Text("\(todayTasks.count) tasks across \(todayByCategory.count) rooms — about \(todayTasks.totalMinutes / 60)h \(todayTasks.totalMinutes % 60)m")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer()
             }
@@ -330,70 +331,83 @@ struct PowerHourView: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 24) {
-                // Progress
-                HStack {
-                    Text("Task \(min(currentIndex + 1, tasks.count)) of \(tasks.count)")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    Text(formatTime(elapsedSeconds))
-                        .font(.system(.title3, design: .monospaced).bold())
-                        .foregroundStyle(Theme.streakOrange)
-                }
-
-                ProgressView(value: Double(currentIndex), total: Double(tasks.count))
-                    .tint(Theme.successGreen)
-
-                if let task = currentTask {
-                    Spacer()
-
-                    Image(systemName: task.category.icon)
-                        .font(.system(size: 50))
-                        .foregroundStyle(Theme.categoryColor(task.category))
-
-                    Text(task.name)
-                        .font(.title.bold())
-
-                    Text(task.description)
-                        .font(.body)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-
-                    Text("~\(task.estimatedMinutes) min")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-
-                    Spacer()
-
-                    Button {
-                        Task {
-                            await dataStore.completeTask(task)
-                            advanceOrFinish()
+            GeometryReader { geo in
+                ScrollView {
+                    VStack(spacing: 24) {
+                        // Progress
+                        HStack {
+                            Text("Task \(min(currentIndex + 1, tasks.count)) of \(tasks.count)")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            Text(formatTime(elapsedSeconds))
+                                .font(.system(.title3, design: .monospaced).bold())
+                                .foregroundStyle(Theme.streakOrange)
                         }
-                    } label: {
-                        Label(currentIndex < tasks.count - 1 ? "Done — Next" : "Done — Finish!", systemImage: "checkmark.circle.fill")
-                            .font(.headline)
-                            .frame(maxWidth: .infinity)
-                            .padding()
-                            .background(Theme.successGreen, in: RoundedRectangle(cornerRadius: Theme.cornerRadius))
-                            .foregroundStyle(.white)
-                    }
-                    .buttonStyle(.plain)
 
-                    Button("Skip") { advanceOrFinish() }
-                    .foregroundStyle(.secondary)
-                } else {
-                    Spacer()
-                    Image(systemName: "trophy.fill")
-                        .font(.system(size: 60))
-                        .foregroundStyle(Theme.xpGold)
-                    Text("All done!")
-                        .font(.title.bold())
-                    Spacer()
+                        ProgressView(value: Double(currentIndex), total: Double(tasks.count))
+                            .tint(Theme.successGreen)
+
+                        if let task = currentTask {
+                            Spacer(minLength: 8)
+
+                            Image(systemName: task.category.icon)
+                                .font(.system(size: 50))
+                                .dynamicTypeSize(...DynamicTypeSize.accessibility1)
+                                .foregroundStyle(Theme.categoryColor(task.category))
+
+                            Text(task.name)
+                                .font(.title.bold())
+                                .multilineTextAlignment(.center)
+                                .fixedSize(horizontal: false, vertical: true)
+
+                            Text(task.description)
+                                .font(.body)
+                                .foregroundStyle(.secondary)
+                                .multilineTextAlignment(.center)
+                                .fixedSize(horizontal: false, vertical: true)
+
+                            Text("~\(task.estimatedMinutes) min")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+
+                            Spacer(minLength: 8)
+
+                            Button {
+                                Task {
+                                    await dataStore.completeTask(task)
+                                    advanceOrFinish()
+                                }
+                            } label: {
+                                Label(currentIndex < tasks.count - 1 ? "Done — Next" : "Done — Finish!", systemImage: "checkmark.circle.fill")
+                                    .font(.headline)
+                                    .multilineTextAlignment(.center)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                    .frame(maxWidth: .infinity)
+                                    .padding()
+                                    .background(Theme.successGreen, in: RoundedRectangle(cornerRadius: Theme.cornerRadius))
+                                    .foregroundStyle(.white)
+                            }
+                            .buttonStyle(.plain)
+
+                            Button("Skip") { advanceOrFinish() }
+                            .foregroundStyle(.secondary)
+                        } else {
+                            Spacer(minLength: 8)
+                            Image(systemName: "trophy.fill")
+                                .font(.system(size: 60))
+                                .dynamicTypeSize(...DynamicTypeSize.accessibility1)
+                                .foregroundStyle(Theme.xpGold)
+                            Text("All done!")
+                                .font(.title.bold())
+                            Spacer(minLength: 8)
+                        }
+                    }
+                    .padding()
+                    .frame(minHeight: geo.size.height)
                 }
+                .scrollBounceBehavior(.basedOnSize)
             }
-            .padding()
             .navigationTitle("Power Hour")
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)

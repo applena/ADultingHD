@@ -64,10 +64,12 @@ struct HouseholdListView: View {
                         Text(inviteError)
                             .font(.caption)
                             .foregroundStyle(.red)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                     Text("Pick contacts by email or phone, or send via Messages, Mail, or AirDrop. They'll tap the invite and land straight in your household.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             } else {
                 Section("Invite Collaborators") {
@@ -76,6 +78,7 @@ struct HouseholdListView: View {
                     Text("Cross-device household sharing is in development. For now, each device manages its own household list locally.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
         }

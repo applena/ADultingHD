@@ -132,11 +132,21 @@ actor TaskStore {
     func loadProfile() -> UserProfile {
         let url = newerOf(cloud: cloudURL(for: "profile.json"), local: profileURL)
         guard let data = try? Data(contentsOf: url),
-              let profile = try? decoder.decode(UserProfile.self, from: data) else {
+              var profile = try? decoder.decode(UserProfile.self, from: data) else {
             logger.info("No saved profile, creating new")
-            let profile = UserProfile()
+            var profile = UserProfile()
+            profile.name = UserProfile.defaultPlayerName()
             saveProfile(profile)
             return profile
+        }
+        // Legacy "Player 1" installs: upgrade to the system-suggested name
+        // on platforms where one is available (currently macOS only).
+        if profile.name == "Player 1" || profile.name.isEmpty {
+            let suggested = UserProfile.defaultPlayerName()
+            if !suggested.isEmpty && suggested != profile.name {
+                profile.name = suggested
+                saveProfile(profile)
+            }
         }
         return profile
     }
