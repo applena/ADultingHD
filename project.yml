@@ -10,7 +10,7 @@ options:
 settings:
   base:
     DEVELOPMENT_TEAM: TYQ32QCF6K
-    MARKETING_VERSION: "1.0.1"
+    MARKETING_VERSION: "1.1.0"
     CURRENT_PROJECT_VERSION: 28
     SWIFT_VERSION: "6.0"
     DEAD_CODE_STRIPPING: YES
@@ -122,7 +122,7 @@ targets:
         INFOPLIST_KEY_NSExtension_NSExtensionPointIdentifier: com.apple.widgetkit-extension
         SWIFT_EMIT_LOC_STRINGS: YES
         GENERATE_INFOPLIST_FILE: YES
-        MARKETING_VERSION: "1.0.1"
+        MARKETING_VERSION: "1.1.0"
         CURRENT_PROJECT_VERSION: 28
     entitlements:
       path: ADultingHDWidget/ADultingHDWidget.entitlements

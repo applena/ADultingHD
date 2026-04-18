@@ -10,7 +10,6 @@ struct ProUpgradeView: View {
         ("medal.fill", "All 18 Achievements", "Unlock the complete achievement collection"),
         ("paintpalette.fill", "Full Avatar Shop", "38 items: characters, hats, glasses, accessories, backgrounds"),
         ("plus.circle.fill", "Unlimited Custom Tasks", "Create as many custom tasks as you want"),
-        ("sparkles", "Quality Tracking", "Quick, Normal, and Deep Clean completion modes"),
         ("flame.fill", "Streak & Consistency Bonuses", "Earn bonus XP for daily, weekly, and monthly consistency"),
         ("leaf.fill", "Seasonal Suggestions", "Seasonal task recommendations throughout the year"),
         ("list.clipboard.fill", "Shopping List Export", "Share your supply shopping list"),

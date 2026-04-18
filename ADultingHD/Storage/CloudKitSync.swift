@@ -4,6 +4,9 @@ import os
 
 private let logger = Logger(subsystem: "net.shadowpuppet.ADultingHD", category: "CloudKitSync")
 
+private let sharedJSONEncoder = JSONEncoder()
+private let sharedJSONDecoder = JSONDecoder()
+
 // MARK: - CloudKit record type names
 
 private enum RecordType {
@@ -428,6 +431,10 @@ extension HouseholdTask {
         r["isActive"]         = (isActive ? 1 : 0) as CKRecordValue
         r["lastCompleted"]    = lastCompleted as CKRecordValue?
         r["defaultAssigneeId"] = defaultAssigneeId?.uuidString as CKRecordValue?
+        r["scheduledWeekdays"] = scheduledWeekdays.isEmpty ? nil : scheduledWeekdays as CKRecordValue?
+        r["scheduledDayOfMonth"] = scheduledDayOfMonth as CKRecordValue?
+        r["scheduledMonth"] = scheduledMonth as CKRecordValue?
+        r["checklist"] = checklist.isEmpty ? nil : (try? sharedJSONEncoder.encode(checklist)) as CKRecordValue?
         return r
     }
 
@@ -455,6 +462,15 @@ extension HouseholdTask {
         self.isActive = (record["isActive"] as? Int ?? 1) == 1
         self.lastCompleted = record["lastCompleted"] as? Date
         self.defaultAssigneeId = (record["defaultAssigneeId"] as? String).flatMap(UUID.init)
+        self.scheduledWeekdays = record["scheduledWeekdays"] as? [Int] ?? []
+        self.scheduledDayOfMonth = record["scheduledDayOfMonth"] as? Int
+        self.scheduledMonth = record["scheduledMonth"] as? Int
+        if let data = record["checklist"] as? Data,
+           let decoded = try? sharedJSONDecoder.decode([ChecklistItem].self, from: data) {
+            self.checklist = decoded
+        } else {
+            self.checklist = []
+        }
     }
 }
 
@@ -468,7 +484,6 @@ extension TaskCompletion {
         r["xpEarned"]    = xpEarned as CKRecordValue
         r["streakBonus"] = streakBonus as CKRecordValue
         r["notes"]       = notes as CKRecordValue?
-        r["quality"]     = quality?.rawValue as CKRecordValue?
         r["profileId"]   = profileId?.uuidString as CKRecordValue?
         return r
     }
@@ -492,7 +507,6 @@ extension TaskCompletion {
         self.xpEarned = xpEarned
         self.streakBonus = streakBonus
         self.notes = record["notes"] as? String
-        self.quality = (record["quality"] as? Int).flatMap(CompletionQuality.init)
         self.profileId = (record["profileId"] as? String).flatMap(UUID.init)
     }
 }

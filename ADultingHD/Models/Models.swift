@@ -83,6 +83,63 @@ enum TaskFrequency: String, Codable, CaseIterable, Identifiable {
         case .yearly: "star.circle"
         }
     }
+
+    /// How many specific weekdays this frequency expects (0 for frequencies
+    /// that schedule by day-of-month instead).
+    var weekdayCount: Int {
+        switch self {
+        case .weekly, .biweekly: return 1
+        case .twiceWeekly: return 2
+        default: return 0
+        }
+    }
+
+    var usesDayOfMonth: Bool {
+        switch self {
+        case .monthly, .quarterly, .semiannually, .yearly: return true
+        default: return false
+        }
+    }
+
+    /// Minimum elapsed days before a completion re-qualifies the task as due.
+    /// Slightly shorter than `days` so scheduled-day matches don't false-miss.
+    var minGap: Int {
+        switch self {
+        case .daily: return 1
+        case .twiceWeekly: return 2
+        case .weekly: return 6
+        case .biweekly: return 13
+        case .monthly: return 23
+        case .quarterly: return 83
+        case .semiannually: return 175
+        case .yearly: return 300
+        }
+    }
+}
+
+// MARK: - Weekday helpers
+
+/// Apple `Calendar.component(.weekday:)` convention: 1 = Sunday … 7 = Saturday.
+enum Weekday: Int, CaseIterable, Identifiable {
+    case sunday = 1, monday, tuesday, wednesday, thursday, friday, saturday
+
+    var id: Int { rawValue }
+
+    var shortLabel: String { Calendar.current.shortWeekdaySymbols[rawValue - 1] }
+    var fullLabel: String { Calendar.current.weekdaySymbols[rawValue - 1] }
+
+    static func label(for weekdays: [Int]) -> String {
+        weekdays.compactMap(Weekday.init(rawValue:))
+            .sorted { $0.rawValue < $1.rawValue }
+            .map(\.shortLabel)
+            .joined(separator: ", ")
+    }
+}
+
+func shortMonthName(_ month: Int) -> String {
+    let symbols = Calendar.current.shortMonthSymbols
+    guard (1...symbols.count).contains(month) else { return "" }
+    return symbols[month - 1]
 }
 
 // MARK: - Difficulty
@@ -127,6 +184,20 @@ enum Difficulty: Int, Codable, CaseIterable, Identifiable, Comparable {
     }
 }
 
+// MARK: - Checklist Item
+
+struct ChecklistItem: Codable, Identifiable, Hashable {
+    var id: UUID
+    var text: String
+    var instructions: String
+
+    init(id: UUID = UUID(), text: String, instructions: String = "") {
+        self.id = id
+        self.text = text
+        self.instructions = instructions
+    }
+}
+
 // MARK: - Household Task
 
 struct HouseholdTask: Codable, Identifiable, Hashable {
@@ -145,6 +216,17 @@ struct HouseholdTask: Codable, Identifiable, Hashable {
     /// assignee picker once the household has more than one member (members
     /// only arrive via CloudKit share acceptance).
     var defaultAssigneeId: UUID? = nil
+    /// Apple weekday ints (1 = Sunday … 7 = Saturday) the task is scheduled on.
+    /// Empty for daily/monthly-family frequencies. Count matches
+    /// `frequency.weekdayCount` when set.
+    var scheduledWeekdays: [Int] = []
+    /// Day of month (1…28) for monthly/quarterly/semi-annual/yearly tasks.
+    var scheduledDayOfMonth: Int? = nil
+    /// Month (1…12) for yearly tasks.
+    var scheduledMonth: Int? = nil
+    /// Ordered steps the user ticks off while completing the task. Empty
+    /// for simple single-action tasks.
+    var checklist: [ChecklistItem] = []
 
     var xpReward: Int {
         Self.computeXP(difficulty: difficulty, frequency: frequency, estimatedMinutes: estimatedMinutes)
@@ -169,9 +251,32 @@ struct HouseholdTask: Codable, Identifiable, Hashable {
     /// are never due; tasks that have never been completed are always due.
     func isDue(on referenceDate: Date) -> Bool {
         guard isActive else { return false }
-        guard let last = lastCompleted else { return true }
-        let daysSince = Calendar.current.dateComponents([.day], from: last, to: referenceDate).day ?? 0
-        return daysSince >= frequency.days
+        let cal = Calendar.current
+        let daysSince: Int
+        if let last = lastCompleted {
+            daysSince = cal.dateComponents([.day], from: last, to: referenceDate).day ?? 0
+        } else {
+            return true
+        }
+
+        switch frequency {
+        case .daily:
+            return daysSince >= 1
+        case .weekly, .biweekly, .twiceWeekly:
+            guard !scheduledWeekdays.isEmpty else { return daysSince >= frequency.days }
+            let today = cal.component(.weekday, from: referenceDate)
+            return scheduledWeekdays.contains(today) && daysSince >= frequency.minGap
+        case .monthly, .quarterly, .semiannually:
+            guard let dom = scheduledDayOfMonth else { return daysSince >= frequency.days }
+            return cal.component(.day, from: referenceDate) == dom && daysSince >= frequency.minGap
+        case .yearly:
+            guard let dom = scheduledDayOfMonth, let month = scheduledMonth else {
+                return daysSince >= frequency.days
+            }
+            return cal.component(.month, from: referenceDate) == month
+                && cal.component(.day, from: referenceDate) == dom
+                && daysSince >= frequency.minGap
+        }
     }
 
     var isOverdue: Bool {
@@ -184,6 +289,29 @@ struct HouseholdTask: Codable, Identifiable, Hashable {
     var dueDate: Date? {
         guard isActive, let last = lastCompleted else { return nil }
         return Calendar.current.date(byAdding: .day, value: frequency.days, to: last)
+    }
+
+    /// Human-readable description of when this task recurs — used in lists
+    /// and detail views. Returns `nil` when no specific day is set.
+    var scheduleSummary: String? {
+        switch frequency {
+        case .daily:
+            return nil
+        case .weekly, .biweekly, .twiceWeekly:
+            guard !scheduledWeekdays.isEmpty else { return nil }
+            let days = Weekday.label(for: scheduledWeekdays)
+            switch frequency {
+            case .twiceWeekly: return days
+            case .biweekly: return "every other \(days)"
+            default: return days
+            }
+        case .monthly, .quarterly, .semiannually:
+            guard let dom = scheduledDayOfMonth else { return nil }
+            return "day \(dom)"
+        case .yearly:
+            guard let dom = scheduledDayOfMonth, let month = scheduledMonth else { return nil }
+            return "\(shortMonthName(month)) \(dom)"
+        }
     }
 
     var daysSinceLastCompleted: Int? {
@@ -202,38 +330,6 @@ struct HouseholdTask: Codable, Identifiable, Hashable {
 
 // MARK: - Task Completion
 
-enum CompletionQuality: Int, Codable, CaseIterable, Identifiable {
-    case quick = 1
-    case normal = 2
-    case deep = 3
-
-    var id: Int { rawValue }
-
-    var label: String {
-        switch self {
-        case .quick: "Quick"
-        case .normal: "Normal"
-        case .deep: "Deep Clean"
-        }
-    }
-
-    var icon: String {
-        switch self {
-        case .quick: "hare"
-        case .normal: "checkmark"
-        case .deep: "sparkles"
-        }
-    }
-
-    var xpMultiplier: Double {
-        switch self {
-        case .quick: 0.75
-        case .normal: 1.0
-        case .deep: 1.5
-        }
-    }
-}
-
 struct TaskCompletion: Codable, Identifiable {
     let id: UUID
     let taskId: UUID
@@ -242,7 +338,6 @@ struct TaskCompletion: Codable, Identifiable {
     let xpEarned: Int
     let streakBonus: Int
     let notes: String?
-    var quality: CompletionQuality?
     var profileId: UUID?  // nil = legacy data; set to completing member's profile id
 }
 

@@ -5,8 +5,6 @@ struct WelcomeView: View {
     @Environment(DataStore.self) private var dataStore
     @Environment(StoreManager.self) private var storeManager
     @State private var currentPageIndex = 0
-    @State private var isCompletingStarterTask = false
-    @State private var starterXPMessage: String?
     @State private var showProUpgrade = false
     @State private var selectedCategories: Set<TaskCategory> = Set(TaskCategory.allCases)
     @State private var inviteError: String?
@@ -28,7 +26,7 @@ struct WelcomeView: View {
 
     private enum Page {
         case welcome, howItWorks, categories, nameHousehold,
-             pickRooms, proPitch, invite, starterTask
+             pickRooms, proPitch, invite
     }
 
     private var pages: [Page] {
@@ -37,7 +35,6 @@ struct WelcomeView: View {
             .pickRooms, .proPitch,
         ]
         if Features.cloudKitSharing { result.append(.invite) }
-        result.append(.starterTask)
         return result
     }
 
@@ -93,14 +90,7 @@ struct WelcomeView: View {
                 icon: "person.crop.circle.badge.plus", color: Theme.accent,
                 title: "Invite Your Household",
                 subtitle: "Share a link so the people you live with can join on their own device. They'll see the same tasks and compete on the leaderboard.",
-                primaryButtonTitle: "Next"
-            )
-        case .starterTask:
-            return PageMeta(
-                icon: "sparkles", color: Theme.successGreen,
-                title: "Start Small",
-                subtitle: "Your first quest is quick. Finish it once and instantly see the XP you earned.",
-                primaryButtonTitle: "Start My Day"
+                primaryButtonTitle: inviteButtonTitle
             )
         }
     }
@@ -114,11 +104,6 @@ struct WelcomeView: View {
     }
 
     private var page: PageMeta { meta(for: currentPage) }
-
-    private var starterTask: HouseholdTask? {
-        dataStore.tasks.first { $0.name == "Wipe the counters" }
-            ?? dataStore.activeTasks.first
-    }
 
     // MARK: - Body
 
@@ -226,7 +211,6 @@ struct WelcomeView: View {
         case .pickRooms: roomPickerContent
         case .proPitch: proPitchContent
         case .invite: inviteContent
-        case .starterTask: starterTaskContent
         default: EmptyView()
         }
     }
@@ -294,25 +278,43 @@ struct WelcomeView: View {
         return LazyVGrid(columns: columns, spacing: 10) {
             ForEach(TaskCategory.allCases) { category in
                 let selected = selectedCategories.contains(category)
+                let color = Theme.categoryColor(category)
                 Button {
                     if selected { selectedCategories.remove(category) }
                     else { selectedCategories.insert(category) }
                 } label: {
-                    VStack(spacing: 6) {
-                        Image(systemName: category.icon)
-                            .font(.title3)
-                            .foregroundStyle(selected ? .white : Theme.categoryColor(category))
-                        Text(category.rawValue)
-                            .font(.caption2.weight(.semibold))
-                            .multilineTextAlignment(.center)
-                            .foregroundStyle(selected ? .white : .primary)
+                    ZStack(alignment: .topTrailing) {
+                        VStack(spacing: 6) {
+                            Image(systemName: category.icon)
+                                .font(.title3)
+                                .foregroundStyle(selected ? .white : .secondary)
+                            Text(category.rawValue)
+                                .font(.caption2.weight(.semibold))
+                                .multilineTextAlignment(.center)
+                                .foregroundStyle(selected ? .white : .secondary)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                        .background {
+                            RoundedRectangle(cornerRadius: 10)
+                                .fill(selected ? color : Color.secondary.opacity(0.08))
+                        }
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 10)
+                                .strokeBorder(
+                                    selected ? Color.clear : Color.secondary.opacity(0.35),
+                                    style: StrokeStyle(lineWidth: 1, dash: selected ? [] : [4, 3])
+                                )
+                        }
+                        .opacity(selected ? 1.0 : 0.55)
+
+                        if selected {
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.caption)
+                                .foregroundStyle(.white, color)
+                                .padding(4)
+                        }
                     }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 10)
-                    .background(
-                        selected ? Theme.categoryColor(category) : Color.secondary.opacity(0.10),
-                        in: RoundedRectangle(cornerRadius: 10)
-                    )
                 }
                 .buttonStyle(.plain)
             }
@@ -359,75 +361,22 @@ struct WelcomeView: View {
 
     @ViewBuilder
     private var inviteContent: some View {
-        VStack(spacing: 12) {
-            Button {
-                Task { await presentShareSheet() }
-            } label: {
-                HStack {
-                    if isGeneratingInvite {
-                        ProgressView()
-                    } else {
-                        Image(systemName: hasSentInvite ? "checkmark.circle.fill" : "person.crop.circle.badge.plus")
-                    }
-                    Text(inviteButtonTitle).fontWeight(.semibold)
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 12)
-                .background(
-                    (hasSentInvite ? Theme.successGreen.opacity(0.15) : Color.secondary.opacity(0.12)),
-                    in: RoundedRectangle(cornerRadius: 12)
-                )
-            }
-            .buttonStyle(.plain)
-            .disabled(isGeneratingInvite)
-            if let inviteError {
-                Text(inviteError)
-                    .font(.caption)
-                    .foregroundStyle(.red)
-            }
+        if let inviteError {
+            Text(inviteError)
+                .font(.caption)
+                .foregroundStyle(.red)
+                .multilineTextAlignment(.center)
+        } else if hasSentInvite {
+            Label("Invite sent", systemImage: "checkmark.circle.fill")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(Theme.successGreen)
         }
     }
 
     private var inviteButtonTitle: String {
         if isGeneratingInvite { return "Preparing…" }
-        if hasSentInvite { return "Invite sent — send another?" }
+        if hasSentInvite { return "Send another invite" }
         return "Pick someone to invite"
-    }
-
-    private var starterTaskContent: some View {
-        VStack(spacing: 12) {
-            Button {
-                completeStarterTask()
-            } label: {
-                HStack {
-                    if isCompletingStarterTask {
-                        ProgressView()
-                    } else {
-                        Image(systemName: starterXPMessage == nil ? "sparkles" : "checkmark.circle.fill")
-                    }
-                    Text(starterXPMessage == nil ? starterButtonTitle : "Starter task complete")
-                        .fontWeight(.semibold)
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 12)
-                .background(Color.secondary.opacity(0.12), in: RoundedRectangle(cornerRadius: 14))
-            }
-            .buttonStyle(.plain)
-            .disabled(isCompletingStarterTask || starterXPMessage != nil)
-
-            if let starterXPMessage {
-                Text(starterXPMessage)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(Theme.successGreen)
-            }
-        }
-    }
-
-    private var starterButtonTitle: String {
-        if let task = starterTask {
-            return "Complete: \(task.name)"
-        }
-        return "Mark starter done"
     }
 
     // MARK: - Navigation logic
@@ -435,46 +384,47 @@ struct WelcomeView: View {
     private func handlePrimaryAction() {
         switch currentPage {
         case .nameHousehold:
-            // The household was created with a default name at first launch,
-            // before the user saw this screen. Push the entered name onto it
-            // so the header and Settings reflect their choice.
             let entered = householdName
             Task {
                 await dataStore.renameHousehold(dataStore.activeHouseholdId, to: entered)
-                advance()
+                advanceOrComplete()
             }
         case .pickRooms:
-            // Await the filter so the starter-task step sees the final
-            // task list — otherwise a fast tapper could hit the starter
-            // button before the save completes.
             Task {
                 await dataStore.filterTasks(toCategories: selectedCategories)
-                advance()
+                advanceOrComplete()
             }
         case .proPitch:
             if storeManager.isPro {
-                advance()
+                advanceOrComplete()
             } else {
                 Task {
                     await storeManager.purchase()
-                    if storeManager.isPro { advance() }
+                    if storeManager.isPro { advanceOrComplete() }
                 }
             }
-        case .starterTask:
-            onComplete()
+        case .invite:
+            Task { await presentShareSheet() }
         default:
-            if currentPageIndex == pages.count - 1 { onComplete() }
-            else { advance() }
+            advanceOrComplete()
         }
     }
 
-    private func advance() {
-        withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
-            currentPageIndex += 1
+    private func advanceOrComplete() {
+        if currentPageIndex >= pages.count - 1 {
+            onComplete()
+        } else {
+            withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
+                currentPageIndex += 1
+            }
         }
     }
 
     private func handleSecondaryAction() {
+        if currentPage == .invite {
+            advanceOrComplete()
+            return
+        }
         if currentPageIndex > 0 {
             withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
                 currentPageIndex -= 1
@@ -485,8 +435,6 @@ struct WelcomeView: View {
     }
 
     private var secondaryLabel: String {
-        // Allow skipping the invite step entirely — cross-device invites are
-        // optional and the user can do it later from Households.
         if currentPage == .invite { return hasSentInvite ? "Done, Next" : "Skip for now" }
         return currentPageIndex > 0 ? "Back" : "Skip"
     }
@@ -499,7 +447,7 @@ struct WelcomeView: View {
             // product hasn't loaded (e.g. offline) the primary still routes
             // through to purchase() which will surface its own error.
             return storeManager.isPurchasing
-        case .starterTask: return starterXPMessage == nil
+        case .invite: return isGeneratingInvite
         default: return false
         }
     }
@@ -520,20 +468,4 @@ struct WelcomeView: View {
         }
     }
 
-    private func completeStarterTask() {
-        guard let task = starterTask else {
-            starterXPMessage = "Nice! Your starter task is ready on Home."
-            return
-        }
-
-        let beforeXP = dataStore.profile.totalXP
-        isCompletingStarterTask = true
-
-        Task {
-            await dataStore.completeTask(task)
-            let gained = max(dataStore.profile.totalXP - beforeXP, task.xpReward)
-            starterXPMessage = "+\(gained) XP earned for finishing \"\(task.name)\""
-            isCompletingStarterTask = false
-        }
-    }
 }

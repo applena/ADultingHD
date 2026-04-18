@@ -25,6 +25,10 @@ struct TaskDetailView: View {
                 headerCard(task)
                 detailsCard(task)
 
+                if !task.checklist.isEmpty {
+                    checklistCard(task)
+                }
+
                 if !task.supplies.isEmpty {
                     suppliesCard(task)
                 }
@@ -116,10 +120,21 @@ struct TaskDetailView: View {
 
     // MARK: - Details
 
+    private func frequencyDisplay(for task: HouseholdTask) -> String {
+        if let summary = task.scheduleSummary {
+            return "\(task.frequency.rawValue) · \(summary)"
+        }
+        return task.frequency.rawValue
+    }
+
     private func detailsCard(_ task: HouseholdTask) -> some View {
         LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
             Button { showFrequencyPicker = true } label: {
-                DetailItem(label: "Frequency", value: task.frequency.rawValue, icon: task.frequency.icon)
+                DetailItem(
+                    label: "Frequency",
+                    value: frequencyDisplay(for: task),
+                    icon: task.frequency.icon
+                )
             }
             .buttonStyle(.plain)
 
@@ -136,6 +151,35 @@ struct TaskDetailView: View {
         .sheet(isPresented: $showFrequencyPicker) {
             FrequencyPickerSheet(task: task)
         }
+    }
+
+    // MARK: - Checklist
+
+    private func checklistCard(_ task: HouseholdTask) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label("Checklist", systemImage: "checklist")
+                .font(.headline)
+
+            ForEach(Array(task.checklist.enumerated()), id: \.element.id) { idx, step in
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(alignment: .top, spacing: 8) {
+                        Text("\(idx + 1).")
+                            .font(.subheadline.monospacedDigit())
+                            .foregroundStyle(.secondary)
+                        Text(step.text)
+                            .font(.subheadline)
+                    }
+                    if !step.instructions.isEmpty {
+                        Text(step.instructions)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .padding(.leading, 24)
+                    }
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .card()
     }
 
     // MARK: - Supplies
@@ -189,11 +233,6 @@ struct TaskDetailView: View {
                         Text(completion.completedAt, style: .time)
                             .font(.caption)
                             .foregroundStyle(.secondary)
-                        if let quality = completion.quality {
-                            Label(quality.label, systemImage: quality.icon)
-                                .font(.caption2)
-                                .foregroundStyle(quality == .deep ? Theme.levelPurple : .secondary)
-                        }
                         Spacer()
                         Text("+\(completion.xpEarned + completion.streakBonus) XP")
                             .font(.caption.bold())
@@ -219,41 +258,38 @@ struct FrequencyPickerSheet: View {
     @Environment(\.dismiss) private var dismiss
     let task: HouseholdTask
     @State private var selected: TaskFrequency
+    @State private var weekdays: Set<Int>
+    @State private var dayOfMonth: Int
+    @State private var month: Int
 
     init(task: HouseholdTask) {
         self.task = task
         self._selected = State(initialValue: task.frequency)
+        self._weekdays = State(initialValue: Set(task.scheduledWeekdays))
+        self._dayOfMonth = State(initialValue: task.scheduledDayOfMonth ?? 1)
+        self._month = State(initialValue: task.scheduledMonth ?? 1)
     }
 
     var body: some View {
         NavigationStack {
-            List {
-                ForEach(TaskFrequency.allCases) { freq in
-                    Button {
-                        selected = freq
-                    } label: {
-                        HStack(spacing: 12) {
-                            Image(systemName: freq.icon)
-                                .foregroundStyle(Theme.categoryColor(.general))
-                                .frame(width: 24)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(freq.rawValue)
-                                    .font(.body)
-                                Text("Every \(freq.days) day\(freq.days == 1 ? "" : "s")")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            if freq == selected {
-                                Image(systemName: "checkmark")
-                                    .foregroundStyle(Theme.successGreen)
-                                    .fontWeight(.semibold)
-                            }
+            Form {
+                Section("Frequency") {
+                    Picker("Frequency", selection: $selected) {
+                        ForEach(TaskFrequency.allCases) { freq in
+                            Label(freq.rawValue, systemImage: freq.icon).tag(freq)
                         }
-                        .contentShape(Rectangle())
                     }
-                    .buttonStyle(.plain)
+                    .pickerStyle(.inline)
+                    .labelsHidden()
+                    .onChange(of: selected) { _, new in applyDefaults(for: new) }
                 }
+
+                SchedulePickerSection(
+                    frequency: selected,
+                    weekdays: $weekdays,
+                    dayOfMonth: $dayOfMonth,
+                    month: $month
+                )
             }
             .navigationTitle("Frequency")
             #if os(iOS)
@@ -264,19 +300,48 @@ struct FrequencyPickerSheet: View {
                     Button("Cancel") { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") {
-                        var updated = task
-                        updated.frequency = selected
-                        Task { await dataStore.updateTask(updated) }
-                        dismiss()
-                    }
-                    .disabled(selected == task.frequency)
+                    Button("Save") { saveAndDismiss() }
+                        .disabled(!isValid || isUnchanged)
                 }
             }
         }
-        #if os(iOS)
-        .presentationDetents([.medium])
-        #endif
+    }
+
+    private var isValid: Bool {
+        selected.weekdayCount == 0 || weekdays.count == selected.weekdayCount
+    }
+
+    private var isUnchanged: Bool {
+        selected == task.frequency
+            && Array(weekdays).sorted() == task.scheduledWeekdays.sorted()
+            && (!selected.usesDayOfMonth || dayOfMonth == (task.scheduledDayOfMonth ?? -1))
+            && (selected != .yearly || month == (task.scheduledMonth ?? -1))
+    }
+
+    private func applyDefaults(for freq: TaskFrequency) {
+        if freq.weekdayCount > 0 && weekdays.count != freq.weekdayCount {
+            weekdays = freq.weekdayCount == 2 ? [2, 5] : [2]
+        }
+    }
+
+    private func saveAndDismiss() {
+        var updated = task
+        updated.frequency = selected
+        if selected.weekdayCount > 0 {
+            updated.scheduledWeekdays = weekdays.sorted()
+            updated.scheduledDayOfMonth = nil
+            updated.scheduledMonth = nil
+        } else if selected.usesDayOfMonth {
+            updated.scheduledWeekdays = []
+            updated.scheduledDayOfMonth = dayOfMonth
+            updated.scheduledMonth = selected == .yearly ? month : nil
+        } else {
+            updated.scheduledWeekdays = []
+            updated.scheduledDayOfMonth = nil
+            updated.scheduledMonth = nil
+        }
+        Task { await dataStore.updateTask(updated) }
+        dismiss()
     }
 }
 

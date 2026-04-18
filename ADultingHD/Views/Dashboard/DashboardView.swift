@@ -367,12 +367,12 @@ struct DueTaskRow: View {
 
 struct CompleteTaskSheet: View {
     @Environment(DataStore.self) private var dataStore
-    @Environment(StoreManager.self) private var storeManager
     @Environment(\.dismiss) private var dismiss
     let task: HouseholdTask
     @State private var showDescription = false
     @State private var notes = ""
-    @State private var selectedQuality: CompletionQuality = .normal
+    @State private var checkedStepIds: Set<UUID> = []
+    @State private var expandedStepId: UUID?
 
     var body: some View {
         NavigationStack {
@@ -417,33 +417,28 @@ struct CompleteTaskSheet: View {
                     }
                 }
 
+                if !task.checklist.isEmpty {
+                    Section {
+                        ForEach(task.checklist) { step in
+                            checklistRow(step)
+                        }
+                    } header: {
+                        HStack {
+                            Text("Checklist")
+                            Spacer()
+                            Text("\(checkedStepIds.count)/\(task.checklist.count)")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+
                 if !task.supplies.isEmpty {
                     Section("Supplies needed") {
                         ForEach(task.supplies, id: \.self) { supply in
                             Label(supply, systemImage: "circle.fill")
                                 .font(.subheadline)
                                 .labelStyle(SupplyLabelStyle())
-                        }
-                    }
-                }
-
-                if storeManager.isPro {
-                    Section("Quality") {
-                        Picker("Completion Quality", selection: $selectedQuality) {
-                            ForEach(CompletionQuality.allCases) { quality in
-                                Label(quality.label, systemImage: quality.icon)
-                                    .tag(quality)
-                            }
-                        }
-                        .pickerStyle(.segmented)
-
-                        HStack {
-                            Text("XP multiplier:")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                            Text("\(selectedQuality.xpMultiplier, specifier: "%.2f")x")
-                                .font(.caption.bold())
-                                .foregroundStyle(Theme.xpGold)
                         }
                     }
                 }
@@ -464,14 +459,61 @@ struct CompleteTaskSheet: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") {
                         Task {
-                            let quality = storeManager.isPro ? selectedQuality : .normal
-                            await dataStore.completeTask(task, notes: notes.isEmpty ? nil : notes, quality: quality)
+                            await dataStore.completeTask(task, notes: notes.isEmpty ? nil : notes)
                             dismiss()
                         }
                     }
                 }
             }
         }
+    }
+
+    private func checklistRow(_ step: ChecklistItem) -> some View {
+        let checked = checkedStepIds.contains(step.id)
+        let expanded = expandedStepId == step.id
+        let hasInstructions = !step.instructions.isEmpty
+        return VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 10) {
+                Button {
+                    toggleChecked(step.id)
+                } label: {
+                    Image(systemName: checked ? "checkmark.circle.fill" : "circle")
+                        .font(.title3)
+                        .foregroundStyle(checked ? Theme.successGreen : .secondary)
+                }
+                .buttonStyle(.plain)
+
+                Text(step.text)
+                    .font(.subheadline)
+                    .strikethrough(checked, color: .secondary)
+                    .foregroundStyle(checked ? .secondary : .primary)
+
+                Spacer()
+
+                if hasInstructions {
+                    Button {
+                        expandedStepId = expanded ? nil : step.id
+                    } label: {
+                        Image(systemName: expanded ? "chevron.up" : "info.circle")
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            if expanded && hasInstructions {
+                Text(step.instructions)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(.leading, 32)
+            }
+        }
+        .contentShape(Rectangle())
+        .onTapGesture { toggleChecked(step.id) }
+    }
+
+    private func toggleChecked(_ id: UUID) {
+        if checkedStepIds.contains(id) { checkedStepIds.remove(id) }
+        else { checkedStepIds.insert(id) }
     }
 }
 

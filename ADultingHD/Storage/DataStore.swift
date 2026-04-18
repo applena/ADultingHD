@@ -296,10 +296,9 @@ final class DataStore {
 
     // MARK: - Complete Task
 
-    func completeTask(_ task: HouseholdTask, notes: String? = nil, quality: CompletionQuality = .normal) async {
+    func completeTask(_ task: HouseholdTask, notes: String? = nil) async {
         let streakBonus = profile.currentStreak > 0 ? min(profile.currentStreak * 2, 50) : 0
-        let baseXP = task.xpReward
-        let xpEarned = Int(Double(baseXP) * quality.xpMultiplier)
+        let xpEarned = task.xpReward
 
         let completion = TaskCompletion(
             id: UUID(),
@@ -309,7 +308,6 @@ final class DataStore {
             xpEarned: xpEarned,
             streakBonus: streakBonus,
             notes: notes,
-            quality: quality,
             profileId: profile.id
         )
 

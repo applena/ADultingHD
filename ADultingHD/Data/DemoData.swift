@@ -107,15 +107,13 @@ enum DemoData {
                 components.minute = (dayOffset * 7 + i * 13) % 60
                 let completedAt = calendar.date(from: components) ?? day
 
-                let quality: CompletionQuality = i == 0 ? .deep : (i % 2 == 0 ? .normal : .quick)
-                let baseXP = task.xpReward
-                let xpEarned = Int(Double(baseXP) * quality.xpMultiplier)
+                let xpEarned = task.xpReward
                 let streakBonus = dayOffset < 14 ? min(dayOffset * 2, 50) : 0
 
                 completions.append(TaskCompletion(
                     id: UUID(), taskId: task.id, taskName: task.name,
                     completedAt: completedAt, xpEarned: xpEarned, streakBonus: streakBonus,
-                    notes: nil, quality: quality
+                    notes: nil
                 ))
             }
         }
