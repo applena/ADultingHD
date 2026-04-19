@@ -187,6 +187,52 @@ TestFlight-internal testers on the owner's device will still be able
 to create shares and see the UICloudSharingController sheet correctly.
 The block is only on the recipient's "accept" step.
 
+## Testing the sharing flow locally
+
+### Automated tests (one simulator, Development CloudKit)
+
+`ADultingHDTests/CloudKitIntegrationTests.swift` covers the owner side:
+zone setup, share creation, idempotency, and recipient-side metadata fetch.
+Enable with an env var so CI skips them:
+
+```bash
+CLOUDKIT_INTEGRATION_TESTS=1 xcodebuild test \
+    -scheme ADultingHD_iOS \
+    -destination 'platform=iOS Simulator,name=iPhone 15 Pro' \
+    -only-testing ADultingHDTests_iOS/CloudKitIntegrationTests
+```
+
+`testShareURL_metadataFetchable` is the key regression test — it calls
+`CKFetchShareMetadataOperation` with the live share URL, which is exactly
+what iOS does when a recipient taps the link. If this test passes in
+Development, the schema is correct and the recipient-side routing will work
+in Production once the App Store submission gate is cleared.
+
+### Two-simulator cross-account test
+
+The full accept flow — two different Apple IDs, one inviting the other —
+cannot be automated in a single process because `CKShare.Metadata` has no
+public initializer and `userDidAcceptCloudKitShareWith` is triggered by
+Apple's OS-level URL router, not by app code.
+
+The semi-automated script at `scripts/test-sharing.sh` handles the
+mechanical parts: it builds a signed app, installs it on two simulators,
+monitors Simulator A's logs for the share URL, and fires it at Simulator B
+via `xcrun simctl openurl` — which triggers iOS's native "Join Household?"
+sheet and then calls `userDidAcceptCloudKitShareWith` in the app.
+
+```bash
+./scripts/test-sharing.sh
+
+# Override simulator names if needed:
+SIM_A_NAME="iPhone 16 Pro" SIM_B_NAME="iPhone 16" ./scripts/test-sharing.sh
+```
+
+See [`docs/test-accounts.md`](test-accounts.md) for one-time setup:
+creating two test Apple IDs and signing them into the simulators.
+
+Run this test before any release that touches the sharing flow.
+
 ## Related skills (Claudeception library)
 
 Problems that have bitten this codebase and are now captured as reusable
@@ -212,3 +258,6 @@ skills in `~/.claude/skills/`:
   from the "CloudKit Sharing" section
 - [`README.md`](../README.md) — user-facing project overview
 - [`deploy.sh`](../deploy.sh) — the re-sign logic this doc describes
+- [`scripts/test-sharing.sh`](../scripts/test-sharing.sh) — two-simulator cross-account test runner
+- [`docs/test-accounts.md`](test-accounts.md) — setting up test Apple IDs for the two-simulator test
+- `ADultingHDTests/CloudKitIntegrationTests.swift` — automated one-simulator tests

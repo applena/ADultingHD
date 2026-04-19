@@ -9,7 +9,7 @@ private let sharedJSONDecoder = JSONDecoder()
 
 // MARK: - CloudKit record type names
 
-private enum RecordType {
+enum RecordType {
     static let task       = "HouseholdTask"
     static let completion = "TaskCompletion"
     static let profile    = "MemberProfile"

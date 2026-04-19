@@ -1,0 +1,204 @@
+import XCTest
+import CloudKit
+@testable import ADultingHD
+
+// CKRecord ↔ model round-trip tests. These create CKRecord objects entirely
+// in-memory — no CKContainer, no network — so they run in any build
+// environment including unsigned CI builds (CODE_SIGNING_ALLOWED=NO).
+final class CloudKitRecordTests: XCTestCase {
+
+    private let zone = CKRecordZone(zoneName: "TestZone")
+
+    // MARK: - HouseholdTask
+
+    func testTaskRoundTrip_minimal() {
+        let task = HouseholdTask(
+            id: UUID(), name: "Wash dishes", description: "Clean all dishes",
+            category: .kitchen, frequency: .daily, estimatedMinutes: 20,
+            difficulty: .easy, supplies: [], isActive: true
+        )
+        let record = task.toCKRecord(zone: zone)
+        guard let decoded = HouseholdTask(from: record) else {
+            XCTFail("decode returned nil"); return
+        }
+        XCTAssertEqual(decoded.id, task.id)
+        XCTAssertEqual(decoded.name, task.name)
+        XCTAssertEqual(decoded.description, task.description)
+        XCTAssertEqual(decoded.category, task.category)
+        XCTAssertEqual(decoded.frequency, task.frequency)
+        XCTAssertEqual(decoded.estimatedMinutes, task.estimatedMinutes)
+        XCTAssertEqual(decoded.difficulty, task.difficulty)
+        XCTAssertEqual(decoded.isActive, true)
+        XCTAssertNil(decoded.lastCompleted)
+        XCTAssertNil(decoded.defaultAssigneeId)
+        XCTAssertTrue(decoded.scheduledWeekdays.isEmpty)
+        XCTAssertTrue(decoded.checklist.isEmpty)
+    }
+
+    func testTaskRoundTrip_allOptionalFields() {
+        let assigneeId = UUID()
+        let checklist = [
+            ChecklistItem(id: UUID(), text: "Step 1", instructions: "Do this"),
+            ChecklistItem(id: UUID(), text: "Step 2", instructions: "Then that"),
+        ]
+        var task = HouseholdTask(
+            id: UUID(), name: "Mow lawn", description: "Cut the grass",
+            category: .outdoor, frequency: .weekly, estimatedMinutes: 45,
+            difficulty: .medium, supplies: ["Fuel", "Ear protection"],
+            isActive: false, lastCompleted: Date(timeIntervalSince1970: 1_700_000_000)
+        )
+        task.defaultAssigneeId = assigneeId
+        task.scheduledWeekdays = [2, 6]
+        task.checklist = checklist
+
+        let record = task.toCKRecord(zone: zone)
+        guard let decoded = HouseholdTask(from: record) else {
+            XCTFail("decode returned nil"); return
+        }
+        XCTAssertEqual(decoded.supplies, ["Fuel", "Ear protection"])
+        XCTAssertEqual(decoded.isActive, false)
+        XCTAssertNotNil(decoded.lastCompleted)
+        XCTAssertEqual(decoded.defaultAssigneeId, assigneeId)
+        XCTAssertEqual(decoded.scheduledWeekdays, [2, 6])
+        XCTAssertEqual(decoded.checklist.count, 2)
+        XCTAssertEqual(decoded.checklist[0].text, "Step 1")
+        XCTAssertEqual(decoded.checklist[1].instructions, "Then that")
+    }
+
+    func testTaskRoundTrip_monthlyScheduledDay() {
+        var task = HouseholdTask(
+            id: UUID(), name: "Pay bills", description: "",
+            category: .office, frequency: .monthly, estimatedMinutes: 30,
+            difficulty: .easy, supplies: [], isActive: true
+        )
+        task.scheduledDayOfMonth = 15
+        let decoded = HouseholdTask(from: task.toCKRecord(zone: zone))
+        XCTAssertEqual(decoded?.scheduledDayOfMonth, 15)
+        XCTAssertNil(decoded?.scheduledMonth)
+    }
+
+    func testTaskRoundTrip_yearlyScheduledDayAndMonth() {
+        var task = HouseholdTask(
+            id: UUID(), name: "Clean gutters", description: "",
+            category: .outdoor, frequency: .yearly, estimatedMinutes: 90,
+            difficulty: .hard, supplies: [], isActive: true
+        )
+        task.scheduledDayOfMonth = 1
+        task.scheduledMonth = 4
+        let decoded = HouseholdTask(from: task.toCKRecord(zone: zone))
+        XCTAssertEqual(decoded?.scheduledDayOfMonth, 1)
+        XCTAssertEqual(decoded?.scheduledMonth, 4)
+    }
+
+    func testTaskDecode_missingRequiredField_returnsNil() {
+        let record = CKRecord(
+            recordType: RecordType.task,
+            recordID: CKRecord.ID(recordName: UUID().uuidString, zoneID: zone.zoneID)
+        )
+        XCTAssertNil(HouseholdTask(from: record))
+    }
+
+    func testTaskRecordID_usesTaskUUID() {
+        let id = UUID()
+        let task = HouseholdTask(
+            id: id, name: "Test", description: "", category: .general,
+            frequency: .weekly, estimatedMinutes: 10, difficulty: .easy,
+            supplies: [], isActive: true
+        )
+        XCTAssertEqual(task.toCKRecord(zone: zone).recordID.recordName, id.uuidString)
+    }
+
+    // MARK: - TaskCompletion
+
+    func testCompletionRoundTrip() {
+        let profileId = UUID()
+        let completion = TaskCompletion(
+            id: UUID(), taskId: UUID(), taskName: "Vacuum living room",
+            completedAt: Date(timeIntervalSince1970: 1_700_000_000),
+            xpEarned: 25, streakBonus: 5, notes: "Did the stairs too",
+            profileId: profileId
+        )
+        let record = completion.toCKRecord(zone: zone)
+        guard let decoded = TaskCompletion(from: record) else {
+            XCTFail("decode returned nil"); return
+        }
+        XCTAssertEqual(decoded.id, completion.id)
+        XCTAssertEqual(decoded.taskId, completion.taskId)
+        XCTAssertEqual(decoded.taskName, completion.taskName)
+        XCTAssertEqual(decoded.completedAt, completion.completedAt)
+        XCTAssertEqual(decoded.xpEarned, completion.xpEarned)
+        XCTAssertEqual(decoded.streakBonus, completion.streakBonus)
+        XCTAssertEqual(decoded.notes, completion.notes)
+        XCTAssertEqual(decoded.profileId, profileId)
+    }
+
+    func testCompletionRoundTrip_nilOptionals() {
+        let completion = TaskCompletion(
+            id: UUID(), taskId: UUID(), taskName: "Take out trash",
+            completedAt: Date(), xpEarned: 10, streakBonus: 0,
+            notes: nil, profileId: nil
+        )
+        let decoded = TaskCompletion(from: completion.toCKRecord(zone: zone))
+        XCTAssertNotNil(decoded)
+        XCTAssertNil(decoded?.notes)
+        XCTAssertNil(decoded?.profileId)
+    }
+
+    func testCompletionRecordID_usesCompletionUUID() {
+        let id = UUID()
+        let completion = TaskCompletion(
+            id: id, taskId: UUID(), taskName: "Test", completedAt: Date(),
+            xpEarned: 10, streakBonus: 0, notes: nil, profileId: nil
+        )
+        XCTAssertEqual(completion.toCKRecord(zone: zone).recordID.recordName, id.uuidString)
+    }
+
+    // MARK: - UserProfile
+
+    func testProfileRoundTrip() {
+        var profile = UserProfile()
+        profile.id = UUID()
+        profile.name = "Alice"
+        profile.avatar = "cat"
+        profile.totalXP = 1500
+        profile.coins = 42
+        profile.currentStreak = 7
+        profile.longestStreak = 21
+        profile.totalTasksCompleted = 55
+        profile.joinDate = Date(timeIntervalSince1970: 1_600_000_000)
+        profile.lastActiveDate = Date(timeIntervalSince1970: 1_700_000_000)
+        profile.unlockedAchievements = ["first_task", "streak_7", "level_5"]
+
+        guard let decoded = UserProfile(from: profile.toCKRecord(zone: zone)) else {
+            XCTFail("decode returned nil"); return
+        }
+        XCTAssertEqual(decoded.id, profile.id)
+        XCTAssertEqual(decoded.name, profile.name)
+        XCTAssertEqual(decoded.avatar, profile.avatar)
+        XCTAssertEqual(decoded.totalXP, profile.totalXP)
+        XCTAssertEqual(decoded.coins, profile.coins)
+        XCTAssertEqual(decoded.currentStreak, profile.currentStreak)
+        XCTAssertEqual(decoded.longestStreak, profile.longestStreak)
+        XCTAssertEqual(decoded.totalTasksCompleted, profile.totalTasksCompleted)
+        XCTAssertEqual(decoded.unlockedAchievements, profile.unlockedAchievements)
+        XCTAssertNotNil(decoded.lastActiveDate)
+    }
+
+    func testProfileRoundTrip_nilLastActiveDate() {
+        var profile = UserProfile()
+        profile.id = UUID()
+        profile.name = "Bob"
+        profile.lastActiveDate = nil
+        let decoded = UserProfile(from: profile.toCKRecord(zone: zone))
+        XCTAssertNotNil(decoded)
+        XCTAssertNil(decoded?.lastActiveDate)
+    }
+
+    func testProfileDecode_missingRequiredFields_returnsNil() {
+        let record = CKRecord(
+            recordType: RecordType.profile,
+            recordID: CKRecord.ID(recordName: UUID().uuidString, zoneID: zone.zoneID)
+        )
+        XCTAssertNil(UserProfile(from: record))
+    }
+}
