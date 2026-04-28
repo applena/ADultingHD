@@ -5,6 +5,7 @@ struct ContentView: View {
     @AppStorage(PrefKey.hasCompletedOnboarding) private var hasCompletedOnboarding = false
 
     var body: some View {
+        @Bindable var bindable = dataStore
         Group {
             if !dataStore.isLoaded {
                 VStack(spacing: 12) {
@@ -32,6 +33,9 @@ struct ContentView: View {
                     dataStore.celebrationType = nil
                 })
             }
+        }
+        .sheet(item: $bindable.pendingNameClash) { clash in
+            NameClashSheet(clash: clash)
         }
     }
 }

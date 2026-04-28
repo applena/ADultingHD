@@ -27,6 +27,18 @@ final class DataStore {
     var celebrationType: CelebrationOverlay.CelebrationType?
     var householdActivityFeed: [HouseholdActivity] = []
 
+    /// Set after joining a shared household when the current profile's display
+    /// name collides with an existing member's name. The UI presents a sheet
+    /// to prompt for a unique name before leaderboards become ambiguous.
+    var pendingNameClash: NameClash?
+
+    struct NameClash: Identifiable, Equatable {
+        let id = UUID()
+        let householdName: String
+        let existingNames: [String]
+        let currentName: String
+    }
+
     private let dailyClearBonusXP = 25
     private let weeklyConsistencyBonusXP = 75
     private let monthlyConsistencyBonusXP = 150
@@ -514,6 +526,7 @@ final class DataStore {
         if isHouseholdSharingEnabled && ckSync.isAvailable {
             await ckSync.pushTasks(tasks)
             await ckSync.pushProfile(profile)
+            for completion in completions { await ckSync.pushCompletion(completion) }
         }
     }
 
@@ -689,9 +702,9 @@ final class DataStore {
     // MARK: - CloudKit Migration & Sync
 
     /// One-time migration: push existing JSON data to CloudKit on first launch.
-    private func migrateToCloudKitIfNeeded() async {
+    private func migrateToCloudKitIfNeeded(force: Bool = false) async {
         let key = PrefKey.ckMigrationDone
-        guard !UserDefaults.standard.bool(forKey: key) else { return }
+        guard force || !UserDefaults.standard.bool(forKey: key) else { return }
         logger.info("☁️ Migrating local data to CloudKit...")
         await ckSync.pushTasks(tasks)
         await ckSync.pushProfile(profile)
@@ -836,6 +849,7 @@ final class DataStore {
             logger.error("☁️ createHouseholdShare aborting — setup did not mark available. syncError=\(self.ckSync.syncError ?? "nil", privacy: .public)")
             throw CloudKitSyncError.iCloudUnavailable(status: ckSync.syncError ?? "unknown")
         }
+        await ckSync.setupSubscriptions()
         // Create the share FIRST so the user gets the invite URL without
         // waiting for the full task/profile/completion migration — that
         // migration is a one-shot that can push dozens of records serially
@@ -844,7 +858,7 @@ final class DataStore {
         logger.info("☁️ createHouseholdShare: createOrFetchShare...")
         let share = try await ckSync.createOrFetchShare()
         Task { [weak self] in
-            await self?.migrateToCloudKitIfNeeded()
+            await self?.migrateToCloudKitIfNeeded(force: true)
         }
         return share.url
     }
@@ -864,9 +878,10 @@ final class DataStore {
         guard ckSync.isAvailable else {
             throw CloudKitSyncError.iCloudUnavailable(status: ckSync.syncError ?? "unknown")
         }
+        await ckSync.setupSubscriptions()
         let share = try await ckSync.createOrFetchShare()
         Task { [weak self] in
-            await self?.migrateToCloudKitIfNeeded()
+            await self?.migrateToCloudKitIfNeeded(force: true)
         }
         return (share, ckSync.cloudContainer)
     }
@@ -936,11 +951,48 @@ final class DataStore {
             UserDefaults.standard.set(true, forKey: PrefKey.householdSharingEnabled)
             AppDelegate.registerForRemoteNotifications()
             await ckSync.setup()
+            await ckSync.setupSubscriptions()
             await pullFromCloudKit()
+            Task { [weak self] in
+                await self?.migrateToCloudKitIfNeeded(force: true)
+            }
+            detectNameClashInJoinedHouseholds()
             logger.info("🏠 Joined shared household via CKShare")
         } catch {
             logger.error("🏠 Failed to accept share: \(error.localizedDescription)")
         }
+    }
+
+    /// After joining a shared household, surface a UI prompt if the current
+    /// profile name matches an existing member's. Keeps leaderboards and
+    /// activity attribution unambiguous.
+    private func detectNameClashInJoinedHouseholds() {
+        let myName = profile.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !myName.isEmpty else { return }
+        for household in householdIndex.households where !household.ownerIsCurrentUser {
+            let others = household.members.filter { $0.id != profile.id }
+            let clash = others.contains { $0.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == myName }
+            if clash {
+                pendingNameClash = NameClash(
+                    householdName: household.name,
+                    existingNames: others.map { $0.name },
+                    currentName: profile.name
+                )
+                return
+            }
+        }
+    }
+
+    /// Resolve the pending name clash by renaming the active profile to a
+    /// unique value. No-op when the new name still collides.
+    func resolveNameClash(with newName: String) async {
+        let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, let clash = pendingNameClash else { return }
+        let taken = Set(clash.existingNames.map { $0.lowercased() })
+        guard !taken.contains(trimmed.lowercased()) else { return }
+        profile.name = trimmed
+        pendingNameClash = nil
+        await save()
     }
 
     // MARK: - Export/Import

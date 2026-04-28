@@ -56,8 +56,13 @@ final class CloudKitSync: ObservableObject {
     var cloudContainer: CKContainer { container }
 
     private var zone: CKRecordZone { CKRecordZone(zoneName: ZoneName.household) }
+    private var activeZoneID: CKRecordZone.ID { acceptedSharedZoneID ?? zone.zoneID }
+    private var activeRootRecordID: CKRecord.ID {
+        CKRecord.ID(recordName: RootRecordName.household, zoneID: activeZoneID)
+    }
 
     private var subscriptionsConfigured = false
+    private var acceptedSharedZoneID: CKRecordZone.ID?
 
     private init() {}
 
@@ -72,7 +77,9 @@ final class CloudKitSync: ObservableObject {
                 isAvailable = false
                 return
             }
-            try await createZoneIfNeeded()
+            if acceptedSharedZoneID == nil {
+                try await createZoneIfNeeded()
+            }
             // Only mark available after the zone exists — createOrFetchShare
             // relies on writes landing in HouseholdZone, and a half-setup
             // state where accountStatus passes but zone creation failed
@@ -101,7 +108,7 @@ final class CloudKitSync: ObservableObject {
             let db = try await resolveDatabase()
             let existing = try await db.fetchAllSubscriptions()
             if !existing.contains(where: { $0.subscriptionID == subscriptionID }) {
-                let sub = CKRecordZoneSubscription(zoneID: zone.zoneID, subscriptionID: subscriptionID)
+                let sub = CKRecordZoneSubscription(zoneID: activeZoneID, subscriptionID: subscriptionID)
                 let info = CKSubscription.NotificationInfo()
                 info.shouldSendContentAvailable = true
                 sub.notificationInfo = info
@@ -118,19 +125,19 @@ final class CloudKitSync: ObservableObject {
 
     func pushTasks(_ tasks: [HouseholdTask]) async {
         guard isAvailable else { return }
-        let records = tasks.map { $0.toCKRecord(zone: zone) }
+        let records = tasks.map { $0.toCKRecord(zoneID: activeZoneID, parentRecordID: activeRootRecordID) }
         await saveRecords(records)
     }
 
     func pushProfile(_ profile: UserProfile) async {
         guard isAvailable else { return }
-        let record = profile.toCKRecord(zone: zone)
+        let record = profile.toCKRecord(zoneID: activeZoneID, parentRecordID: activeRootRecordID)
         await saveRecords([record])
     }
 
     func pushCompletion(_ completion: TaskCompletion) async {
         guard isAvailable else { return }
-        let record = completion.toCKRecord(zone: zone)
+        let record = completion.toCKRecord(zoneID: activeZoneID, parentRecordID: activeRootRecordID)
         await saveRecords([record])
     }
 
@@ -178,7 +185,7 @@ final class CloudKitSync: ObservableObject {
 
         repeat {
             let op: CKQueryOperation = cursor.map(CKQueryOperation.init) ?? CKQueryOperation(query: query)
-            op.zoneID = zone.zoneID
+            op.zoneID = activeZoneID
             op.resultsLimit = CKQueryOperation.maximumResults
             let (records, nextCursor) = try await withCheckedThrowingContinuation { cont in
                 var batch: [CKRecord] = []
@@ -286,6 +293,8 @@ final class CloudKitSync: ObservableObject {
 
     func acceptShare(from metadata: CKShare.Metadata) async throws {
         try await container.accept(metadata)
+        acceptedSharedZoneID = metadata.share.recordID.zoneID
+        subscriptionsConfigured = false
         logger.info("☁️ Accepted household share")
     }
 
@@ -293,6 +302,9 @@ final class CloudKitSync: ObservableObject {
 
     /// Returns the private DB if we own the zone, or shared DB if we joined someone else's household
     private func resolveDatabase() async throws -> CKDatabase {
+        if acceptedSharedZoneID != nil {
+            return sharedDB
+        }
         _ = try? await container.userRecordID()
         // Simple heuristic: if zone exists in privateDB, use it; otherwise use sharedDB
         let zones = try await privateDB.allRecordZones()
@@ -419,8 +431,15 @@ private extension CKDatabase {
 
 extension HouseholdTask {
     func toCKRecord(zone: CKRecordZone) -> CKRecord {
-        let recordID = CKRecord.ID(recordName: id.uuidString, zoneID: zone.zoneID)
+        toCKRecord(zoneID: zone.zoneID)
+    }
+
+    func toCKRecord(zoneID: CKRecordZone.ID, parentRecordID: CKRecord.ID? = nil) -> CKRecord {
+        let recordID = CKRecord.ID(recordName: id.uuidString, zoneID: zoneID)
         let r = CKRecord(recordType: RecordType.task, recordID: recordID)
+        if let parentRecordID {
+            r.parent = CKRecord.Reference(recordID: parentRecordID, action: .none)
+        }
         r["name"]             = name as CKRecordValue
         r["taskDescription"]  = description as CKRecordValue
         r["category"]         = category.rawValue as CKRecordValue
@@ -476,8 +495,15 @@ extension HouseholdTask {
 
 extension TaskCompletion {
     func toCKRecord(zone: CKRecordZone) -> CKRecord {
-        let recordID = CKRecord.ID(recordName: id.uuidString, zoneID: zone.zoneID)
+        toCKRecord(zoneID: zone.zoneID)
+    }
+
+    func toCKRecord(zoneID: CKRecordZone.ID, parentRecordID: CKRecord.ID? = nil) -> CKRecord {
+        let recordID = CKRecord.ID(recordName: id.uuidString, zoneID: zoneID)
         let r = CKRecord(recordType: RecordType.completion, recordID: recordID)
+        if let parentRecordID {
+            r.parent = CKRecord.Reference(recordID: parentRecordID, action: .none)
+        }
         r["taskId"]      = taskId.uuidString as CKRecordValue
         r["taskName"]    = taskName as CKRecordValue
         r["completedAt"] = completedAt as CKRecordValue
@@ -513,8 +539,15 @@ extension TaskCompletion {
 
 extension UserProfile {
     func toCKRecord(zone: CKRecordZone) -> CKRecord {
-        let recordID = CKRecord.ID(recordName: id.uuidString, zoneID: zone.zoneID)
+        toCKRecord(zoneID: zone.zoneID)
+    }
+
+    func toCKRecord(zoneID: CKRecordZone.ID, parentRecordID: CKRecord.ID? = nil) -> CKRecord {
+        let recordID = CKRecord.ID(recordName: id.uuidString, zoneID: zoneID)
         let r = CKRecord(recordType: RecordType.profile, recordID: recordID)
+        if let parentRecordID {
+            r.parent = CKRecord.Reference(recordID: parentRecordID, action: .none)
+        }
         r["name"]                  = name as CKRecordValue
         r["avatar"]                = avatar as CKRecordValue
         r["totalXP"]               = totalXP as CKRecordValue

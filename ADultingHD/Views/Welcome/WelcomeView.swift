@@ -35,7 +35,7 @@ struct WelcomeView: View {
             .welcome, .howItWorks, .categories, .nameHousehold,
             .pickRooms, .proPitch,
         ]
-        if Features.cloudKitSharing { result.append(.invite) }
+        if Features.cloudKitSharing && storeManager.isPro { result.append(.invite) }
         return result
     }
 
@@ -83,7 +83,7 @@ struct WelcomeView: View {
             return PageMeta(
                 icon: "crown.fill", color: Theme.xpGold,
                 title: "Unlock the Whole House",
-                subtitle: "Pro is a one-time unlock — no subscriptions.",
+                subtitle: "One-time \(priceLabel) — share tasks with household members and manage multiple homes. No subscription, ever.",
                 primaryButtonTitle: storeManager.isPro ? "You're Pro — Next" : "Upgrade — \(priceLabel)"
             )
         case .invite:
@@ -458,7 +458,7 @@ struct WelcomeView: View {
     }
 
     private func handleSecondaryAction() {
-        if currentPage == .invite {
+        if currentPage == .invite || currentPage == .proPitch {
             advanceOrComplete()
             return
         }
@@ -473,6 +473,7 @@ struct WelcomeView: View {
 
     private var secondaryLabel: String {
         if currentPage == .invite { return hasSentInvite ? "Done, Next" : "Skip for now" }
+        if currentPage == .proPitch { return "Skip for now" }
         return currentPageIndex > 0 ? "Back" : "Skip"
     }
 

@@ -102,6 +102,7 @@ final class ICloudMonitor {
 
     @objc private func appDidEnterForeground(_ notification: Notification) {
         logger.info("☁️ app foregrounded — scheduling proactive iCloud sync")
+        isICloud = FileManager.default.url(forUbiquityContainerIdentifier: CloudConfig.containerID) != nil
         scheduleReload()
     }
 

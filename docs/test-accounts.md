@@ -1,31 +1,19 @@
 # Test Apple IDs for CloudKit Sharing
 
-Two dedicated Apple IDs are required to run the two-simulator sharing test
-(`scripts/test-sharing.sh`). These must be real Apple IDs with iCloud enabled —
-App Store sandbox accounts do **not** work for CloudKit sharing.
+Two real Apple IDs with iCloud enabled are required to run the two-simulator
+sharing test (`scripts/test-sharing.sh`). App Store sandbox accounts do **not**
+work for CloudKit sharing.
 
-## Creating the accounts (one-time)
+## Accounts to use
 
-1. Open a private/incognito browser window.
-2. Go to **https://appleid.apple.com** → **Create Your Apple ID**.
-3. Use a real email address you control (e.g. Gmail aliases:
-   `yourname+adulting-test1@gmail.com` and `yourname+adulting-test2@gmail.com`).
-4. Complete verification (email + phone).
-5. Sign in at https://icloud.com and accept the iCloud terms — this activates
-   the iCloud account and creates the CloudKit user record.
-6. Repeat for the second account.
+Use any two existing Apple IDs — no new accounts needed:
 
-> Apple may enforce a rate limit on new account creation from the same IP.
-> Create the accounts a few minutes apart or from different networks if blocked.
-
-## Recommended naming
-
-| Role | Suggested email | Note |
+| Role | Account | Simulator |
 |---|---|---|
-| Account 1 (household owner) | `yourname+adulting-owner@gmail.com` | Signs into Simulator A |
-| Account 2 (household member) | `yourname+adulting-member@gmail.com` | Signs into Simulator B |
+| Account 1 (household owner) | Your Apple ID | Simulator A (iPhone 15 Pro) |
+| Account 2 (household member) | A family member's Apple ID | Simulator B (iPhone 17 Pro) |
 
-Store these in your password manager. Do not commit credentials to the repo.
+> The accounts just need to be different Apple IDs, both with iCloud enabled.
 
 ## Signing into the simulators (one-time per account)
 

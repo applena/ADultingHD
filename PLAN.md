@@ -26,46 +26,17 @@ crash TestFlight build 20 shipped). To turn this on:
 5. **Verify** on a signed device signed into iCloud: Settings → Households
    → Invite → share URL generates without crashing
 
-## Create test Apple IDs and configure simulators for sharing test
+## Configure simulators for sharing test
 
 Goal: get two simulators signed into different iCloud accounts so
 `scripts/test-sharing.sh` can run end-to-end.
 
-### What can be automated (CDP + Gmail MCP)
+Use your own Apple ID and a family member's (e.g. your wife's) — no new
+accounts needed. Sign in manually:
+- Simulator A (iPhone 15 Pro): Settings → [sign in] → your Apple ID
+- Simulator B (iPhone 17 Pro): Settings → [sign in] → wife's Apple ID
 
-- Open appleid.apple.com via CDP browser
-- Fill the account creation form (name, email, password, birthday)
-- Poll Gmail via Gmail MCP for Apple's verification email and extract the code
-- Submit the code to complete email verification
-- Accept iCloud terms at icloud.com to activate the CloudKit user record
-
-Suggested Gmail aliases (no new inbox needed):
-- Account 1 (owner):    atomantic+adulting-owner@gmail.com
-- Account 2 (member):   atomantic+adulting-member@gmail.com
-
-### What requires manual steps
-
-**Phone/SMS verification** — Apple requires a phone number to complete
-account creation. CDP cannot receive SMS. Options:
-- Use a Google Voice number for Account 2 (Account 1 can reuse your real number)
-- Or complete this step manually in the browser after CDP fills the form
-
-**Simulator iCloud sign-in** — CDP controls Chromium; iOS Simulator Settings
-is a native UIKit UI. There is no CDP path into it. After accounts are created,
-sign in manually:
-- Simulator A (iPhone 15 Pro): Settings → [sign in] → use Account 1
-- Simulator B (iPhone 17 Pro): Settings → [sign in] → use Account 2
-
-### Session instructions
-
-In the new session, ask Claude to:
-1. Use Playwright MCP to open https://appleid.apple.com/account#!&page=create
-2. Fill the form for Account 1 (atomantic+adulting-owner@gmail.com)
-3. Use Gmail MCP (`search_threads` for "Your Apple ID verification code") to get the email code
-4. Complete email verification; pause and prompt for SMS code manually
-5. Repeat for Account 2
-6. Open https://www.icloud.com on each (via browser) and accept terms
-7. Print final checklist: sign into each simulator manually, then run ./scripts/test-sharing.sh
+Then run: `./scripts/test-sharing.sh`
 
 ## Smart Scheduling & Task Batching
 

@@ -130,9 +130,9 @@ final class NewFeatureTests: XCTestCase {
     }
 
     func testLeaderboardSortedByXP() {
-        var p1 = makeProfile(name: "Alice", totalXP: 500)
-        var p2 = makeProfile(name: "Bob", totalXP: 300)
-        var p3 = makeProfile(name: "Charlie", totalXP: 800)
+        let p1 = makeProfile(name: "Alice", totalXP: 500)
+        let p2 = makeProfile(name: "Bob", totalXP: 300)
+        let p3 = makeProfile(name: "Charlie", totalXP: 800)
 
         let leaderboard = [p1, p2, p3].sorted { $0.totalXP > $1.totalXP }
         XCTAssertEqual(leaderboard[0].name, "Charlie")
