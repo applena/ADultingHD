@@ -27,7 +27,13 @@ final class CloudKitIntegrationTests: XCTestCase {
     private var sync: CloudKitSync!
     private var testHousehold: Household!
 
-    override func setUpWithError() throws {
+    override func setUp() async throws {
+        try await super.setUp()
+        // Guard before touching CloudKitSync — calling .setup() constructs
+        // the lazy CKContainer, which traps on unsigned simulator builds
+        // (CODE_SIGNING_ALLOWED=NO strips the icloud-services entitlement).
+        // XCTest runs async setUp() *before* setUpWithError(), so the
+        // skip check must live here, not in the sync variant.
         guard ProcessInfo.processInfo.environment["CLOUDKIT_INTEGRATION_TESTS"] == "1" else {
             throw XCTSkip(
                 "CloudKit integration tests disabled. " +
@@ -37,10 +43,6 @@ final class CloudKitIntegrationTests: XCTestCase {
         guard Features.cloudKitSharing else {
             throw XCTSkip("Features.cloudKitSharing is false — flip the flag and rebuild first")
         }
-    }
-
-    override func setUp() async throws {
-        try await super.setUp()
         let s = CloudKitSync.shared
         await s.setup()
         guard s.isAvailable else {

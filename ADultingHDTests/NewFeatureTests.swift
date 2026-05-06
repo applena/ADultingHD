@@ -119,7 +119,8 @@ final class NewFeatureTests: XCTestCase {
 
     func testUserProfileHasNameAndAvatar() {
         let profile = UserProfile()
-        XCTAssertEqual(profile.name, "Player 1")
+        // Default is empty — onboarding/Settings prompts for it.
+        XCTAssertEqual(profile.name, "")
         XCTAssertEqual(profile.avatar, "person.crop.circle.fill")
     }
 
