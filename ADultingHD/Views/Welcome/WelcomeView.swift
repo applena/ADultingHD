@@ -46,36 +46,36 @@ struct WelcomeView: View {
         case .welcome:
             return PageMeta(
                 icon: "house.fill", color: Theme.coral,
-                title: "Welcome to ADultingHD!",
-                subtitle: "We keep day one simple: just a couple daily tasks so you can build momentum, not stress.",
-                primaryButtonTitle: "Show Me How"
+                title: "Make the house easier to run",
+                subtitle: "Start with a short, realistic plan for the rooms you actually use. ADultingHD turns recurring chores into a shared routine with visible progress.",
+                primaryButtonTitle: "Set up my home"
             )
         case .howItWorks:
             return PageMeta(
                 icon: "bolt.fill", color: Theme.xpGold,
-                title: "How Adulting Works",
-                subtitle: "Every chore you finish moves the game forward.",
+                title: "A simple daily loop",
+                subtitle: "See what is due, finish the next useful task, then watch XP, streaks, and household progress update.",
                 primaryButtonTitle: "Next"
             )
         case .categories:
             return PageMeta(
                 icon: "square.grid.3x3.fill", color: Theme.levelPurple,
-                title: "Every Room, Covered",
-                subtitle: "Kitchen, laundry, yard work — ADultingHD comes stocked with 50+ tasks across these categories.",
+                title: "Choose a practical starter set",
+                subtitle: "The catalog covers the whole home, but onboarding keeps the first list small so the app feels usable immediately.",
                 primaryButtonTitle: "Next"
             )
         case .nameHousehold:
             return PageMeta(
                 icon: "person.3.fill", color: Theme.accent,
-                title: "Who's Adulting?",
-                subtitle: "Your name shows up on the leaderboard. The household name is where you track your wins together.",
+                title: "Name your space",
+                subtitle: "Your name is used for completions and leaderboards. The household name keeps shared progress organized.",
                 primaryButtonTitle: "Create Household"
             )
         case .pickRooms:
             return PageMeta(
                 icon: "checkmark.square.fill", color: Theme.sky,
-                title: "Pick Your Rooms",
-                subtitle: "Tap a room to toggle it. We'll only set up tasks for the rooms you actually have.",
+                title: "Keep only the rooms you need",
+                subtitle: "Tap a room to toggle it. We will only seed tasks for the categories you choose.",
                 primaryButtonTitle: "Next"
             )
         case .proPitch:
@@ -89,8 +89,8 @@ struct WelcomeView: View {
         case .invite:
             return PageMeta(
                 icon: "person.crop.circle.badge.plus", color: Theme.accent,
-                title: "Invite Your Household",
-                subtitle: "Share a link so the people you live with can join on their own device. They'll see the same tasks and compete on the leaderboard.",
+                title: "Bring in your household",
+                subtitle: "Share an iCloud invite so everyone sees the same tasks, completions, and leaderboard.",
                 primaryButtonTitle: inviteButtonTitle
             )
         }
@@ -110,95 +110,55 @@ struct WelcomeView: View {
 
     var body: some View {
         GeometryReader { geo in
-            ScrollView {
-                VStack(spacing: 0) {
-                    Spacer(minLength: 24)
+            ZStack {
+                ScreenBackground()
 
-                    Image(systemName: page.icon)
-                        .font(.system(size: 74, weight: .regular))
-                        .dynamicTypeSize(...DynamicTypeSize.accessibility1)
-                        .foregroundStyle(page.color)
-                        .contentTransition(.symbolEffect(.replace))
-                        .padding(.bottom, 24)
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 18) {
+                        onboardingProgress
 
-                    Text(page.title)
-                        .font(.system(.largeTitle, design: .rounded).weight(.bold))
-                        .multilineTextAlignment(.center)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .padding(.horizontal, 32)
-                        .padding(.bottom, 10)
+                        VStack(alignment: .leading, spacing: 18) {
+                            HStack(alignment: .top, spacing: 14) {
+                                ZStack {
+                                    RoundedRectangle(cornerRadius: 8)
+                                        .fill(page.color.opacity(0.14))
+                                    Image(systemName: page.icon)
+                                        .font(.system(size: 30, weight: .semibold))
+                                        .foregroundStyle(page.color)
+                                        .contentTransition(.symbolEffect(.replace))
+                                }
+                                .frame(width: 64, height: 64)
 
-                    Text(page.subtitle)
-                        .font(.body)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .padding(.horizontal, 44)
-
-                    pageContent
-                        .frame(maxWidth: 360)
-                        .padding(.top, 18)
-                        .padding(.horizontal, 24)
-
-                    Spacer(minLength: 24)
-
-                    Button {
-                        handlePrimaryAction()
-                    } label: {
-                        Group {
-                            if currentPage == .proPitch && storeManager.isPurchasing {
-                                ProgressView().tint(.white)
-                            } else {
-                                Text(page.primaryButtonTitle)
-                                    .font(.headline)
-                                    .multilineTextAlignment(.center)
-                                    .fixedSize(horizontal: false, vertical: true)
+                                VStack(alignment: .leading, spacing: 7) {
+                                    Text(stepLabel.uppercased())
+                                        .font(.caption.weight(.bold))
+                                        .foregroundStyle(page.color)
+                                    Text(page.title)
+                                        .font(.system(.largeTitle, design: .rounded).weight(.bold))
+                                        .fixedSize(horizontal: false, vertical: true)
+                                    Text(page.subtitle)
+                                        .font(.body)
+                                        .foregroundStyle(.secondary)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
                             }
-                        }
-                        .frame(maxWidth: 280)
-                        .padding(.vertical, 16)
-                        .padding(.horizontal, 12)
-                        .background(page.color, in: RoundedRectangle(cornerRadius: Theme.cornerRadius))
-                        .foregroundStyle(.white)
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(primaryButtonDisabled)
 
-                    HStack(spacing: 8) {
-                        ForEach(0..<pages.count, id: \.self) { i in
-                            Circle()
-                                .fill(i == currentPageIndex ? page.color : Color.secondary.opacity(0.25))
-                                .frame(width: 8, height: 8)
-                                .scaleEffect(i == currentPageIndex ? 1.2 : 1.0)
+                            pageContent
+                                .frame(maxWidth: .infinity)
                         }
-                    }
-                    .padding(.top, 18)
-                    .animation(.spring(response: 0.3), value: currentPageIndex)
+                        .card()
 
-                    Button {
-                        handleSecondaryAction()
-                    } label: {
-                        Text(secondaryLabel)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                        onboardingActions
                     }
-                    .buttonStyle(.plain)
-                    .padding(.top, 12)
-                    .padding(.bottom, 40)
+                    .frame(maxWidth: min(geo.size.width - 32, 560), alignment: .leading)
+                    .frame(minHeight: geo.size.height, alignment: .center)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 24)
+                    .frame(maxWidth: .infinity)
                 }
-                .frame(minHeight: geo.size.height)
-                .frame(maxWidth: .infinity)
+                .scrollBounceBehavior(.basedOnSize)
             }
-            .scrollBounceBehavior(.basedOnSize)
-        }
-        .background {
-            LinearGradient(
-                colors: [page.color.opacity(0.10), .clear],
-                startPoint: .top,
-                endPoint: .center
-            )
-            .ignoresSafeArea()
-            .animation(.easeInOut(duration: 0.5), value: currentPageIndex)
         }
         .sheet(isPresented: $showProUpgrade) { ProUpgradeView() }
         .sheet(item: $shareSheetPayload) { payload in
@@ -211,6 +171,62 @@ struct WelcomeView: View {
                     shareSheetPayload = nil
                 }
             )
+        }
+    }
+
+    private var stepLabel: String {
+        "Step \(currentPageIndex + 1) of \(pages.count)"
+    }
+
+    private var onboardingProgress: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("ADultingHD setup")
+                    .font(.subheadline.weight(.semibold))
+                Spacer()
+                Text(stepLabel)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            ProgressView(value: Double(currentPageIndex + 1), total: Double(pages.count))
+                .tint(page.color)
+        }
+    }
+
+    private var onboardingActions: some View {
+        VStack(spacing: 10) {
+            Button {
+                handlePrimaryAction()
+            } label: {
+                Group {
+                    if currentPage == .proPitch && storeManager.isPurchasing {
+                        ProgressView().tint(.white)
+                    } else {
+                        Text(page.primaryButtonTitle)
+                            .font(.headline)
+                            .multilineTextAlignment(.center)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 15)
+                .padding(.horizontal, 12)
+                .background(page.color, in: RoundedRectangle(cornerRadius: Theme.cornerRadius))
+                .foregroundStyle(.white)
+            }
+            .buttonStyle(.plain)
+            .disabled(primaryButtonDisabled)
+
+            Button {
+                handleSecondaryAction()
+            } label: {
+                Text(secondaryLabel)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 10)
+            }
+            .buttonStyle(.plain)
         }
     }
 

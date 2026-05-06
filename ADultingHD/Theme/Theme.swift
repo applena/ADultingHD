@@ -55,13 +55,13 @@ enum Theme {
     #if os(macOS)
     static let cardPadding: CGFloat = 16
     static let sectionSpacing: CGFloat = 20
-    static let cornerRadius: CGFloat = 12
+    static let cornerRadius: CGFloat = 8
     static let macOSContentMaxWidth: CGFloat = 780
     static let rowSpacing: CGFloat = 8
     #else
     static let cardPadding: CGFloat = 14
     static let sectionSpacing: CGFloat = 16
-    static let cornerRadius: CGFloat = 16
+    static let cornerRadius: CGFloat = 8
     static let rowSpacing: CGFloat = 6
     #endif
 
@@ -78,24 +78,32 @@ enum Theme {
 // MARK: - Card Styling
 
 extension View {
-    /// Standard card: padding + white background + soft shadow
+    /// Standard surface: padding + adaptive background + fine border.
     func card() -> some View {
         self
             .padding(Theme.cardPadding)
             .background {
                 RoundedRectangle(cornerRadius: Theme.cornerRadius)
                     .fill(.background)
-                    .shadow(color: .black.opacity(0.05), radius: 10, y: 3)
+                    .shadow(color: .black.opacity(0.04), radius: 8, y: 2)
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: Theme.cornerRadius)
+                    .strokeBorder(Color.secondary.opacity(0.10))
             }
     }
 
-    /// Card background only (no padding) — for views with custom padding
+    /// Card background only (no padding) - for views with custom padding.
     func cardBackground() -> some View {
         self
             .background {
                 RoundedRectangle(cornerRadius: Theme.cornerRadius)
                     .fill(.background)
-                    .shadow(color: .black.opacity(0.05), radius: 10, y: 3)
+                    .shadow(color: .black.opacity(0.04), radius: 8, y: 2)
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: Theme.cornerRadius)
+                    .strokeBorder(Color.secondary.opacity(0.10))
             }
     }
 
@@ -106,5 +114,79 @@ extension View {
         #else
         self
         #endif
+    }
+}
+
+struct ScreenBackground: View {
+    var body: some View {
+        #if os(iOS)
+        Color(uiColor: .systemGroupedBackground).ignoresSafeArea()
+        #else
+        Color(nsColor: .windowBackgroundColor).ignoresSafeArea()
+        #endif
+    }
+}
+
+struct LandingHeader: View {
+    let eyebrow: String
+    let title: String
+    let subtitle: String
+    let icon: String
+    let color: Color
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 14) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(color.opacity(0.14))
+                Image(systemName: icon)
+                    .font(.title2.weight(.semibold))
+                    .foregroundStyle(color)
+            }
+            .frame(width: 52, height: 52)
+
+            VStack(alignment: .leading, spacing: 5) {
+                Text(eyebrow.uppercased())
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(color)
+                    .lineLimit(1)
+                Text(title)
+                    .font(.system(.title2, design: .rounded).weight(.bold))
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(subtitle)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .card()
+    }
+}
+
+struct MetricPill: View {
+    let title: String
+    let value: String
+    let icon: String
+    let color: Color
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: icon)
+                .foregroundStyle(color)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(value)
+                    .font(.subheadline.weight(.bold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+                Text(title)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(color.opacity(0.10), in: RoundedRectangle(cornerRadius: 8))
     }
 }

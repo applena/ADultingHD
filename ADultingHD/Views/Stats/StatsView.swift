@@ -22,22 +22,26 @@ struct StatsView: View {
 
     var body: some View {
         let aggregates = StatsAggregates(completions: dataStore.completions, tasks: dataStore.tasks)
-        ScrollView {
-            #if os(macOS)
-            macOSLayout(aggregates: aggregates)
-            #else
-            VStack(spacing: Theme.sectionSpacing) {
-                if storeManager.isPro {
-                    xpPerDayChart(aggregates: aggregates)
-                    completionTrendChart(aggregates: aggregates)
-                    categoryBreakdownChart(aggregates: aggregates)
-                } else {
-                    ProPromptCard(title: "Pro Analytics", icon: "chart.bar.fill")
+        ZStack {
+            ScreenBackground()
+            ScrollView {
+                #if os(macOS)
+                macOSLayout(aggregates: aggregates)
+                #else
+                VStack(spacing: Theme.sectionSpacing) {
+                    statsHeader
+                    if storeManager.isPro {
+                        xpPerDayChart(aggregates: aggregates)
+                        completionTrendChart(aggregates: aggregates)
+                        categoryBreakdownChart(aggregates: aggregates)
+                    } else {
+                        ProPromptCard(title: "Pro Analytics", icon: "chart.bar.fill")
+                    }
+                    streakCalendar(aggregates: aggregates)
                 }
-                streakCalendar(aggregates: aggregates)
+                .padding()
+                #endif
             }
-            .padding()
-            #endif
         }
         .navigationTitle("")
     }
@@ -45,6 +49,7 @@ struct StatsView: View {
     #if os(macOS)
     private func macOSLayout(aggregates: StatsAggregates) -> some View {
         VStack(spacing: Theme.sectionSpacing) {
+            statsHeader
             if storeManager.isPro {
                 HStack(alignment: .top, spacing: Theme.sectionSpacing) {
                     xpPerDayChart(aggregates: aggregates).frame(maxWidth: .infinity)
@@ -63,6 +68,16 @@ struct StatsView: View {
         .macOSContentFrame()
     }
     #endif
+
+    private var statsHeader: some View {
+        LandingHeader(
+            eyebrow: "Analytics",
+            title: "See what is actually getting done",
+            subtitle: "\(dataStore.completions.count) completions tracked across \(dataStore.tasks.count) tasks. Use this to tune the routine instead of guessing.",
+            icon: "chart.bar.xaxis",
+            color: Theme.successGreen
+        )
+    }
 
     // MARK: - XP Per Day (last 14 days)
 

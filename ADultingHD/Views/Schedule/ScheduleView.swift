@@ -37,12 +37,15 @@ struct ScheduleView: View {
             .sorted { $0.key.rawValue < $1.key.rawValue }
         let dueCount = dataStore.dueTasks.count
 
-        return ScrollView {
-            #if os(macOS)
-            macOSLayout(dates: dates, tasksByDate: tasksByDate, todayTasks: todayTasks, todayByCategory: todayByCategory, dueCount: dueCount)
-            #else
-            iOSLayout(dates: dates, tasksByDate: tasksByDate, todayTasks: todayTasks, todayByCategory: todayByCategory, dueCount: dueCount)
-            #endif
+        return ZStack {
+            ScreenBackground()
+            ScrollView {
+                #if os(macOS)
+                macOSLayout(dates: dates, tasksByDate: tasksByDate, todayTasks: todayTasks, todayByCategory: todayByCategory, dueCount: dueCount)
+                #else
+                iOSLayout(dates: dates, tasksByDate: tasksByDate, todayTasks: todayTasks, todayByCategory: todayByCategory, dueCount: dueCount)
+                #endif
+            }
         }
         .navigationTitle("")
         .sheet(isPresented: $showPowerHour) {
@@ -58,6 +61,8 @@ struct ScheduleView: View {
         dueCount: Int
     ) -> some View {
         VStack(spacing: Theme.sectionSpacing) {
+            scheduleHeader(todayTasks: todayTasks, todayByCategory: todayByCategory, dueCount: dueCount)
+
             DatePicker("Week starting", selection: $selectedDate, displayedComponents: .date)
                 .datePickerStyle(.graphical)
                 .card()
@@ -102,6 +107,8 @@ struct ScheduleView: View {
 
             // Right: summary + batches + week view
             VStack(spacing: Theme.sectionSpacing) {
+                scheduleHeader(todayTasks: todayTasks, todayByCategory: todayByCategory, dueCount: dueCount)
+
                 if dueCount > 0 {
                     HStack(spacing: 12) {
                         Label("\(dueCount) due", systemImage: "clock.fill")
@@ -128,6 +135,22 @@ struct ScheduleView: View {
         .padding(.top, 8)
     }
     #endif
+
+    private func scheduleHeader(
+        todayTasks: [HouseholdTask],
+        todayByCategory: [(TaskCategory, [HouseholdTask])],
+        dueCount: Int
+    ) -> some View {
+        LandingHeader(
+            eyebrow: "Schedule",
+            title: dueCount == 0 ? "Nothing is pressing today" : "Plan today's cleaning run",
+            subtitle: todayTasks.isEmpty
+                ? "Pick a date to see upcoming maintenance and recurring work."
+                : "\(todayTasks.count) tasks across \(todayByCategory.count) rooms, about \(todayTasks.totalMinutes) minutes total.",
+            icon: "calendar.badge.clock",
+            color: dueCount == 0 ? Theme.successGreen : Theme.streakOrange
+        )
+    }
 
     private func todayBatchesCard(
         todayTasks: [HouseholdTask],

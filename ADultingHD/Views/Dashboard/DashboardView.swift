@@ -55,12 +55,15 @@ struct DashboardView: View {
     }
 
     var body: some View {
-        ScrollView {
-            #if os(macOS)
-            macOSLayout
-            #else
-            iOSLayout
-            #endif
+        ZStack {
+            ScreenBackground()
+            ScrollView {
+                #if os(macOS)
+                macOSLayout
+                #else
+                iOSLayout
+                #endif
+            }
         }
         .navigationTitle("")
         #if os(iOS)
@@ -78,7 +81,8 @@ struct DashboardView: View {
             heroSection
             tipBanner
             statsRow
-            if !dataStore.dueTasks.isEmpty { dueTasksSection }
+            if dataStore.dueTasks.isEmpty { caughtUpSection }
+            else { dueTasksSection }
             if !dataStore.todayCompletions.isEmpty { recentCompletionsSection }
             if storeManager.isPro { seasonalSection }
         }
@@ -109,6 +113,9 @@ struct DashboardView: View {
                 if !dataStore.dueTasks.isEmpty {
                     dueTasksSection
                         .frame(maxWidth: .infinity)
+                } else {
+                    caughtUpSection
+                        .frame(maxWidth: .infinity)
                 }
                 if hasRightColumnContent {
                     VStack(spacing: Theme.sectionSpacing) {
@@ -128,18 +135,14 @@ struct DashboardView: View {
     // MARK: - Hero Section
 
     private var heroSection: some View {
-        VStack(spacing: 16) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(greeting)
-                    .font(.system(.title, design: .rounded).weight(.bold))
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                Text(subtitle)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
+        VStack(alignment: .leading, spacing: 16) {
+            LandingHeader(
+                eyebrow: dataStore.activeHousehold.name,
+                title: greeting,
+                subtitle: subtitle,
+                icon: dataStore.dueTasks.isEmpty ? "checkmark.seal.fill" : "clock.badge.exclamationmark.fill",
+                color: dataStore.dueTasks.isEmpty ? Theme.successGreen : Theme.streakOrange
+            )
 
             HStack(alignment: .top, spacing: 12) {
                 CompactAvatarView(avatarState: dataStore.profile.avatarState, size: 44)
@@ -165,8 +168,8 @@ struct DashboardView: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
+            .card()
         }
-        .card()
     }
 
     // MARK: - Tip Banner
@@ -210,6 +213,25 @@ struct DashboardView: View {
                 color: Theme.xpGold
             )
         }
+    }
+
+    private var caughtUpSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label("Today is clear", systemImage: "sparkles")
+                .font(.headline)
+                .foregroundStyle(Theme.successGreen)
+
+            Text("No tasks are currently due. Browse the catalog, check supplies, or keep the streak alive when the next task appears.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            HStack(spacing: 10) {
+                MetricPill(title: "Active", value: "\(dataStore.activeTasks.count)", icon: "checklist", color: Theme.accent)
+                MetricPill(title: "Done today", value: "\(dataStore.todayCompletions.count)", icon: "checkmark.circle.fill", color: Theme.successGreen)
+            }
+        }
+        .card()
     }
 
     // MARK: - Due Tasks
@@ -543,19 +565,26 @@ struct StatCard: View {
     let color: Color
 
     var body: some View {
-        VStack(spacing: 6) {
-            Image(systemName: icon)
-                .font(.title2)
-                .foregroundStyle(color)
-            Text(value)
-                .font(.headline.bold())
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
-            Text(title)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .fixedSize(horizontal: false, vertical: true)
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Image(systemName: icon)
+                    .font(.headline)
+                    .foregroundStyle(color)
+                    .frame(width: 28, height: 28)
+                    .background(color.opacity(0.12), in: RoundedRectangle(cornerRadius: 7))
+                Spacer()
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                Text(value)
+                    .font(.system(.title3, design: .rounded).weight(.bold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+                Text(title)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
         .frame(maxWidth: .infinity)
         .card()

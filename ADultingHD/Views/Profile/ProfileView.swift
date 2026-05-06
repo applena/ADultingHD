@@ -16,18 +16,22 @@ struct ProfileView: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: Theme.sectionSpacing) {
-                levelCard
-                statsGrid
-                achievementsSection
-                if storeManager.isPro && dataStore.householdProfiles.count > 1 {
-                    leaderboardPreview
+        ZStack {
+            ScreenBackground()
+            ScrollView {
+                VStack(spacing: Theme.sectionSpacing) {
+                    profileHeader
+                    levelCard
+                    statsGrid
+                    achievementsSection
+                    if storeManager.isPro && dataStore.householdProfiles.count > 1 {
+                        leaderboardPreview
+                    }
+                    categoryBreakdown
                 }
-                categoryBreakdown
+                .padding()
+                .macOSContentFrame()
             }
-            .padding()
-            .macOSContentFrame()
         }
         .navigationTitle("")
         #if os(iOS)
@@ -49,6 +53,16 @@ struct ProfileView: View {
             }
         }
         #endif
+    }
+
+    private var profileHeader: some View {
+        LandingHeader(
+            eyebrow: "Progress",
+            title: dataStore.profile.name.isEmpty ? "Your profile" : dataStore.profile.name,
+            subtitle: "Level \(dataStore.profile.level) with \(dataStore.profile.totalXP) XP, \(dataStore.profile.currentStreak) day streak, and \(unlockedCount) achievements unlocked.",
+            icon: "person.crop.circle.fill",
+            color: Theme.levelPurple
+        )
     }
 
     // MARK: - Level Card

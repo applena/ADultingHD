@@ -30,25 +30,34 @@ struct TaskListView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            Picker("View", selection: $selectedTab) {
-                ForEach(TaskTab.allCases, id: \.self) { tab in
-                    Text(tab.rawValue).tag(tab)
-                }
-            }
-            .pickerStyle(.segmented)
-            .padding(.horizontal)
-            .padding(.vertical, 8)
-            .onChange(of: selectedTab) {
-                selectedCategory = nil
-            }
+        ZStack {
+            ScreenBackground()
 
-            Group {
-                switch selectedTab {
-                case .myTasks:
-                    myTasksList
-                case .allTasks:
-                    catalogList
+            VStack(spacing: 0) {
+                taskHeader
+                    .padding(.horizontal)
+                    .padding(.top)
+                    .padding(.bottom, 8)
+
+                Picker("View", selection: $selectedTab) {
+                    ForEach(TaskTab.allCases, id: \.self) { tab in
+                        Text(tab.rawValue).tag(tab)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .padding(.horizontal)
+                .padding(.vertical, 8)
+                .onChange(of: selectedTab) {
+                    selectedCategory = nil
+                }
+
+                Group {
+                    switch selectedTab {
+                    case .myTasks:
+                        myTasksList
+                    case .allTasks:
+                        catalogList
+                    }
                 }
             }
         }
@@ -66,6 +75,19 @@ struct TaskListView: View {
         .sheet(isPresented: $showProUpgrade) {
             ProUpgradeView()
         }
+    }
+
+    private var taskHeader: some View {
+        let isCatalog = selectedTab == .allTasks
+        return LandingHeader(
+            eyebrow: isCatalog ? "Task catalog" : dataStore.activeHousehold.name,
+            title: isCatalog ? "Add work that matches your home" : "Your active task list",
+            subtitle: isCatalog
+                ? "\(taskCatalog.count) ready-made tasks plus custom chores when the catalog is not specific enough."
+                : "\(dataStore.activeTasks.count) active tasks, \(dataStore.dueTasks.count) due now, \(customTaskCount) custom.",
+            icon: isCatalog ? "square.grid.2x2.fill" : "checklist",
+            color: isCatalog ? Theme.levelPurple : Theme.accent
+        )
     }
 
     // MARK: - My Tasks
@@ -95,7 +117,7 @@ struct TaskListView: View {
                 ContentUnavailableView {
                     Label("No Tasks Yet", systemImage: "checklist")
                 } description: {
-                    Text("Switch to All Tasks to browse and add tasks to your list.")
+                    Text("Browse the catalog to add a focused starter set, then come back here to manage what is active.")
                 }
             }
 
@@ -127,6 +149,7 @@ struct TaskListView: View {
         #if os(macOS)
         .listStyle(.inset)
         #endif
+        .scrollContentBackground(.hidden)
     }
 
     // MARK: - All Tasks Catalog
@@ -220,6 +243,7 @@ struct TaskListView: View {
         #if os(macOS)
         .listStyle(.inset)
         #endif
+        .scrollContentBackground(.hidden)
     }
 
     // MARK: - Shared
