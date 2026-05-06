@@ -19,12 +19,13 @@ import CloudKit
 // What these tests catch:
 //   - CKShare not saved atomically (share URL nil)
 //   - cloudkit.share record type missing from Development (metadata fetch fails)
-//   - HouseholdZone not created (zone setup never runs)
+//   - per-household zone not created (zone setup never runs)
 //   - createOrFetchShare() not idempotent (second invite creates duplicate root)
 @MainActor
 final class CloudKitIntegrationTests: XCTestCase {
 
     private var sync: CloudKitSync!
+    private var testHousehold: Household!
 
     override func setUpWithError() throws {
         guard ProcessInfo.processInfo.environment["CLOUDKIT_INTEGRATION_TESTS"] == "1" else {
@@ -46,6 +47,13 @@ final class CloudKitIntegrationTests: XCTestCase {
             throw XCTSkip("iCloud unavailable on this machine — sign into iCloud in Simulator Settings")
         }
         sync = s
+        // Use the legacy default household so multiple test runs against the
+        // same iCloud account reuse one zone instead of polluting the dev
+        // container with disposable zones every run.
+        testHousehold = Household.newLocal(
+            name: "Integration Test Household",
+            members: []
+        )
     }
 
     // MARK: - Setup
@@ -57,12 +65,12 @@ final class CloudKitIntegrationTests: XCTestCase {
 
     // MARK: - Share creation
 
-    // Verifies the HouseholdZone exists and CKShare + HouseholdRoot save
+    // Verifies the household zone exists and CKShare + HouseholdRoot save
     // atomically. A nil share.url indicates the cloudkit.share system type
     // is missing from the Development schema (deploy Dev→Production was
     // never run, or the schema was reset).
     func testCreateOrFetchShare_returnsURLAndCorrectPermissions() async throws {
-        let share = try await sync.createOrFetchShare()
+        let share = try await sync.createOrFetchShare(for: testHousehold)
         XCTAssertNotNil(share.url,
             "share.url is nil — cloudkit.share type may be missing from the Development schema. " +
             "Open CloudKit Console → Schema → Deploy Schema Changes…")
@@ -74,8 +82,8 @@ final class CloudKitIntegrationTests: XCTestCase {
     // root record. Idempotency is required so the Invite button is safe to
     // tap multiple times.
     func testCreateOrFetchShare_isIdempotent() async throws {
-        let url1 = try await sync.createOrFetchShare().url
-        let url2 = try await sync.createOrFetchShare().url
+        let url1 = try await sync.createOrFetchShare(for: testHousehold).url
+        let url2 = try await sync.createOrFetchShare(for: testHousehold).url
         XCTAssertEqual(url1, url2,
             "Repeated calls returned different URLs — root record is being recreated on each invite")
     }
@@ -91,7 +99,7 @@ final class CloudKitIntegrationTests: XCTestCase {
     //   - cloudkit.share type not deployed to Production (or missing in Dev)
     //   - Share root record was saved without the share in the same operation
     func testShareURL_metadataFetchable() async throws {
-        let share = try await sync.createOrFetchShare()
+        let share = try await sync.createOrFetchShare(for: testHousehold)
         guard let url = share.url else {
             XCTFail("No share URL — cannot test recipient-side metadata fetch")
             return

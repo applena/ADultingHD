@@ -11,26 +11,32 @@ someone** (or the same step during onboarding). The app creates a
 then presents Apple's native `UICloudSharingController` sheet. The
 owner picks one or more contacts by name/email/phone or sends via
 Messages/Mail/AirDrop. The recipient taps the invite, iOS shows the
-"Join [Household]?" sheet, and on accept the recipient's app joins
-the shared `HouseholdZone` and starts seeing the same tasks,
-completions, and member profiles.
+"Join [Household]?" sheet, and on accept the recipient's app inserts
+a new `Household` row pointing at the inviter's shared zone and starts
+seeing the same tasks, completions, and member profiles.
 
-All records in the shared zone (`HouseholdTask`, `TaskCompletion`,
-`MemberProfile`, `HouseholdRoot`) sync cross-device via CloudKit zone
-subscriptions plus our `userDidAcceptCloudKitShareWith` AppDelegate
-hook.
+Every `Household` row maps to a single custom CKRecordZone. Owned
+households live in `privateCloudDatabase`; joined households live in
+`sharedCloudDatabase` and carry `ownerUserRecordName` so the zone
+ID resolves correctly across app restarts. Records in the zone
+(`HouseholdTask`, `TaskCompletion`, `MemberProfile`, `HouseholdRoot`)
+sync cross-device via CloudKit zone subscriptions plus our
+`userDidAcceptCloudKitShareWith` AppDelegate hook and the
+`onContinueUserActivity` SwiftUI modifier.
 
 ## Code map
 
 | File | Role |
 |---|---|
 | `ADultingHD/App/Features.swift` | `Features.cloudKitSharing` compile-time flag that gates every CloudKit code path. Never call `CKContainer(identifier:)` when this is off — the init traps if the container entitlement isn't in the signed profile |
-| `ADultingHD/Storage/CloudKitSync.swift` | `CloudKitSync` singleton: zone setup, record push/pull, `createOrFetchShare()` that saves the root + CKShare atomically via `privateDB.modifyRecords(saving:deleting:savePolicy:atomically:)` |
-| `ADultingHD/Storage/DataStore.swift` | `prepareHouseholdShare()` — the entry point the invite UI calls. Runs `setup()`, returns `(CKShare, CKContainer)` to the UI, and kicks off the one-shot data migration in a background Task so the share sheet opens instantly |
+| `ADultingHD/Storage/CloudKitSync.swift` | `CloudKitSync` singleton: per-household zone+database routing, record push/pull, `createOrFetchShare(for:)` that saves the root + CKShare atomically. `acceptShare(from:)` returns `AcceptedShareInfo` (zoneName + ownerUserRecordName + title) |
+| `ADultingHD/Storage/DataStore.swift` | `prepareHouseholdShare()` — the entry point the invite UI calls. Runs `setup()`, creates the share, returns `(CKShare, CKContainer)` to the UI, and kicks off the one-shot data migration in a background Task. `registerJoinedHousehold(from:)` inserts a new `ownerIsCurrentUser=false` Household row and switches active to it |
+| `ADultingHD/Models/Household.swift` | `Household` value type. `newLocal(...)` for owned, `newJoined(zoneName:ownerUserRecordName:...)` for joined. `HouseholdIndex.currentSchemaVersion = 3` |
 | `ADultingHD/Views/Household/CloudShareSheet.swift` | SwiftUI wrapper around `UICloudSharingController` (iOS) with a simple URL-and-copy fallback for macOS |
 | `ADultingHD/Views/Household/HouseholdListView.swift` | Settings path: "Invite someone" button → presents `CloudShareSheet` |
 | `ADultingHD/Views/Welcome/WelcomeView.swift` | Onboarding path: invite step → presents the same `CloudShareSheet` |
-| `ADultingHD/App/AppDelegate.swift` | Implements `userDidAcceptCloudKitShareWith` on both iOS and macOS. Posts `.cloudKitShareAccepted` which `DataStore.registerJoinedHousehold(from:)` observes to complete the join |
+| `ADultingHD/App/AppDelegate.swift` | Implements `userDidAcceptCloudKitShareWith` on iOS and macOS. Enqueues into `AcceptedShareInbox` so cold-launch invites aren't lost before SwiftUI's `.task` runs. Also defines `ShareAcceptance.activityType` for the warm-launch `onContinueUserActivity` path |
+| `ADultingHD/App/ADultingHDApp.swift` | Drains `AcceptedShareInbox` from `.task` and handles `onContinueUserActivity(ShareAcceptance.activityType)` for warm-launch deliveries |
 
 ## Invite flow (owner side)
 
@@ -40,11 +46,13 @@ User taps Invite
 DataStore.prepareHouseholdShare()
   ├── UserDefaults[householdSharingEnabled] = true
   ├── AppDelegate.registerForRemoteNotifications()
-  ├── ckSync.setup()                    ← account status + zone create
-  ├── ckSync.createOrFetchShare()       ← saves CKShare + HouseholdRoot
-  │    atomically via modifyRecords
-  │    savePolicy=.allKeys atomically=true
-  ├── Task { migrateToCloudKitIfNeeded() }   ← background, non-blocking
+  ├── ckSync.setup()                              ← account status check
+  ├── ckSync.createOrFetchShare(for: activeHousehold)
+  │    ├── ensureOwnedZoneExists(for:)            ← idempotent zone create
+  │    └── modifyRecords(saving: [root, share],   ← atomic both-or-nothing
+  │                      savePolicy=.allKeys, atomically=true)
+  ├── ckSync.setupSubscriptions(for: activeHousehold)
+  ├── Task { migrateToCloudKitIfNeeded() }        ← background, non-blocking
   └── returns (CKShare, CKContainer)
   ↓
 CloudShareSheet wraps UICloudSharingController
@@ -60,17 +68,24 @@ Recipient taps icloud.com/share/... link
 iOS cloud-share service decodes metadata
   ↓
 Looks up container → App ID mapping in Apple's routing DB
-  ├── App installed + routing registered → open app, call
-  │    userDidAcceptCloudKitShareWith on our AppDelegate
+  ├── App installed + routing registered → open app, deliver via
+  │   either AppDelegate.userDidAcceptCloudKitShareWith (cold-launch)
+  │   or NSUserActivity activityType=com.apple.CloudKit.ShareMetadata
+  │   (warm-launch)
   └── Otherwise → "Get the latest app from the App Store"
      (see App Store Connect Gate section below)
   ↓
-AppDelegate posts .cloudKitShareAccepted notification
+AcceptedShareInbox.enqueue(metadata)             ← cold-launch buffer
+  └── ADultingHDApp.task drains via dataStore.drainAcceptedShareInbox()
+OR
+onContinueUserActivity(ShareAcceptance.activityType) → registerJoinedHousehold
   ↓
 DataStore.registerJoinedHousehold(from: metadata)
-  ├── ckSync.acceptShare(from: metadata)
-  ├── ckSync.setup() + pullFromCloudKit()
-  └── shared zone records populate local state
+  ├── ckSync.acceptShare(from: metadata) → AcceptedShareInfo
+  ├── insert Household.newJoined(zoneName:, ownerUserRecordName:, ...)
+  ├── switchHousehold(to: joined.id)
+  ├── ckSync.setupSubscriptions(for: joined)
+  └── pullFromCloudKit() merges shared zone records into local state
 ```
 
 ## Setup prerequisites

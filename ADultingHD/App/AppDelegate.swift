@@ -3,10 +3,44 @@ import CloudKit
 
 extension Notification.Name {
     static let cloudKitRemoteChange = Notification.Name("ADHDCloudKitRemoteChange")
-    /// Posted when the user accepts a CKShare invite for a household. The
-    /// `object` is the `CKShare.Metadata`. Observed by `DataStore` to trigger
-    /// acceptance + pull + local household registration.
-    static let cloudKitShareAccepted = Notification.Name("ADHDCloudKitShareAccepted")
+}
+
+/// Magic strings for handling CKShare invites delivered via NSUserActivity
+/// (the SwiftUI `onContinueUserActivity` path). These are NOT exposed by
+/// Apple's SDK headers — `CKShare.Metadata.activityType` referenced by older
+/// sample code does not exist as a public symbol. Hardcoded.
+enum ShareAcceptance {
+    static let activityType = "com.apple.CloudKit.ShareMetadata"
+    static let metadataKey = "CKShareMetadata"
+
+    static func metadata(from activity: NSUserActivity) -> CKShare.Metadata? {
+        activity.userInfo?[metadataKey] as? CKShare.Metadata
+    }
+}
+
+/// Buffers CKShare metadata that arrived via the AppDelegate before the
+/// SwiftUI scene is ready to handle it. SwiftUI's `.task` drains it on the
+/// first frame so cold-launch invites aren't lost.
+///
+/// On a warm-launch the `.onContinueUserActivity` modifier handles delivery
+/// directly without going through this buffer.
+@MainActor
+final class AcceptedShareInbox: ObservableObject {
+    static let shared = AcceptedShareInbox()
+
+    @Published private(set) var pending: [CKShare.Metadata] = []
+
+    private init() {}
+
+    func enqueue(_ metadata: CKShare.Metadata) {
+        pending.append(metadata)
+    }
+
+    func drain() -> [CKShare.Metadata] {
+        let snapshot = pending
+        pending.removeAll()
+        return snapshot
+    }
 }
 
 #if os(iOS)
@@ -46,7 +80,7 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         userDidAcceptCloudKitShareWith metadata: CKShare.Metadata
     ) {
         Task { @MainActor in
-            NotificationCenter.default.post(name: .cloudKitShareAccepted, object: metadata)
+            AcceptedShareInbox.shared.enqueue(metadata)
         }
     }
 }
@@ -82,7 +116,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         userDidAcceptCloudKitShareWith metadata: CKShare.Metadata
     ) {
         Task { @MainActor in
-            NotificationCenter.default.post(name: .cloudKitShareAccepted, object: metadata)
+            AcceptedShareInbox.shared.enqueue(metadata)
         }
     }
 }

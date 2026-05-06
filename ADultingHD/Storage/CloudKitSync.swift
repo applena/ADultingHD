@@ -30,9 +30,12 @@ enum ZoneName {
 
 // MARK: - CloudKitSync
 
-/// Manages a shared CKRecordZone in the user's private CloudKit database.
-/// The zone owner shares it via CKShare; household members accept the share and
-/// gain read/write access to the same tasks, completions, and profiles.
+/// Manages CloudKit sharing for households. Each `Household` maps to a single
+/// custom `CKRecordZone`. When `ownerIsCurrentUser` is true the zone lives in
+/// the user's `privateCloudDatabase`; when false, it lives in `sharedCloudDatabase`
+/// owned by the inviter. All push/pull/share APIs take a `Household` so a
+/// single device with multiple households (some owned, some joined) routes
+/// each operation to the correct zone + database.
 @MainActor
 final class CloudKitSync: ObservableObject {
 
@@ -55,14 +58,11 @@ final class CloudKitSync: ObservableObject {
     /// can be constructed. Safe to read only after setup() has marked `isAvailable`.
     var cloudContainer: CKContainer { container }
 
-    private var zone: CKRecordZone { CKRecordZone(zoneName: ZoneName.household) }
-    private var activeZoneID: CKRecordZone.ID { acceptedSharedZoneID ?? zone.zoneID }
-    private var activeRootRecordID: CKRecord.ID {
-        CKRecord.ID(recordName: RootRecordName.household, zoneID: activeZoneID)
-    }
-
-    private var subscriptionsConfigured = false
-    private var acceptedSharedZoneID: CKRecordZone.ID?
+    /// In-memory dedupe of zoneNames whose subscription was saved this
+    /// session, so repeated `setupSubscriptions(for:)` calls don't keep
+    /// hitting `fetchAllSubscriptions`. Cleared on relaunch — the underlying
+    /// CloudKit subscription persists server-side.
+    private var configuredSubscriptionZones: Set<String> = []
 
     private init() {}
 
@@ -77,13 +77,6 @@ final class CloudKitSync: ObservableObject {
                 isAvailable = false
                 return
             }
-            if acceptedSharedZoneID == nil {
-                try await createZoneIfNeeded()
-            }
-            // Only mark available after the zone exists — createOrFetchShare
-            // relies on writes landing in HouseholdZone, and a half-setup
-            // state where accountStatus passes but zone creation failed
-            // would otherwise let the share save run and fail confusingly.
             isAvailable = true
             syncError = nil
             logger.info("☁️ CloudKit ready")
@@ -94,28 +87,35 @@ final class CloudKitSync: ObservableObject {
         }
     }
 
-    private func createZoneIfNeeded() async throws {
+    /// Ensure the household's zone exists in `privateCloudDatabase`. No-op
+    /// for joined households — CloudKit auto-mirrors the owner's zone into
+    /// our `sharedCloudDatabase` when the share is accepted.
+    private func ensureOwnedZoneExists(for household: Household) async throws {
+        guard household.ownerIsCurrentUser else { return }
         let zones = try await privateDB.allRecordZones()
-        if zones.contains(where: { $0.zoneID.zoneName == ZoneName.household }) { return }
-        _ = try await privateDB.save(zone)
-        logger.info("☁️ Created HouseholdZone")
+        if zones.contains(where: { $0.zoneID.zoneName == household.zoneName }) { return }
+        _ = try await privateDB.save(CKRecordZone(zoneName: household.zoneName))
+        logger.info("☁️ Created zone \(household.zoneName, privacy: .public)")
     }
 
-    func setupSubscriptions() async {
-        guard isAvailable, !subscriptionsConfigured else { return }
-        let subscriptionID = "household-zone-changes"
+    func setupSubscriptions(for household: Household) async {
+        guard isAvailable else { return }
+        let zoneName = household.zoneName
+        guard !configuredSubscriptionZones.contains(zoneName) else { return }
+        let subscriptionID = "household-zone-changes-\(zoneName)"
         do {
-            let db = try await resolveDatabase()
+            let db = database(for: household)
+            let zoneID = zoneID(for: household)
             let existing = try await db.fetchAllSubscriptions()
             if !existing.contains(where: { $0.subscriptionID == subscriptionID }) {
-                let sub = CKRecordZoneSubscription(zoneID: activeZoneID, subscriptionID: subscriptionID)
+                let sub = CKRecordZoneSubscription(zoneID: zoneID, subscriptionID: subscriptionID)
                 let info = CKSubscription.NotificationInfo()
                 info.shouldSendContentAvailable = true
                 sub.notificationInfo = info
                 _ = try await db.saveSubscription(sub)
-                logger.info("☁️ CloudKit zone subscription registered")
+                logger.info("☁️ CloudKit zone subscription registered for \(zoneName, privacy: .public)")
             }
-            subscriptionsConfigured = true
+            configuredSubscriptionZones.insert(zoneName)
         } catch {
             logger.error("☁️ Subscription setup failed: \(error.localizedDescription)")
         }
@@ -123,28 +123,29 @@ final class CloudKitSync: ObservableObject {
 
     // MARK: - Push (local → CloudKit)
 
-    func pushTasks(_ tasks: [HouseholdTask]) async {
+    func pushTasks(_ tasks: [HouseholdTask], household: Household) async {
         guard isAvailable else { return }
-        let records = tasks.map { $0.toCKRecord(zoneID: activeZoneID, parentRecordID: activeRootRecordID) }
-        await saveRecords(records)
+        let zoneID = zoneID(for: household)
+        let rootID = rootRecordID(for: household)
+        let records = tasks.map { $0.toCKRecord(zoneID: zoneID, parentRecordID: rootID) }
+        await saveRecords(records, in: database(for: household))
     }
 
-    func pushProfile(_ profile: UserProfile) async {
+    func pushProfile(_ profile: UserProfile, household: Household) async {
         guard isAvailable else { return }
-        let record = profile.toCKRecord(zoneID: activeZoneID, parentRecordID: activeRootRecordID)
-        await saveRecords([record])
+        let record = profile.toCKRecord(zoneID: zoneID(for: household), parentRecordID: rootRecordID(for: household))
+        await saveRecords([record], in: database(for: household))
     }
 
-    func pushCompletion(_ completion: TaskCompletion) async {
+    func pushCompletion(_ completion: TaskCompletion, household: Household) async {
         guard isAvailable else { return }
-        let record = completion.toCKRecord(zoneID: activeZoneID, parentRecordID: activeRootRecordID)
-        await saveRecords([record])
+        let record = completion.toCKRecord(zoneID: zoneID(for: household), parentRecordID: rootRecordID(for: household))
+        await saveRecords([record], in: database(for: household))
     }
 
-    private func saveRecords(_ records: [CKRecord]) async {
+    private func saveRecords(_ records: [CKRecord], in db: CKDatabase) async {
         guard !records.isEmpty else { return }
         do {
-            let db = try await resolveDatabase()
             _ = try await db.modifyRecords(saving: records, deleting: [])
             logger.info("☁️ Pushed \(records.count) records")
         } catch {
@@ -155,13 +156,14 @@ final class CloudKitSync: ObservableObject {
 
     // MARK: - Pull (CloudKit → local)
 
-    func pullAll() async -> CloudKitPayload? {
+    func pullAll(for household: Household) async -> CloudKitPayload? {
         guard isAvailable else { return nil }
+        let db = database(for: household)
+        let zoneID = zoneID(for: household)
         do {
-            let db = try await resolveDatabase()
-            async let tasks       = fetchRecords(ofType: RecordType.task,       from: db)
-            async let completions = fetchRecords(ofType: RecordType.completion, from: db)
-            async let profiles    = fetchRecords(ofType: RecordType.profile,    from: db)
+            async let tasks       = fetchRecords(ofType: RecordType.task,       from: db, zoneID: zoneID)
+            async let completions = fetchRecords(ofType: RecordType.completion, from: db, zoneID: zoneID)
+            async let profiles    = fetchRecords(ofType: RecordType.profile,    from: db, zoneID: zoneID)
 
             let (t, c, p) = try await (tasks, completions, profiles)
             let payload = CloudKitPayload(
@@ -169,7 +171,7 @@ final class CloudKitSync: ObservableObject {
                 completions: c.compactMap { TaskCompletion(from: $0) },
                 profiles:    p.compactMap { UserProfile(from: $0) }
             )
-            logger.info("☁️ Pulled \(payload.tasks.count) tasks, \(payload.completions.count) completions, \(payload.profiles.count) profiles")
+            logger.info("☁️ Pulled \(payload.tasks.count) tasks, \(payload.completions.count) completions, \(payload.profiles.count) profiles from \(household.zoneName, privacy: .public)")
             return payload
         } catch {
             logger.error("☁️ Pull failed: \(error.localizedDescription)")
@@ -178,14 +180,14 @@ final class CloudKitSync: ObservableObject {
         }
     }
 
-    private func fetchRecords(ofType type: String, from db: CKDatabase) async throws -> [CKRecord] {
+    private func fetchRecords(ofType type: String, from db: CKDatabase, zoneID: CKRecordZone.ID) async throws -> [CKRecord] {
         let query = CKQuery(recordType: type, predicate: NSPredicate(value: true))
         var results: [CKRecord] = []
         var cursor: CKQueryOperation.Cursor? = nil
 
         repeat {
             let op: CKQueryOperation = cursor.map(CKQueryOperation.init) ?? CKQueryOperation(query: query)
-            op.zoneID = activeZoneID
+            op.zoneID = zoneID
             op.resultsLimit = CKQueryOperation.maximumResults
             let (records, nextCursor) = try await withCheckedThrowingContinuation { cont in
                 var batch: [CKRecord] = []
@@ -209,16 +211,24 @@ final class CloudKitSync: ObservableObject {
 
     // MARK: - Sharing (household invite)
 
-    /// Returns a CKShare for the household root record, creating one the
+    /// Returns a CKShare for the household's root record, creating one the
     /// first time and reusing it thereafter. Root record and share are
     /// always saved together — CloudKit requires both in the same operation.
-    func createOrFetchShare() async throws -> CKShare {
+    /// Only valid for households where `ownerIsCurrentUser == true`.
+    func createOrFetchShare(for household: Household) async throws -> CKShare {
         guard isAvailable else {
             logger.error("☁️ createOrFetchShare called but isAvailable=false")
             throw CloudKitSyncError.iCloudUnavailable(status: syncError ?? "unknown")
         }
+        guard household.ownerIsCurrentUser else {
+            throw CloudKitSyncError.shareCreationFailed(detail: "cannot share a household joined from someone else")
+        }
+
+        try await ensureOwnedZoneExists(for: household)
+
+        let zone = CKRecordZone(zoneName: household.zoneName)
         let rootID = CKRecord.ID(recordName: RootRecordName.household, zoneID: zone.zoneID)
-        logger.info("☁️ createOrFetchShare zone=\(self.zone.zoneID.zoneName, privacy: .public) rootID=\(rootID.recordName, privacy: .public)")
+        logger.info("☁️ createOrFetchShare zone=\(household.zoneName, privacy: .public) rootID=\(rootID.recordName, privacy: .public)")
 
         // If the root already exists, it carries a reference to its share.
         // Pull the share through that reference rather than guessing IDs.
@@ -238,10 +248,10 @@ final class CloudKitSync: ObservableObject {
 
         // First-time setup: create the root record and its share atomically.
         let rootRecord = CKRecord(recordType: RecordType.householdRoot, recordID: rootID)
-        rootRecord["title"] = "ADultingHD Household" as CKRecordValue
+        rootRecord["title"] = household.name as CKRecordValue
 
         let share = CKShare(rootRecord: rootRecord)
-        share[CKShare.SystemFieldKey.title] = "ADultingHD Household" as CKRecordValue
+        share[CKShare.SystemFieldKey.title] = household.name as CKRecordValue
         share.publicPermission = .none
         logger.info("☁️ Saving root + share atomically (share.recordID=\(share.recordID.recordName, privacy: .public))")
 
@@ -291,28 +301,64 @@ final class CloudKitSync: ObservableObject {
         return savedShare
     }
 
-    func acceptShare(from metadata: CKShare.Metadata) async throws {
+    /// Accept a CKShare invite. Returns the data needed to register a new
+    /// joined household locally — caller is responsible for inserting the
+    /// row into `householdIndex` (this layer doesn't know about it). The
+    /// metadata's `share.recordID.zoneID` carries both the zoneName and the
+    /// inviter's user record name, which together identify the shared zone
+    /// against `sharedCloudDatabase` across app restarts.
+    func acceptShare(from metadata: CKShare.Metadata) async throws -> AcceptedShareInfo {
         try await container.accept(metadata)
-        acceptedSharedZoneID = metadata.share.recordID.zoneID
-        subscriptionsConfigured = false
-        logger.info("☁️ Accepted household share")
+        let zoneID = metadata.share.recordID.zoneID
+        // CKShare title is set when the owner created the share. Fallback to
+        // a generic name when missing — the joiner can rename later.
+        let title = (metadata.share[CKShare.SystemFieldKey.title] as? String)?.nilIfEmpty
+            ?? "Shared Household"
+        logger.info("☁️ Accepted household share zone=\(zoneID.zoneName, privacy: .public) owner=\(zoneID.ownerName, privacy: .public)")
+        return AcceptedShareInfo(
+            zoneName: zoneID.zoneName,
+            ownerUserRecordName: zoneID.ownerName,
+            title: title
+        )
     }
 
     // MARK: - Helpers
 
-    /// Returns the private DB if we own the zone, or shared DB if we joined someone else's household
-    private func resolveDatabase() async throws -> CKDatabase {
-        if acceptedSharedZoneID != nil {
-            return sharedDB
-        }
-        _ = try? await container.userRecordID()
-        // Simple heuristic: if zone exists in privateDB, use it; otherwise use sharedDB
-        let zones = try await privateDB.allRecordZones()
-        if zones.contains(where: { $0.zoneID.zoneName == ZoneName.household }) {
-            return privateDB
-        }
-        return sharedDB
+    private func database(for household: Household) -> CKDatabase {
+        household.ownerIsCurrentUser ? privateDB : sharedDB
     }
+
+    /// Joined households embed the inviter's user record name so the zone
+    /// resolves correctly in `sharedCloudDatabase`.
+    private func zoneID(for household: Household) -> CKRecordZone.ID {
+        if household.ownerIsCurrentUser {
+            return CKRecordZone.ID(zoneName: household.zoneName)
+        }
+        guard let ownerName = household.ownerUserRecordName else {
+            // Should be unreachable: `Household.newJoined` requires this
+            // field. A nil here means a hand-edited or pre-schema-v3
+            // households.json — log loudly and fall back to default-owner,
+            // which will produce empty pulls (not silent wrong-zone writes).
+            logger.error("☁️ Joined household '\(household.name, privacy: .public)' is missing ownerUserRecordName — pulls will return empty")
+            return CKRecordZone.ID(zoneName: household.zoneName, ownerName: CKCurrentUserDefaultName)
+        }
+        return CKRecordZone.ID(zoneName: household.zoneName, ownerName: ownerName)
+    }
+
+    /// The record itself is created lazily by `createOrFetchShare` — push
+    /// records may dangle until then, which is fine.
+    private func rootRecordID(for household: Household) -> CKRecord.ID {
+        CKRecord.ID(recordName: RootRecordName.household, zoneID: zoneID(for: household))
+    }
+}
+
+/// Returned by `CloudKitSync.acceptShare` so `DataStore` can persist the new
+/// joined household row with the zone identity needed to address it across
+/// future app launches.
+struct AcceptedShareInfo: Sendable {
+    let zoneName: String
+    let ownerUserRecordName: String
+    let title: String
 }
 
 // MARK: - Payload

@@ -524,9 +524,10 @@ final class DataStore {
         await store.saveHouseholdIndex(householdIndex)
         updateWidgetData()
         if isHouseholdSharingEnabled && ckSync.isAvailable {
-            await ckSync.pushTasks(tasks)
-            await ckSync.pushProfile(profile)
-            for completion in completions { await ckSync.pushCompletion(completion) }
+            let target = activeHousehold
+            await ckSync.pushTasks(tasks, household: target)
+            await ckSync.pushProfile(profile, household: target)
+            for completion in completions { await ckSync.pushCompletion(completion, household: target) }
         }
     }
 
@@ -705,11 +706,19 @@ final class DataStore {
     private func migrateToCloudKitIfNeeded(force: Bool = false) async {
         let key = PrefKey.ckMigrationDone
         guard force || !UserDefaults.standard.bool(forKey: key) else { return }
-        logger.info("☁️ Migrating local data to CloudKit...")
-        await ckSync.pushTasks(tasks)
-        await ckSync.pushProfile(profile)
-        for completion in completions { await ckSync.pushCompletion(completion) }
-        for p in householdProfiles where p.id != profile.id { await ckSync.pushProfile(p) }
+        // Migrations only push for owned households — joined households
+        // already had their data populated by the inviter.
+        let target = activeHousehold
+        guard target.ownerIsCurrentUser else {
+            logger.info("☁️ Skipping CK migration for joined household '\(target.name, privacy: .public)'")
+            UserDefaults.standard.set(true, forKey: key)
+            return
+        }
+        logger.info("☁️ Migrating local data to CloudKit for '\(target.name, privacy: .public)'...")
+        await ckSync.pushTasks(tasks, household: target)
+        await ckSync.pushProfile(profile, household: target)
+        for completion in completions { await ckSync.pushCompletion(completion, household: target) }
+        for p in householdProfiles where p.id != profile.id { await ckSync.pushProfile(p, household: target) }
         UserDefaults.standard.set(true, forKey: key)
         logger.info("☁️ Migration complete")
     }
@@ -726,7 +735,7 @@ final class DataStore {
             drainPendingReload()
         }
 
-        guard ckSync.isAvailable, let payload = await ckSync.pullAll() else { return }
+        guard ckSync.isAvailable, let payload = await ckSync.pullAll(for: activeHousehold) else { return }
 
         // Snapshot before merge for change detection
         let preProfiles = householdProfiles
@@ -841,6 +850,10 @@ final class DataStore {
         guard Features.cloudKitSharing else {
             throw CloudKitSyncError.shareCreationFailed(detail: "cloudKitSharing feature flag is off")
         }
+        let target = activeHousehold
+        guard target.ownerIsCurrentUser else {
+            throw CloudKitSyncError.shareCreationFailed(detail: "cannot share a household joined from someone else")
+        }
         UserDefaults.standard.set(true, forKey: PrefKey.householdSharingEnabled)
         AppDelegate.registerForRemoteNotifications()
         logger.info("☁️ createHouseholdShare: setup...")
@@ -849,14 +862,13 @@ final class DataStore {
             logger.error("☁️ createHouseholdShare aborting — setup did not mark available. syncError=\(self.ckSync.syncError ?? "nil", privacy: .public)")
             throw CloudKitSyncError.iCloudUnavailable(status: ckSync.syncError ?? "unknown")
         }
-        await ckSync.setupSubscriptions()
-        // Create the share FIRST so the user gets the invite URL without
-        // waiting for the full task/profile/completion migration — that
-        // migration is a one-shot that can push dozens of records serially
-        // and was making the button feel dead for 10-30s on first use.
-        // Migration happens in the background after we return.
+        // Share creation runs first so the invite URL is available without
+        // waiting for the migration push (a one-shot that can serially push
+        // dozens of records and was making the button feel dead for 10-30s).
+        // It also creates the zone, which subscription registration needs.
         logger.info("☁️ createHouseholdShare: createOrFetchShare...")
-        let share = try await ckSync.createOrFetchShare()
+        let share = try await ckSync.createOrFetchShare(for: target)
+        await ckSync.setupSubscriptions(for: target)
         Task { [weak self] in
             await self?.migrateToCloudKitIfNeeded(force: true)
         }
@@ -872,14 +884,18 @@ final class DataStore {
         guard Features.cloudKitSharing else {
             throw CloudKitSyncError.shareCreationFailed(detail: "cloudKitSharing feature flag is off")
         }
+        let target = activeHousehold
+        guard target.ownerIsCurrentUser else {
+            throw CloudKitSyncError.shareCreationFailed(detail: "cannot share a household joined from someone else")
+        }
         UserDefaults.standard.set(true, forKey: PrefKey.householdSharingEnabled)
         AppDelegate.registerForRemoteNotifications()
         await ckSync.setup()
         guard ckSync.isAvailable else {
             throw CloudKitSyncError.iCloudUnavailable(status: ckSync.syncError ?? "unknown")
         }
-        await ckSync.setupSubscriptions()
-        let share = try await ckSync.createOrFetchShare()
+        let share = try await ckSync.createOrFetchShare(for: target)
+        await ckSync.setupSubscriptions(for: target)
         Task { [weak self] in
             await self?.migrateToCloudKitIfNeeded(force: true)
         }
@@ -928,36 +944,78 @@ final class DataStore {
                 }
             }
         )
-
-        syncObserverTokens.append(
-            NotificationCenter.default.addObserver(forName: .cloudKitShareAccepted, object: nil, queue: .main) { [weak self] notification in
-                guard let metadata = notification.object as? CKShare.Metadata else { return }
-                Task { @MainActor in
-                    await self?.registerJoinedHousehold(from: metadata)
-                }
-            }
-        )
     }
 
-    /// Handle acceptance of a CKShare invite. Joins the shared zone and
-    /// pulls its data into the active household.
+    /// Drain any CKShare invites that arrived before SwiftUI was ready
+    /// (cold-launch path) and process each one. Safe to call repeatedly.
+    func drainAcceptedShareInbox() async {
+        let pending = AcceptedShareInbox.shared.drain()
+        for metadata in pending {
+            await registerJoinedHousehold(from: metadata)
+        }
+    }
+
+    /// Handle acceptance of a CKShare invite. Creates a new local `Household`
+    /// row pointing at the inviter's shared zone, switches to it, and pulls
+    /// its data. Idempotent — re-accepting a share for a zone we already
+    /// joined just switches to that existing row.
     func registerJoinedHousehold(from metadata: CKShare.Metadata) async {
         guard Features.cloudKitSharing else {
             logger.error("🏠 Ignoring CKShare acceptance: cloudKitSharing feature is off")
             return
         }
         do {
-            try await ckSync.acceptShare(from: metadata)
             UserDefaults.standard.set(true, forKey: PrefKey.householdSharingEnabled)
             AppDelegate.registerForRemoteNotifications()
             await ckSync.setup()
-            await ckSync.setupSubscriptions()
-            await pullFromCloudKit()
-            Task { [weak self] in
-                await self?.migrateToCloudKitIfNeeded(force: true)
+            guard ckSync.isAvailable else {
+                logger.error("🏠 acceptShare aborting — CloudKit not available: \(self.ckSync.syncError ?? "unknown", privacy: .public)")
+                return
             }
+            let info = try await ckSync.acceptShare(from: metadata)
+
+            // If we already accepted this share before (e.g. tapping the
+            // invite link a second time), reuse the existing local row
+            // instead of inserting a duplicate.
+            let existing = householdIndex.households.first { household in
+                !household.ownerIsCurrentUser
+                    && household.zoneName == info.zoneName
+                    && household.ownerUserRecordName == info.ownerUserRecordName
+            }
+            let joined: Household
+            if let existing {
+                joined = existing
+                logger.info("🏠 Re-joined existing shared household '\(existing.name, privacy: .public)'")
+            } else {
+                joined = Household.newJoined(
+                    name: info.title,
+                    members: [profile],
+                    zoneName: info.zoneName,
+                    ownerUserRecordName: info.ownerUserRecordName
+                )
+                householdIndex.households.append(joined)
+                // Pre-seed the joined household's local files with empty
+                // collections so `switchHousehold` doesn't fall through to
+                // `defaultHouseholdTasks` (which would then merge through
+                // `pullFromCloudKit` and push the joiner's default seed
+                // back into the inviter's shared zone, polluting their data).
+                await store.saveTasks([], for: joined.id)
+                await store.saveSupplyStock([:], for: joined.id)
+                logger.info("🏠 Joined new shared household '\(info.title, privacy: .public)' zone=\(info.zoneName, privacy: .public)")
+            }
+
+            // Persist the index BEFORE switching so a crash between accept
+            // and the post-switch save doesn't leave the joined row missing
+            // (its CloudKit zone is already plumbed at this point).
+            await store.saveHouseholdIndex(householdIndex)
+
+            if activeHouseholdId != joined.id {
+                await switchHousehold(to: joined.id)
+            }
+
+            await ckSync.setupSubscriptions(for: joined)
+            await pullFromCloudKit()
             detectNameClashInJoinedHouseholds()
-            logger.info("🏠 Joined shared household via CKShare")
         } catch {
             logger.error("🏠 Failed to accept share: \(error.localizedDescription)")
         }

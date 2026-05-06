@@ -18,6 +18,11 @@ struct Household: Identifiable, Codable {
     /// `ZoneName.household` so existing TestFlight users don't lose records
     /// (CloudKit can't rename zones).
     var zoneName: String
+    /// CloudKit user record name of the zone owner. Always nil for
+    /// `ownerIsCurrentUser == true`; set to the inviter's user record name
+    /// when this household represents an accepted CKShare. Required to
+    /// construct a `CKRecordZone.ID` against `sharedCloudDatabase`.
+    var ownerUserRecordName: String?
 
     /// Convenience constructor for a locally-owned household. Defaults zone
     /// to the legacy shared zone when `id` is omitted (callers pass an
@@ -35,7 +40,32 @@ struct Household: Identifiable, Codable {
             members: members,
             shareRecordName: nil,
             ownerIsCurrentUser: true,
-            zoneName: zoneName
+            zoneName: zoneName,
+            ownerUserRecordName: nil
+        )
+    }
+
+    /// Convenience constructor for a household joined via a CKShare invite.
+    /// `zoneName` and `ownerUserRecordName` come from the share metadata's
+    /// `recordID.zoneID` and let CloudKit calls target `sharedCloudDatabase`
+    /// after app restart without losing track of which shared zone backs
+    /// this row.
+    static func newJoined(
+        id: UUID = UUID(),
+        name: String,
+        members: [UserProfile],
+        zoneName: String,
+        ownerUserRecordName: String
+    ) -> Household {
+        Household(
+            id: id,
+            name: name,
+            createdAt: Date(),
+            members: members,
+            shareRecordName: nil,
+            ownerIsCurrentUser: false,
+            zoneName: zoneName,
+            ownerUserRecordName: ownerUserRecordName
         )
     }
 }
@@ -46,7 +76,7 @@ struct HouseholdIndex: Codable {
     var activeHouseholdId: UUID
     var schemaVersion: Int
 
-    static let currentSchemaVersion = 2
+    static let currentSchemaVersion = 3
 
     var activeHousehold: Household? {
         households.first { $0.id == activeHouseholdId }

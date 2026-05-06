@@ -1,4 +1,5 @@
 import SwiftUI
+import CloudKit
 
 @main
 struct ADultingHDApp: App {
@@ -29,8 +30,15 @@ struct ADultingHDApp: App {
                     await dataStore.load()
                     ICloudMonitor.shared.start()
                     dataStore.startSyncObserver()
+                    await dataStore.drainAcceptedShareInbox()
                     await notificationManager.checkAuthorizationStatus()
                     await storeManager.loadProducts()
+                }
+                .onContinueUserActivity(ShareAcceptance.activityType) { activity in
+                    guard let metadata = ShareAcceptance.metadata(from: activity) else { return }
+                    Task { @MainActor in
+                        await dataStore.registerJoinedHousehold(from: metadata)
+                    }
                 }
         }
         #if os(macOS)
