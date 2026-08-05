@@ -32,8 +32,9 @@ struct ProfileView: View {
                 .padding()
                 .macOSContentFrame()
             }
+            .rootTabScrollClearance()
         }
-        .navigationTitle("")
+        .rootTabNavigation("Profile")
         #if os(iOS)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
@@ -63,6 +64,7 @@ struct ProfileView: View {
             icon: "person.crop.circle.fill",
             color: Theme.levelPurple
         )
+        .accessibilityIdentifier("profile-root-header")
     }
 
     // MARK: - Level Card
@@ -227,6 +229,7 @@ struct ProfileView: View {
                         .tint(Theme.categoryColor(category))
                         .frame(width: 60)
                 }
+                .accessibilityIdentifier("profile-category-\(category.rawValue)")
             }
         }
         .card()

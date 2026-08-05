@@ -5,6 +5,9 @@ enum Theme {
 
     static let accent = Color.accentColor
 
+    // Cozy Domestic Adventure foundations
+    static let cream = Color(red: 1.00, green: 0.97, blue: 0.93)
+
     // Gamification — curated soft palette
     static let xpGold = Color(red: 0.96, green: 0.68, blue: 0.26)
     static let streakOrange = Color(red: 0.98, green: 0.52, blue: 0.33)
@@ -63,6 +66,14 @@ enum Theme {
     static let sectionSpacing: CGFloat = 16
     static let cornerRadius: CGFloat = 8
     static let rowSpacing: CGFloat = 6
+    static let rootTabBottomClearance: CGFloat = 72
+
+    static let rootNavigationSurface = Color(uiColor: UIColor { traits in
+        if traits.userInterfaceStyle == .dark {
+            return UIColor(red: 0.10, green: 0.10, blue: 0.12, alpha: 1)
+        }
+        return UIColor(red: 1.00, green: 0.97, blue: 0.93, alpha: 1)
+    })
     #endif
 
     /// Grid column count: 4 on macOS wide layouts, 2 on iOS.
@@ -115,12 +126,40 @@ extension View {
         self
         #endif
     }
+
+    /// Keeps every iOS root tab on the same compact navigation baseline.
+    func rootTabNavigation(_ title: LocalizedStringKey) -> some View {
+        #if os(iOS)
+        self
+            .navigationTitle(title)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(Theme.rootNavigationSurface, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
+        #else
+        self
+        #endif
+    }
+
+    /// Leaves room to scroll the final control clear of iOS's floating tab bar.
+    func rootTabScrollClearance() -> some View {
+        #if os(iOS)
+        self.contentMargins(.bottom, Theme.rootTabBottomClearance, for: .scrollContent)
+        #else
+        self
+        #endif
+    }
 }
 
 struct ScreenBackground: View {
+    @Environment(\.colorScheme) private var colorScheme
+
     var body: some View {
         #if os(iOS)
-        Color(uiColor: .systemGroupedBackground).ignoresSafeArea()
+        ZStack {
+            Color(uiColor: .systemGroupedBackground)
+            Theme.cream.opacity(colorScheme == .dark ? 0.03 : 0.72)
+        }
+        .ignoresSafeArea()
         #else
         Color(nsColor: .windowBackgroundColor).ignoresSafeArea()
         #endif

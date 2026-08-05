@@ -57,6 +57,57 @@ final class ScreenshotTests: XCTestCase {
         }
     }
 
+    func testRootTabsUseCompactNavigationChrome() throws {
+        let tabs = [
+            (name: "Home", header: "home-root-header"),
+            (name: "Tasks", header: "tasks-root-header"),
+            (name: "Schedule", header: "schedule-root-header"),
+            (name: "Stats", header: "stats-root-header"),
+            (name: "Profile", header: "profile-root-header"),
+        ]
+
+        let window = app.windows.firstMatch
+        XCTAssertTrue(window.waitForExistence(timeout: 5))
+
+        for tab in tabs {
+            navigateTo(tab.name)
+
+            let header = app.descendants(matching: .any)
+                .matching(identifier: tab.header)
+                .firstMatch
+            XCTAssertTrue(header.waitForExistence(timeout: 3), "Missing \(tab.name) landing header")
+            capture("Chrome_\(tab.name)")
+            XCTAssertLessThan(
+                header.frame.minY,
+                window.frame.height * 0.22,
+                "\(tab.name) reserves an oversized empty navigation region"
+            )
+
+            let tabButton = app.tabBars.buttons[tab.name]
+            if tabButton.exists {
+                XCTAssertTrue(tabButton.isHittable, "\(tab.name) tab should remain tappable")
+            }
+        }
+
+        let profileScroll = app.scrollViews.firstMatch
+        let finalProfileRow = app.descendants(matching: .any)
+            .matching(identifier: "profile-category-General")
+            .firstMatch
+        for _ in 0..<12 where !finalProfileRow.isHittable {
+            profileScroll.swipeUp()
+        }
+        XCTAssertTrue(finalProfileRow.isHittable, "The final Profile row should scroll above the tab bar")
+
+        let tabBar = app.tabBars.firstMatch
+        if tabBar.exists {
+            XCTAssertLessThan(
+                finalProfileRow.frame.maxY,
+                tabBar.frame.minY,
+                "The floating tab bar should not cover the final Profile row"
+            )
+        }
+    }
+
     /// Navigate to a tab - handles both iPhone (TabBar) and iPad (sidebar) layouts
     private func navigateTo(_ tab: String) {
         // iPhone: standard tab bar
