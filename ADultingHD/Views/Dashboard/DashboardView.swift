@@ -29,6 +29,8 @@ struct DashboardView: View {
     @Environment(DataStore.self) private var dataStore
     @Environment(StoreManager.self) private var storeManager
     @AppStorage("showSeasonalSection") private var showSeasonalSection = true
+    @State private var showAddTask = false
+    @State private var showProUpgrade = false
 
     private var greeting: String {
         let hour = Calendar.current.component(.hour, from: Date())
@@ -73,6 +75,19 @@ struct DashboardView: View {
             }
         }
         #endif
+        .sheet(isPresented: $showAddTask) {
+            AddTaskView()
+        }
+        .sheet(isPresented: $showProUpgrade) {
+            ProUpgradeView()
+        }
+    }
+
+    @ViewBuilder
+    private var primaryTaskSection: some View {
+        if dataStore.tasks.isEmpty { emptyTasksSection }
+        else if dataStore.dueTasks.isEmpty { caughtUpSection }
+        else { dueTasksSection }
     }
 
     #if os(iOS)
@@ -81,8 +96,7 @@ struct DashboardView: View {
             heroSection
             tipBanner
             statsRow
-            if dataStore.dueTasks.isEmpty { caughtUpSection }
-            else { dueTasksSection }
+            primaryTaskSection
             if !dataStore.todayCompletions.isEmpty { recentCompletionsSection }
             if storeManager.isPro { seasonalSection }
         }
@@ -110,13 +124,8 @@ struct DashboardView: View {
 
             // Main body: due tasks left, secondary content right
             HStack(alignment: .top, spacing: Theme.sectionSpacing) {
-                if !dataStore.dueTasks.isEmpty {
-                    dueTasksSection
-                        .frame(maxWidth: .infinity)
-                } else {
-                    caughtUpSection
-                        .frame(maxWidth: .infinity)
-                }
+                primaryTaskSection
+                    .frame(maxWidth: .infinity)
                 if hasRightColumnContent {
                     VStack(spacing: Theme.sectionSpacing) {
                         if !dataStore.todayCompletions.isEmpty { recentCompletionsSection }
@@ -213,6 +222,37 @@ struct DashboardView: View {
                 color: Theme.xpGold
             )
         }
+    }
+
+    private var canCreateCustomTask: Bool {
+        storeManager.canCreateCustomTask(existingCount: dataStore.customTaskCount)
+    }
+
+    private var emptyTasksSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label("No tasks yet", systemImage: "checklist")
+                .font(.headline)
+                .foregroundStyle(Theme.accent)
+
+            Text("Add your first task and it'll show up here whenever it's due.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Button {
+                if canCreateCustomTask { showAddTask = true }
+                else { showProUpgrade = true }
+            } label: {
+                Label("Add A Task", systemImage: "plus")
+                    .font(.subheadline.weight(.semibold))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 10)
+                    .background(Theme.accent, in: RoundedRectangle(cornerRadius: Theme.cornerRadius))
+                    .foregroundStyle(.white)
+            }
+            .buttonStyle(.plain)
+        }
+        .card()
     }
 
     private var caughtUpSection: some View {

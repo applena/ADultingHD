@@ -384,6 +384,13 @@ final class DataStore {
         await store.saveTasks(tasks, for: activeHouseholdId)
     }
 
+    /// Tasks that don't match a built-in catalog entry by name — counted
+    /// against the free-tier custom-task limit.
+    var customTaskCount: Int {
+        let catalogNames = Set(taskCatalog.map { $0.name.lowercased() })
+        return tasks.filter { !catalogNames.contains($0.name.lowercased()) }.count
+    }
+
     func deleteTask(_ task: HouseholdTask) async {
         tasks.removeAll { $0.id == task.id }
         await store.saveTasks(tasks, for: activeHouseholdId)
@@ -396,13 +403,14 @@ final class DataStore {
         }
     }
 
-    /// Drop tasks belonging to categories the user deselected during
-    /// onboarding. Run once after the "Pick Your Rooms" step. Any task whose
-    /// category isn't in `allowed` is removed — simplest UX for first-time
-    /// setup; the user can always add tasks back from the catalog later.
-    func filterTasks(toCategories allowed: Set<TaskCategory>) async {
-        guard !allowed.isEmpty, allowed.count < TaskCategory.allCases.count else { return }
-        tasks.removeAll { !allowed.contains($0.category) }
+    /// Seed the starter catalog for the categories the user picked during
+    /// onboarding's "Pick Your Rooms" step. Households otherwise start with
+    /// no tasks — onboarding is the only place the built-in catalog is
+    /// offered, so a user can see exactly how a task lands on their
+    /// homescreen. The user can always add more from the catalog later.
+    func seedOnboardingTasks(categories allowed: Set<TaskCategory>) async {
+        guard !allowed.isEmpty else { return }
+        tasks = defaultHouseholdTasks.filter { allowed.contains($0.category) }
         await store.saveTasks(tasks, for: activeHouseholdId)
     }
 
@@ -627,8 +635,9 @@ final class DataStore {
 
     // MARK: - Multi-household management
 
-    /// Creates a new household with default tasks and makes it active. UI gates
-    /// this on Pro for the 2nd+ household.
+    /// Creates a new household and makes it active. UI gates this on Pro for
+    /// the 2nd+ household. Starts with no tasks — the built-in catalog is
+    /// only offered during onboarding.
     func createHousehold(name: String) async {
         let id = UUID()
         let household = Household.newLocal(
@@ -640,8 +649,8 @@ final class DataStore {
         householdIndex.households.append(household)
         householdIndex.activeHouseholdId = id
         // Seed scoped state directly instead of loading from disk (which would
-        // fall through to defaults + write anyway, costing a wasted read).
-        tasks = defaultHouseholdTasks
+        // fall through to an empty read + wasted write anyway).
+        tasks = []
         supplyStock = [:]
         await store.saveTasks(tasks, for: id)
         await store.saveHouseholdIndex(householdIndex)
@@ -994,12 +1003,10 @@ final class DataStore {
                     ownerUserRecordName: info.ownerUserRecordName
                 )
                 householdIndex.households.append(joined)
-                // Pre-seed the joined household's local files with empty
-                // collections so `switchHousehold` doesn't fall through to
-                // `defaultHouseholdTasks` (which would then merge through
-                // `pullFromCloudKit` and push the joiner's default seed
-                // back into the inviter's shared zone, polluting their data).
-                await store.saveTasks([], for: joined.id)
+                // Pre-seed the joined household's local supply-stock file so
+                // it exists before `pullFromCloudKit` merges — tasks already
+                // default to empty on a missing file, so no seed is needed
+                // there.
                 await store.saveSupplyStock([:], for: joined.id)
                 logger.info("🏠 Joined new shared household '\(info.title, privacy: .public)' zone=\(info.zoneName, privacy: .public)")
             }
@@ -1077,7 +1084,7 @@ final class DataStore {
         defaults.removeObject(forKey: PrefKey.hasCompletedOnboarding)
         defaults.removeObject(forKey: PrefKey.onboardingHouseholdName)
         defaults.removeObject(forKey: PrefKey.householdSharingEnabled)
-        tasks = defaultHouseholdTasks
+        tasks = []
         profile = UserProfile()
         completions = []
         supplyStock = [:]

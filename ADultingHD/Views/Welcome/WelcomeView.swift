@@ -444,7 +444,7 @@ struct WelcomeView: View {
             }
         case .pickRooms:
             Task {
-                await dataStore.filterTasks(toCategories: selectedCategories)
+                await dataStore.seedOnboardingTasks(categories: selectedCategories)
                 advanceOrComplete()
             }
         case .proPitch:
