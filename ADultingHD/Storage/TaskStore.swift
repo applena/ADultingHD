@@ -110,10 +110,8 @@ actor TaskStore {
         let url = newerOf(cloud: cloud, local: local)
         guard let data = try? Data(contentsOf: url),
               let tasks = try? decoder.decode([HouseholdTask].self, from: data) else {
-            logger.info("No saved tasks found for household \(householdId.uuidString, privacy: .public), using defaults")
-            let tasks = defaultHouseholdTasks
-            saveTasks(tasks, for: householdId)
-            return tasks
+            logger.info("No saved tasks found for household \(householdId.uuidString, privacy: .public), starting empty")
+            return []
         }
         logger.info("Loaded \(tasks.count) tasks for household \(householdId.uuidString, privacy: .public)")
         return tasks

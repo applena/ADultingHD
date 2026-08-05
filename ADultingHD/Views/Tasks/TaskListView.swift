@@ -20,13 +20,8 @@ struct TaskListView: View {
     @State private var showAddCustom = false
     @State private var showProUpgrade = false
 
-    private var customTaskCount: Int {
-        let catalogNames = Set(taskCatalog.map { $0.name.lowercased() })
-        return dataStore.tasks.filter { !catalogNames.contains($0.name.lowercased()) }.count
-    }
-
     private var canCreateCustomTask: Bool {
-        storeManager.isPro || customTaskCount < StoreManager.freeCustomTaskLimit
+        storeManager.canCreateCustomTask(existingCount: dataStore.customTaskCount)
     }
 
     var body: some View {
@@ -84,7 +79,7 @@ struct TaskListView: View {
             title: isCatalog ? "Add work that matches your home" : "Your active task list",
             subtitle: isCatalog
                 ? "\(taskCatalog.count) ready-made tasks plus custom chores when the catalog is not specific enough."
-                : "\(dataStore.activeTasks.count) active tasks, \(dataStore.dueTasks.count) due now, \(customTaskCount) custom.",
+                : "\(dataStore.activeTasks.count) active tasks, \(dataStore.dueTasks.count) due now, \(dataStore.customTaskCount) custom.",
             icon: isCatalog ? "square.grid.2x2.fill" : "checklist",
             color: isCatalog ? Theme.levelPurple : Theme.accent
         )

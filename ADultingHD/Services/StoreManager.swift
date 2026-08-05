@@ -39,6 +39,10 @@ final class StoreManager {
 
     private var isDemoMode = false
 
+    func canCreateCustomTask(existingCount: Int) -> Bool {
+        isPro || existingCount < Self.freeCustomTaskLimit
+    }
+
     #if DEBUG
     func enableDemoMode() {
         isPro = true
