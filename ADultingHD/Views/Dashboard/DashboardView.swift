@@ -427,29 +427,38 @@ struct DueTaskRow: View {
     var body: some View {
         let status = task.dueStatus()
         HStack(spacing: 10) {
-            Image(systemName: task.category.icon)
-                .foregroundStyle(Theme.categoryColor(task.category))
-                .frame(width: 24)
+            // Tap target for opening the task's detail/edit view is scoped to
+            // just this leading content, not the whole row — an ancestor
+            // .onTapGesture spanning the trailing checkmark Button below is
+            // not guaranteed mutually exclusive with the Button's own tap
+            // recognizer, so both could fire from a single tap on the button.
+            HStack(spacing: 10) {
+                Image(systemName: task.category.icon)
+                    .foregroundStyle(Theme.categoryColor(task.category))
+                    .frame(width: 24)
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(task.name)
-                    .font(.subheadline.weight(.medium))
-                    .fixedSize(horizontal: false, vertical: true)
-                HStack(spacing: 6) {
-                    if status.isOverdue {
-                        Text("\(status.daysOverdue)d overdue")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(Theme.overdueRed)
-                    } else {
-                        Text("\(task.estimatedMinutes)m")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(task.name)
+                        .font(.subheadline.weight(.medium))
+                        .fixedSize(horizontal: false, vertical: true)
+                    HStack(spacing: 6) {
+                        if status.isOverdue {
+                            Text("\(status.daysOverdue)d overdue")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(Theme.overdueRed)
+                        } else {
+                            Text("\(task.estimatedMinutes)m")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        Text("+\(task.xpReward) XP")
+                            .font(.caption.bold())
+                            .foregroundStyle(Theme.xpGold)
                     }
-                    Text("+\(task.xpReward) XP")
-                        .font(.caption.bold())
-                        .foregroundStyle(Theme.xpGold)
                 }
             }
+            .contentShape(Rectangle())
+            .onTapGesture(perform: onSelect)
             .accessibilityElement(children: .combine)
             .accessibilityAction { onSelect() }
 
@@ -467,8 +476,6 @@ struct DueTaskRow: View {
             .accessibilityLabel(isChecked ? "Undo complete" : "Mark complete")
         }
         .padding(.vertical, 4)
-        .contentShape(Rectangle())
-        .onTapGesture(perform: onSelect)
         .onDisappear {
             // Reset (not just cancel) so a stale cancelled Task can't leave
             // the checkmark showing "checked" the next time this row is
