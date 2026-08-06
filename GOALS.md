@@ -8,7 +8,7 @@ Make adulting suck less by turning household chores into a game worth playing.
 
 ADultingHD exists because household maintenance is necessary, repetitive, and deeply unmotivating. The app has three selling points, and every feature traces back to one of them:
 
-1. **Tell you exactly what to do, today** — Not just a task name, but a description of the task, step-by-step instructions for how to do it, and the supplies it needs, so there's never a "wait, how do I even do this" moment standing between a user and a finished chore.
+1. **Tell you exactly what to do, today** — Not just a task name, but a description, and room for step-by-step instructions and the supplies it needs, so a chore doesn't have to start with "wait, how do I even do this."
 2. **Divide the labor** — Invite the people you live with into your household (via a native iCloud share — no ADultingHD account to create) so chores can be assigned to whoever's doing them, and everyone can see who did what, and when.
 3. **Make it a game** — RPG-style progression — XP, levels, streaks, achievements — turns "I have to clean the bathroom" into "I'm 200 XP from leveling up."
 
@@ -38,7 +38,7 @@ The app delivers a full gamification cycle: discover tasks, complete them with q
 
 - **Core loop** — Completing any task feels immediately rewarding through XP gains, streak maintenance, and progress toward the next level
 - **Depth** — Achievements, seasonal suggestions, quality ratings, and category mastery give long-term players new goals to chase
-- **Task clarity** — Every task carries a description, ordered instructions (`ChecklistItem.instructions`), and a supply list, so "what do I need to do today" always comes with "and here's how, and here's what it takes"
+- **Task clarity** — Every task carries a description and a supply list; tasks can also carry ordered step-by-step instructions (`ChecklistItem.instructions`) for when "what" isn't enough and a chore needs a "how"
 - **Household play** — Shipped via CloudKit `CKShare`: a household owner invites others (even across Apple IDs) through the native share sheet; accepted invites sync the same task list, completions, and leaderboard. Tasks can carry a `defaultAssigneeId` so a household can divide chores by member, and the activity feed/leaderboard shows who did what and when
 - **Passive engagement** — Widgets and notifications keep the game present without requiring the app to be open
 - **Supply awareness** — Task-linked inventory tracking bridges the gap between "what needs doing" and "what do I need to buy"
