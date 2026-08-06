@@ -31,6 +31,7 @@ struct DashboardView: View {
     @AppStorage(PrefKey.showSeasonalSection) private var showSeasonalSection = false
     @State private var showAddTask = false
     @State private var showProUpgrade = false
+    @State private var selectedTask: HouseholdTask?
 
     private var seasonalSectionVisible: Bool { storeManager.isPro && showSeasonalSection }
 
@@ -85,6 +86,9 @@ struct DashboardView: View {
         }
         .sheet(isPresented: $showProUpgrade) {
             ProUpgradeView()
+        }
+        .navigationDestination(item: $selectedTask) { task in
+            TaskDetailView(task: task)
         }
     }
 
@@ -304,7 +308,7 @@ struct DashboardView: View {
             }
 
             ForEach(dataStore.dueTasks.prefix(10)) { task in
-                DueTaskRow(task: task)
+                DueTaskRow(task: task) { selectedTask = task }
             }
 
             if dataStore.dueTasks.count > 10 {
@@ -405,6 +409,10 @@ struct DashboardView: View {
 struct DueTaskRow: View {
     @Environment(DataStore.self) private var dataStore
     let task: HouseholdTask
+    /// Opens the task's detail/edit view. Kept separate from the checkmark
+    /// button below so tapping to complete a task and tapping to edit it
+    /// don't fight over the same gesture.
+    let onSelect: () -> Void
     @State private var pendingCompletion: Task<Void, Never>?
 
     /// Tapping the checkmark marks the task done immediately in the UI, but
@@ -457,6 +465,8 @@ struct DueTaskRow: View {
             .accessibilityLabel(isChecked ? "Undo complete" : "Mark complete")
         }
         .padding(.vertical, 4)
+        .contentShape(Rectangle())
+        .onTapGesture(perform: onSelect)
         .onDisappear { pendingCompletion?.cancel() }
     }
 
