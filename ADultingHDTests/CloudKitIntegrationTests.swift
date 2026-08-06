@@ -49,12 +49,13 @@ final class CloudKitIntegrationTests: XCTestCase {
             throw XCTSkip("iCloud unavailable on this machine — sign into iCloud in Simulator Settings")
         }
         sync = s
-        // Use the legacy default household so multiple test runs against the
-        // same iCloud account reuse one zone instead of polluting the dev
-        // container with disposable zones every run.
+        // Use a fixed test-only zone so multiple integration runs reuse one
+        // zone without touching the app's legacy migration zone or creating
+        // disposable zones in the development container.
         testHousehold = Household.newLocal(
             name: "Integration Test Household",
-            members: []
+            members: [],
+            zoneName: "IntegrationTestHouseholdZone"
         )
     }
 
