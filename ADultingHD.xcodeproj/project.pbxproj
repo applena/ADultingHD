@@ -77,6 +77,7 @@
 		8D0F4534D07BA76C6387C53A /* DataStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7A30BDBD828F7148288710C /* DataStore.swift */; };
 		8DE2F629284ED770D3B2D48B /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81CDE793214D211A1B6C4124 /* ContentView.swift */; };
 		903A1FCACE9EB8111F170CA6 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC7C1D393BEF1BD66D303071 /* AppDelegate.swift */; };
+		9230042663357D55AAB821DA /* WeeklyLeaderboard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53F4786298402DBDC4632460 /* WeeklyLeaderboard.swift */; };
 		9C1DEBF4250D2976DB2BB016 /* AvatarShopView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4757FDAA2BA9BF7C4FCF13EF /* AvatarShopView.swift */; };
 		9D361A1FB6B532CDC9A8FA64 /* SharedDefaults.swift in Sources */ = {isa = PBXBuildFile; fileRef = 120568C8B5D9789897289150 /* SharedDefaults.swift */; };
 		9F85CA4BB8D941A50064BBDD /* Household.swift in Sources */ = {isa = PBXBuildFile; fileRef = D11A106E8C2F206C19D308D2 /* Household.swift */; };
@@ -86,6 +87,7 @@
 		AB9CED694A786AED0A665721 /* Products.storekit in Resources */ = {isa = PBXBuildFile; fileRef = 94BE46FE41B7C1EA8E502F61 /* Products.storekit */; };
 		AD649BB11A09F94907291EA6 /* CloudKitSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC0D49B9607490BDBDF8E190 /* CloudKitSync.swift */; };
 		AE9A26A486ADF8D8C308066E /* DefaultTasks.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04D1D6ED759D2E2C16961F3F /* DefaultTasks.swift */; };
+		B0063F961C5D09824CD606F1 /* WeeklyLeaderboard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53F4786298402DBDC4632460 /* WeeklyLeaderboard.swift */; };
 		B2E33766E6A443E258D27C8E /* AvatarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1090F574CE8B557B631AA05C /* AvatarView.swift */; };
 		B719C8440B8AA15C2D29DE11 /* StorageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC655FB6ECD683EFB08D9D2A /* StorageTests.swift */; };
 		BB5FC43B97E81E7B705F1E50 /* HouseholdListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D2415835B6B9246CBCB2B51 /* HouseholdListView.swift */; };
@@ -161,6 +163,7 @@
 		4F0201C1F9CC0080AB9AE3DF /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		50B7A549DD9609592F8E379E /* CloudShareSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudShareSheet.swift; sourceTree = "<group>"; };
 		5396E4C1C4C3ECF26BB2EAFA /* DashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardView.swift; sourceTree = "<group>"; };
+		53F4786298402DBDC4632460 /* WeeklyLeaderboard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WeeklyLeaderboard.swift; sourceTree = "<group>"; };
 		549CB63F51BACCA54F498F61 /* ProUpgradeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProUpgradeView.swift; sourceTree = "<group>"; };
 		57C8C629738FF18C6D7FC2F7 /* ADultingHDWidget.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = ADultingHDWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		595B8FFDEAA880BB683CE951 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
@@ -448,6 +451,7 @@
 				D11A106E8C2F206C19D308D2 /* Household.swift */,
 				B54CC3BCB4829D7DA2F17D3B /* Models.swift */,
 				AF1CF56CB3F7513581C10151 /* Recurrence.swift */,
+				53F4786298402DBDC4632460 /* WeeklyLeaderboard.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -721,6 +725,7 @@
 				32B2A2B1C0D0C060D199A5F0 /* TaskListView.swift in Sources */,
 				4BFE807B0EA0A3A6DE64775E /* TaskStore.swift in Sources */,
 				0A1DFB68D9B5E5EF8D71D9B7 /* Theme.swift in Sources */,
+				9230042663357D55AAB821DA /* WeeklyLeaderboard.swift in Sources */,
 				D5ED0D8A6525358B05C0F0B6 /* WelcomeView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -770,6 +775,7 @@
 				76E0314219EACDB96AD1BAA5 /* TaskListView.swift in Sources */,
 				1A414DB4EF6A72C1C2BB593C /* TaskStore.swift in Sources */,
 				39B3C852206DB89E94730D9B /* Theme.swift in Sources */,
+				B0063F961C5D09824CD606F1 /* WeeklyLeaderboard.swift in Sources */,
 				DCBFC7323C498C4BCACA07F2 /* WelcomeView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

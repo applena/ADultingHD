@@ -172,6 +172,18 @@ final class DataStore {
         householdProfiles.sorted { $0.totalXP > $1.totalXP }
     }
 
+    /// Each household member's XP earned so far this calendar week, highest
+    /// first — see `WeeklyLeaderboard.entries`.
+    var weeklyLeaderboard: [WeeklyXPEntry] {
+        WeeklyLeaderboard.entries(members: householdProfiles, completions: completions)
+    }
+
+    /// This week's "superstar" (highest weekly XP), or `nil` when there's no
+    /// clear leader — see `WeeklyLeaderboard.superstar`.
+    var weeklySuperstar: WeeklyXPEntry? {
+        WeeklyLeaderboard.superstar(among: weeklyLeaderboard)
+    }
+
     // MARK: - Load
 
     func load() async {
@@ -676,7 +688,7 @@ final class DataStore {
 
     private func earnedWeeklyConsistencyBonus(at date: Date) -> Bool {
         let calendar = Calendar.current
-        guard let interval = calendar.dateInterval(of: .weekOfYear, for: date) else { return false }
+        guard let interval = calendar.weekInterval(containing: date) else { return false }
         let completedTaskIDs = Set(
             completions
                 .filter { interval.contains($0.completedAt) }
@@ -711,7 +723,7 @@ final class DataStore {
         let anchorDate: Date
         switch period {
         case "weekly":
-            anchorDate = calendar.dateInterval(of: .weekOfYear, for: date)?.start ?? date
+            anchorDate = calendar.weekInterval(containing: date)?.start ?? date
         case "monthly":
             anchorDate = calendar.dateInterval(of: .month, for: date)?.start ?? date
         default:

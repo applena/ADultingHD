@@ -191,4 +191,86 @@ final class ModelTests: XCTestCase {
         let ids = allAchievements.map(\.id)
         XCTAssertEqual(ids.count, Set(ids).count, "Achievements should have unique IDs")
     }
+
+    // MARK: - WeeklyLeaderboard
+
+    private func makeCompletion(profileId: UUID?, xp: Int, streakBonus: Int = 0, daysAgo: Int = 0) -> TaskCompletion {
+        let date = Calendar.current.date(byAdding: .day, value: -daysAgo, to: Date())!
+        return TaskCompletion(
+            id: UUID(), taskId: UUID(), taskName: "Test", completedAt: date,
+            xpEarned: xp, streakBonus: streakBonus, notes: nil, profileId: profileId
+        )
+    }
+
+    func testWeeklyLeaderboardSumsXPAndStreakBonusPerMember() {
+        var alice = UserProfile(); alice.name = "Alice"
+        var bob = UserProfile(); bob.name = "Bob"
+        let completions = [
+            makeCompletion(profileId: alice.id, xp: 10, streakBonus: 5),
+            makeCompletion(profileId: alice.id, xp: 20),
+            makeCompletion(profileId: bob.id, xp: 15),
+        ]
+        let entries = WeeklyLeaderboard.entries(members: [alice, bob], completions: completions)
+        XCTAssertEqual(entries.first?.profile.name, "Alice")
+        XCTAssertEqual(entries.first?.weeklyXP, 35)
+        XCTAssertEqual(entries.last?.profile.name, "Bob")
+        XCTAssertEqual(entries.last?.weeklyXP, 15)
+    }
+
+    func testWeeklyLeaderboardExcludesCompletionsOutsideCurrentWeek() {
+        let alice = UserProfile()
+        let completions = [
+            makeCompletion(profileId: alice.id, xp: 10, daysAgo: 0),
+            makeCompletion(profileId: alice.id, xp: 999, daysAgo: 30),
+        ]
+        let entries = WeeklyLeaderboard.entries(members: [alice], completions: completions)
+        XCTAssertEqual(entries.first?.weeklyXP, 10)
+    }
+
+    func testWeeklyLeaderboardIgnoresLegacyCompletionsWithNoProfileId() {
+        let alice = UserProfile()
+        let completions = [makeCompletion(profileId: nil, xp: 50)]
+        let entries = WeeklyLeaderboard.entries(members: [alice], completions: completions)
+        XCTAssertEqual(entries.first?.weeklyXP, 0)
+    }
+
+    func testWeeklyLeaderboardMembersWithNoCompletionsScoreZero() {
+        let alice = UserProfile()
+        let bob = UserProfile()
+        let entries = WeeklyLeaderboard.entries(members: [alice, bob], completions: [])
+        XCTAssertEqual(entries.map(\.weeklyXP), [0, 0])
+    }
+
+    func testSuperstarIsNilForSoloHousehold() {
+        let alice = UserProfile()
+        let entries = WeeklyLeaderboard.entries(members: [alice], completions: [makeCompletion(profileId: alice.id, xp: 100)])
+        XCTAssertNil(WeeklyLeaderboard.superstar(among: entries))
+    }
+
+    func testSuperstarIsNilWhenNoOneHasEarnedXP() {
+        let entries = WeeklyLeaderboard.entries(members: [UserProfile(), UserProfile()], completions: [])
+        XCTAssertNil(WeeklyLeaderboard.superstar(among: entries))
+    }
+
+    func testSuperstarIsNilOnATie() {
+        let alice = UserProfile()
+        let bob = UserProfile()
+        let completions = [
+            makeCompletion(profileId: alice.id, xp: 20),
+            makeCompletion(profileId: bob.id, xp: 20),
+        ]
+        let entries = WeeklyLeaderboard.entries(members: [alice, bob], completions: completions)
+        XCTAssertNil(WeeklyLeaderboard.superstar(among: entries))
+    }
+
+    func testSuperstarIsTheTopScorer() {
+        var alice = UserProfile(); alice.name = "Alice"
+        let bob = UserProfile()
+        let completions = [
+            makeCompletion(profileId: alice.id, xp: 50),
+            makeCompletion(profileId: bob.id, xp: 20),
+        ]
+        let entries = WeeklyLeaderboard.entries(members: [alice, bob], completions: completions)
+        XCTAssertEqual(WeeklyLeaderboard.superstar(among: entries)?.profile.name, "Alice")
+    }
 }
