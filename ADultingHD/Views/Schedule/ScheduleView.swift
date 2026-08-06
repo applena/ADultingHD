@@ -107,8 +107,11 @@ struct ScheduleView: View {
             }
 
             ForEach(dates, id: \.self) { date in
-                let tasks = tasksByDate[date] ?? []
-                if !tasks.isEmpty { weekDayCard(date: date, tasks: tasks) }
+                // Always render the card, even for an empty day — it's the
+                // only drop target a drag-to-reschedule gesture has, and an
+                // otherwise-free day is exactly where a user would want to
+                // move a task to (issue #25).
+                weekDayCard(date: date, tasks: tasksByDate[date] ?? [])
             }
         }
         .padding()
@@ -143,8 +146,9 @@ struct ScheduleView: View {
                 }
 
                 ForEach(dates, id: \.self) { date in
-                    let tasks = tasksByDate[date] ?? []
-                    if !tasks.isEmpty { weekDayCard(date: date, tasks: tasks) }
+                    // Always render the card — see the iOS layout's comment
+                    // above; the same reasoning applies to both layouts.
+                    weekDayCard(date: date, tasks: tasksByDate[date] ?? [])
                 }
             }
             .frame(maxWidth: .infinity)
@@ -327,6 +331,12 @@ struct ScheduleView: View {
                     .foregroundStyle(.secondary)
             }
 
+            if tasks.isEmpty {
+                Text("Nothing scheduled — drop a task here to move it")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
+
             ForEach(tasks) { task in
                 let status = task.dueStatus()
                 // Daily tasks are "due" every day by design, so dragging one
@@ -364,16 +374,18 @@ struct ScheduleView: View {
                 }
             }
 
-            let totalMinutes = tasks.totalMinutes
-            let totalXP = tasks.totalXP
-            HStack {
-                Text("Total: \(totalMinutes) min")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Spacer()
-                Text("+\(totalXP) XP")
-                    .font(.caption.bold())
-                    .foregroundStyle(Theme.xpGold)
+            if !tasks.isEmpty {
+                let totalMinutes = tasks.totalMinutes
+                let totalXP = tasks.totalXP
+                HStack {
+                    Text("Total: \(totalMinutes) min")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Text("+\(totalXP) XP")
+                        .font(.caption.bold())
+                        .foregroundStyle(Theme.xpGold)
+                }
             }
         }
         .padding(Theme.cardPadding)
