@@ -3,19 +3,32 @@ import XCTest
 
 /// Coverage for `DataStore` task-mutation methods that don't fit the pure
 /// `HouseholdTask`/`Recurrence` model tests (`ModelTests`, `RecurrenceTests`)
-/// or the `TaskStore` round-trip tests (`StorageTests`) — specifically the
-/// interaction between a manual drag-to-reschedule override and a real
-/// schedule edit made afterward (issue #25).
+/// or the `TaskStore` round-trip tests (`StorageTests`) — specifically
+/// `rescheduleTask` (the drag-to-reschedule entry point, issue #25) and its
+/// interaction with a real schedule edit made afterward via `updateTask`.
 @MainActor
 final class DataStoreTests: XCTestCase {
 
-    private func makeTask(frequency: TaskFrequency = .weekly, scheduledWeekdays: [Int] = [Weekday.monday.rawValue]) -> HouseholdTask {
+    /// A fixed, UTC-based calendar so weekday math doesn't depend on the
+    /// machine running the test — matches `RecurrenceTests`' fixture.
+    private let utc: Calendar = {
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(identifier: "UTC")!
+        return cal
+    }()
+
+    private func utcDate(_ year: Int, _ month: Int, _ day: Int, hour: Int = 12) -> Date {
+        utc.date(from: DateComponents(year: year, month: month, day: day, hour: hour))!
+    }
+
+    private func makeTask(frequency: TaskFrequency = .weekly, scheduledWeekdays: [Int] = [Weekday.monday.rawValue], createdAt: Date = Date()) -> HouseholdTask {
         var task = HouseholdTask(
             id: UUID(), name: "Test", description: "", category: .kitchen,
             frequency: frequency, estimatedMinutes: 10, difficulty: .easy,
             supplies: [], isActive: true
         )
         task.scheduledWeekdays = scheduledWeekdays
+        task.createdAt = createdAt
         return task
     }
 
@@ -58,5 +71,35 @@ final class DataStoreTests: XCTestCase {
 
         XCTAssertNotNil(dataStore.tasks.first?.scheduledOverrideDate)
         XCTAssertEqual(dataStore.tasks.first?.name, "Renamed")
+    }
+
+    // MARK: - rescheduleTask (the drag-to-reschedule entry point)
+
+    func testRescheduleTaskSetsOverrideForDifferentDay() async {
+        let dataStore = DataStore()
+        // Created Monday, scheduled for Monday: first occurrence is that Monday.
+        let monday = utcDate(2024, 3, 4)
+        let task = makeTask(scheduledWeekdays: [Weekday.monday.rawValue], createdAt: monday)
+        dataStore.tasks = [task]
+
+        let wednesday = utcDate(2024, 3, 6)
+        await dataStore.rescheduleTask(task, to: wednesday, calendar: utc)
+
+        XCTAssertEqual(dataStore.tasks.first?.scheduledOverrideDate, utc.startOfDay(for: wednesday))
+        // The underlying recurring schedule is untouched.
+        XCTAssertEqual(dataStore.tasks.first?.scheduledWeekdays, [Weekday.monday.rawValue])
+    }
+
+    func testRescheduleTaskOntoCurrentOccurrenceDayIsNoOp() async {
+        let dataStore = DataStore()
+        let monday = utcDate(2024, 3, 4)
+        let task = makeTask(scheduledWeekdays: [Weekday.monday.rawValue], createdAt: monday)
+        dataStore.tasks = [task]
+
+        // Dropping the task back onto the day it's already occurring on
+        // should not create an override at all.
+        await dataStore.rescheduleTask(task, to: monday, calendar: utc)
+
+        XCTAssertNil(dataStore.tasks.first?.scheduledOverrideDate)
     }
 }
