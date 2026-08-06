@@ -64,6 +64,49 @@ final class ModelTests: XCTestCase {
         XCTAssertFalse(task.isOverdue)
     }
 
+    // MARK: - Assignee Filter
+
+    func testAssigneeFilterAllAlwaysMatches() {
+        let me = UUID()
+        var task = HouseholdTask(
+            id: UUID(), name: "Test", description: "", category: .kitchen,
+            frequency: .weekly, estimatedMinutes: 10, difficulty: .easy, supplies: [], isActive: true
+        )
+        XCTAssertTrue(task.matches(.all, currentProfileId: me))
+        task.defaultAssigneeId = UUID()
+        XCTAssertTrue(task.matches(.all, currentProfileId: me))
+    }
+
+    func testAssigneeFilterMineMatchesOnlyOwnAssignment() {
+        let me = UUID()
+        var task = HouseholdTask(
+            id: UUID(), name: "Test", description: "", category: .kitchen,
+            frequency: .weekly, estimatedMinutes: 10, difficulty: .easy, supplies: [], isActive: true
+        )
+        XCTAssertFalse(task.matches(.mine, currentProfileId: me), "unassigned task should not match Mine")
+
+        task.defaultAssigneeId = UUID()
+        XCTAssertFalse(task.matches(.mine, currentProfileId: me), "task assigned to someone else should not match Mine")
+
+        task.defaultAssigneeId = me
+        XCTAssertTrue(task.matches(.mine, currentProfileId: me))
+    }
+
+    func testAssigneeFilterUnassignedMatchesOnlyNilAssignment() {
+        let me = UUID()
+        var task = HouseholdTask(
+            id: UUID(), name: "Test", description: "", category: .kitchen,
+            frequency: .weekly, estimatedMinutes: 10, difficulty: .easy, supplies: [], isActive: true
+        )
+        XCTAssertTrue(task.matches(.unassigned, currentProfileId: me))
+
+        task.defaultAssigneeId = me
+        XCTAssertFalse(task.matches(.unassigned, currentProfileId: me))
+
+        task.defaultAssigneeId = UUID()
+        XCTAssertFalse(task.matches(.unassigned, currentProfileId: me))
+    }
+
     // MARK: - UserProfile
 
     func testLevelCalculation() {

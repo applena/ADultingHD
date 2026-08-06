@@ -26,6 +26,7 @@ struct EditTaskView: View {
 // MARK: - Shared Task Form
 
 private struct TaskFormView: View {
+    @Environment(DataStore.self) private var dataStore
     @Environment(\.dismiss) private var dismiss
 
     let title: String
@@ -44,6 +45,7 @@ private struct TaskFormView: View {
     @State private var scheduledMonth: Int
     @State private var checklist: [ChecklistItem]
     @State private var expandedChecklistId: UUID?
+    @State private var assigneeId: UUID?
 
     private let existingTask: HouseholdTask?
 
@@ -65,6 +67,7 @@ private struct TaskFormView: View {
         _scheduledDayOfMonth = State(initialValue: existingTask?.scheduledDayOfMonth ?? 1)
         _scheduledMonth = State(initialValue: existingTask?.scheduledMonth ?? 1)
         _checklist = State(initialValue: existingTask?.checklist ?? [])
+        _assigneeId = State(initialValue: existingTask?.defaultAssigneeId)
     }
 
     var body: some View {
@@ -99,6 +102,10 @@ private struct TaskFormView: View {
                     }
 
                     Stepper("Estimated: \(estimatedMinutes) min", value: $estimatedMinutes, in: 1...480, step: 5)
+
+                    if dataStore.hasMultipleAssignees {
+                        AssigneePicker(profiles: dataStore.householdProfiles, selection: $assigneeId)
+                    }
                 }
 
                 SchedulePickerSection(
@@ -216,6 +223,7 @@ private struct TaskFormView: View {
         task.estimatedMinutes = estimatedMinutes
         task.difficulty = difficulty
         task.supplies = supplies
+        task.defaultAssigneeId = assigneeId
         task.checklist = checklist.compactMap { item in
             let trimmed = item.text.trimmingCharacters(in: .whitespaces)
             guard !trimmed.isEmpty else { return nil }
@@ -243,6 +251,25 @@ private struct TaskFormView: View {
         Task {
             await onSave(task)
             dismiss()
+        }
+    }
+}
+
+// MARK: - Shared Assignee Picker
+
+/// "Who is this for" picker shared by the task creation/edit form
+/// (`TaskFormView`) and the tap-to-edit sheet on `TaskDetailView`
+/// (`AssigneePickerSheet`). `nil` selection means "Anyone."
+struct AssigneePicker: View {
+    let profiles: [UserProfile]
+    @Binding var selection: UUID?
+
+    var body: some View {
+        Picker("Assignee", selection: $selection) {
+            Text("Anyone").tag(UUID?.none)
+            ForEach(profiles) { member in
+                Text(member.name).tag(UUID?.some(member.id))
+            }
         }
     }
 }

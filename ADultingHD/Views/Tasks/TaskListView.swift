@@ -16,6 +16,7 @@ struct TaskListView: View {
     @Environment(StoreManager.self) private var storeManager
     @State private var selectedTab: TaskTab = .myTasks
     @State private var selectedCategory: TaskCategory?
+    @State private var assigneeFilter: AssigneeFilter = .all
     @State private var searchText = ""
     @State private var showAddCustom = false
     @State private var showProUpgrade = false
@@ -114,6 +115,14 @@ struct TaskListView: View {
     private var filteredTasks: [HouseholdTask] {
         var result = dataStore.tasks
         if let cat = selectedCategory { result = result.filter { $0.category == cat } }
+        // Only apply the assignee filter while its chip row is visible — if a
+        // household shrinks back to one member (a share is revoked or a
+        // member leaves) while "Mine"/"Unassigned" was selected, the row
+        // disappears along with any way to reset it; silently continuing to
+        // filter would leave the list looking incomplete with no visible cause.
+        if dataStore.hasMultipleAssignees {
+            result = result.filter { $0.matches(assigneeFilter, currentProfileId: dataStore.profile.id) }
+        }
         if !searchText.isEmpty {
             result = result.filter {
                 $0.name.localizedCaseInsensitiveContains(searchText) ||
@@ -131,6 +140,7 @@ struct TaskListView: View {
     private var myTasksList: some View {
         List {
             categoryFilter
+            assigneeFilterRow
 
             if groupedTasks.isEmpty {
                 ContentUnavailableView {
@@ -287,6 +297,27 @@ struct TaskListView: View {
         }
         .listRowInsets(EdgeInsets())
         .listRowBackground(Color.clear)
+    }
+
+    /// "Mine" / "Unassigned" / "All" chip row, shown only once a household
+    /// has more than one member — solo households have only one possible
+    /// assignee, so the filter would be a no-op.
+    @ViewBuilder
+    private var assigneeFilterRow: some View {
+        if dataStore.hasMultipleAssignees {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(AssigneeFilter.allCases) { filter in
+                        FilterChip(label: filter.rawValue, isSelected: assigneeFilter == filter) {
+                            assigneeFilter = filter
+                        }
+                    }
+                }
+                .padding(.vertical, 4)
+            }
+            .listRowInsets(EdgeInsets())
+            .listRowBackground(Color.clear)
+        }
     }
 }
 

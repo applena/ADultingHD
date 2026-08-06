@@ -163,6 +163,11 @@ final class DataStore {
         activeHousehold.members
     }
 
+    /// Whether the active household has more than one member — the single
+    /// source of truth for gating assignee pickers/filters, since solo
+    /// households have only one possible assignee.
+    var hasMultipleAssignees: Bool { householdProfiles.count > 1 }
+
     var leaderboard: [UserProfile] {
         householdProfiles.sorted { $0.totalXP > $1.totalXP }
     }
@@ -363,6 +368,11 @@ final class DataStore {
             xpEarned: xpEarned,
             streakBonus: streakBonus,
             notes: notes,
+            // Attribution always follows whoever actually completed the task
+            // on this device, not `task.defaultAssigneeId` — a housemate
+            // finishing someone else's assigned chore is credited to
+            // themselves. This naturally equals `defaultAssigneeId` in the
+            // common case where the assignee is the one completing it.
             profileId: profile.id
         )
 
