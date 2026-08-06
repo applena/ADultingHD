@@ -405,7 +405,6 @@ struct DashboardView: View {
 struct DueTaskRow: View {
     @Environment(DataStore.self) private var dataStore
     let task: HouseholdTask
-    @State private var isChecked = false
     @State private var pendingCompletion: Task<Void, Never>?
 
     /// Tapping the checkmark marks the task done immediately in the UI, but
@@ -414,6 +413,8 @@ struct DueTaskRow: View {
     /// can be undone right away instead of requiring a full "uncomplete"
     /// that would have to unwind XP, streaks, and achievements.
     private static let undoWindow: Duration = .seconds(2)
+
+    private var isChecked: Bool { pendingCompletion != nil }
 
     var body: some View {
         let status = task.dueStatus()
@@ -460,22 +461,17 @@ struct DueTaskRow: View {
     }
 
     private func toggleCompletion() {
-        if isChecked {
-            // Second tap before the undo window elapsed — cancel the
-            // pending completion instead of ever writing it.
-            pendingCompletion?.cancel()
+        // Second tap before the undo window elapsed — cancel the pending
+        // completion instead of ever writing it.
+        if let pending = pendingCompletion {
+            pending.cancel()
             pendingCompletion = nil
-            isChecked = false
             return
         }
 
-        isChecked = true
         pendingCompletion = Task {
-            do {
-                try await Task.sleep(for: Self.undoWindow)
-            } catch {
-                return // Cancelled by the undo tap.
-            }
+            try? await Task.sleep(for: Self.undoWindow)
+            guard !Task.isCancelled else { return }
             await dataStore.completeTask(task)
         }
     }
