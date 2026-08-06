@@ -338,10 +338,15 @@ final class DataStore {
             members.append(currentProfile)
         }
 
-        // Reuse the legacy CloudKit zone name (default for newLocal) so
-        // existing TestFlight users don't lose their records — CloudKit
-        // doesn't support zone rename.
-        let defaultHousehold = Household.newLocal(id: defaultId, name: householdName, members: members)
+        // Reuse the legacy CloudKit zone name only for this migration so
+        // existing TestFlight users don't lose their records. New households
+        // must receive a unique zone because CloudKit cannot rename zones.
+        let defaultHousehold = Household.newLocal(
+            id: defaultId,
+            name: householdName,
+            members: members,
+            zoneName: ZoneName.household
+        )
 
         // Copy (not move) legacy files into the per-household directory. Copy
         // rather than move so a crash mid-migration leaves legacy files intact
@@ -844,7 +849,7 @@ final class DataStore {
             id: id,
             name: name.isEmpty ? "New Household" : name,
             members: [profile],
-            zoneName: "Household-\(id.uuidString)"
+            zoneName: ZoneName.uniqueHousehold(for: id)
         )
         householdIndex.households.append(household)
         householdIndex.activeHouseholdId = id
@@ -889,11 +894,18 @@ final class DataStore {
 
     /// Delete a household. Refuses to delete the last remaining household. If
     /// the active household is deleted, falls back to the first remaining one.
-    func deleteHousehold(_ id: UUID) async {
+    func deleteHousehold(_ id: UUID) async throws {
         guard householdIndex.households.count > 1 else {
             logger.info("🏠 Refusing to delete last household")
             return
         }
+        guard let target = householdIndex.households.first(where: { $0.id == id }) else { return }
+
+        // Remove the server-side share before deleting the local row. Owner
+        // deletion revokes every collaborator; joined-household deletion
+        // removes only this device's participation.
+        try await removeCloudKitDataBeforeLocalDeletion(from: [target])
+
         householdIndex.households.removeAll { $0.id == id }
         if activeHouseholdId == id, let firstRemaining = householdIndex.households.first {
             householdIndex.activeHouseholdId = firstRemaining.id
@@ -910,6 +922,60 @@ final class DataStore {
     }
 
     // MARK: - CloudKit Migration & Sync
+
+    private func householdNeedsCloudKitCleanup(_ household: Household) -> Bool {
+        Features.cloudKitSharing
+            && (isHouseholdSharingEnabled || household.shareRecordName != nil)
+    }
+
+    /// CloudKit cleanup is deliberately completed before local files are
+    /// removed. If the owner cannot revoke the share (or a participant cannot
+    /// leave it), retaining the local row is safer than stranding access on a
+    /// server-side household with no local handle.
+    private func removeCloudKitDataBeforeLocalDeletion(from households: [Household]) async throws {
+        let targets = households.filter(householdNeedsCloudKitCleanup)
+        guard !targets.isEmpty else { return }
+
+        await ckSync.setup()
+        guard ckSync.isAvailable else {
+            throw CloudKitSyncError.iCloudUnavailable(status: ckSync.syncError ?? "unknown")
+        }
+
+        for household in targets {
+            try await ckSync.removeHouseholdCloudData(for: household)
+        }
+    }
+
+    /// Users who already reset data on a build that reused `HouseholdZone`
+    /// arrive here with a local onboarding household that still points at the
+    /// old share. Delete that legacy zone before creating the replacement so
+    /// existing invitees lose access and the new invite gets a new URL.
+    private func isolateLegacyOnboardingHouseholdIfNeeded() async throws -> Household {
+        let target = activeHousehold
+        let defaults = UserDefaults.standard
+        guard target.ownerIsCurrentUser,
+              target.zoneName == ZoneName.household,
+              target.shareRecordName == nil,
+              !defaults.bool(forKey: PrefKey.hasCompletedOnboarding),
+              !defaults.bool(forKey: PrefKey.householdSharingEnabled) else {
+            return target
+        }
+
+        try await ckSync.removeHouseholdCloudData(for: target)
+        var isolated = target
+        isolated.zoneName = ZoneName.uniqueHousehold(for: target.id)
+        if let index = householdIndex.households.firstIndex(where: { $0.id == target.id }) {
+            householdIndex.households[index] = isolated
+            await store.saveHouseholdIndex(householdIndex)
+        }
+        return isolated
+    }
+
+    private func recordShare(_ share: CKShare, for householdID: UUID) async {
+        guard let index = householdIndex.households.firstIndex(where: { $0.id == householdID }) else { return }
+        householdIndex.households[index].shareRecordName = share.recordID.recordName
+        await store.saveHouseholdIndex(householdIndex)
+    }
 
     /// One-time migration: push existing JSON data to CloudKit on first launch.
     private func migrateToCloudKitIfNeeded(force: Bool = false) async {
@@ -1059,11 +1125,9 @@ final class DataStore {
         guard Features.cloudKitSharing else {
             throw CloudKitSyncError.shareCreationFailed(detail: "cloudKitSharing feature flag is off")
         }
-        let target = activeHousehold
-        guard target.ownerIsCurrentUser else {
+        guard activeHousehold.ownerIsCurrentUser else {
             throw CloudKitSyncError.shareCreationFailed(detail: "cannot share a household joined from someone else")
         }
-        UserDefaults.standard.set(true, forKey: PrefKey.householdSharingEnabled)
         AppDelegate.registerForRemoteNotifications()
         logger.info("☁️ createHouseholdShare: setup...")
         await ckSync.setup()
@@ -1071,12 +1135,15 @@ final class DataStore {
             logger.error("☁️ createHouseholdShare aborting — setup did not mark available. syncError=\(self.ckSync.syncError ?? "nil", privacy: .public)")
             throw CloudKitSyncError.iCloudUnavailable(status: ckSync.syncError ?? "unknown")
         }
+        let target = try await isolateLegacyOnboardingHouseholdIfNeeded()
         // Share creation runs first so the invite URL is available without
         // waiting for the migration push (a one-shot that can serially push
         // dozens of records and was making the button feel dead for 10-30s).
         // It also creates the zone, which subscription registration needs.
         logger.info("☁️ createHouseholdShare: createOrFetchShare...")
         let share = try await ckSync.createOrFetchShare(for: target)
+        await recordShare(share, for: target.id)
+        UserDefaults.standard.set(true, forKey: PrefKey.householdSharingEnabled)
         await ckSync.setupSubscriptions(for: target)
         Task { [weak self] in
             await self?.migrateToCloudKitIfNeeded(force: true)
@@ -1093,17 +1160,18 @@ final class DataStore {
         guard Features.cloudKitSharing else {
             throw CloudKitSyncError.shareCreationFailed(detail: "cloudKitSharing feature flag is off")
         }
-        let target = activeHousehold
-        guard target.ownerIsCurrentUser else {
+        guard activeHousehold.ownerIsCurrentUser else {
             throw CloudKitSyncError.shareCreationFailed(detail: "cannot share a household joined from someone else")
         }
-        UserDefaults.standard.set(true, forKey: PrefKey.householdSharingEnabled)
         AppDelegate.registerForRemoteNotifications()
         await ckSync.setup()
         guard ckSync.isAvailable else {
             throw CloudKitSyncError.iCloudUnavailable(status: ckSync.syncError ?? "unknown")
         }
+        let target = try await isolateLegacyOnboardingHouseholdIfNeeded()
         let share = try await ckSync.createOrFetchShare(for: target)
+        await recordShare(share, for: target.id)
+        UserDefaults.standard.set(true, forKey: PrefKey.householdSharingEnabled)
         await ckSync.setupSubscriptions(for: target)
         Task { [weak self] in
             await self?.migrateToCloudKitIfNeeded(force: true)
@@ -1232,17 +1300,24 @@ final class DataStore {
                     && household.zoneName == info.zoneName
                     && household.ownerUserRecordName == info.ownerUserRecordName
             }
-            let joined: Household
+            var joined: Household
             if let existing {
-                joined = existing
+                var updated = existing
+                updated.shareRecordName = info.shareRecordName
+                joined = updated
+                if let index = householdIndex.households.firstIndex(where: { $0.id == existing.id }) {
+                    householdIndex.households[index] = updated
+                }
                 logger.info("🏠 Re-joined existing shared household '\(existing.name, privacy: .public)'")
             } else {
-                joined = Household.newJoined(
+                var newHousehold = Household.newJoined(
                     name: info.title,
                     members: [profile],
                     zoneName: info.zoneName,
                     ownerUserRecordName: info.ownerUserRecordName
                 )
+                newHousehold.shareRecordName = info.shareRecordName
+                joined = newHousehold
                 householdIndex.households.append(joined)
                 // Pre-seed the joined household's local supply-stock file so
                 // it exists before `pullFromCloudKit` merges — tasks already
@@ -1313,7 +1388,11 @@ final class DataStore {
         return success
     }
 
-    func resetAll() async {
+    func resetAll() async throws {
+        // Reset clears every local household, so revoke/leave every known
+        // CloudKit share first. If that cannot complete, keep local state so
+        // the user is not left with an inaccessible shared household.
+        try await removeCloudKitDataBeforeLocalDeletion(from: householdIndex.households)
         await store.resetAllData()
         // Clear one-shot migration flags so a fresh load seeds a new default
         // household; clear onboarding flags so ContentView falls back to the

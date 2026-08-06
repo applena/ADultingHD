@@ -24,23 +24,23 @@ struct Household: Identifiable, Codable {
     /// construct a `CKRecordZone.ID` against `sharedCloudDatabase`.
     var ownerUserRecordName: String?
 
-    /// Convenience constructor for a locally-owned household. Defaults zone
-    /// to the legacy shared zone when `id` is omitted (callers pass an
-    /// explicit zone for newly-created post-migration households).
+    /// Convenience constructor for a locally-owned household. New households
+    /// get a unique CloudKit zone; the legacy zone is opt-in for migration.
     static func newLocal(
-        id: UUID = UUID(),
+        id: UUID? = nil,
         name: String,
         members: [UserProfile],
-        zoneName: String = ZoneName.household
+        zoneName: String? = nil
     ) -> Household {
-        Household(
-            id: id,
+        let householdID = id ?? UUID()
+        return Household(
+            id: householdID,
             name: name,
             createdAt: Date(),
             members: members,
             shareRecordName: nil,
             ownerIsCurrentUser: true,
-            zoneName: zoneName,
+            zoneName: zoneName ?? ZoneName.uniqueHousehold(for: householdID),
             ownerUserRecordName: nil
         )
     }

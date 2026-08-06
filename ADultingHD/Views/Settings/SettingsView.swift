@@ -12,6 +12,7 @@ struct SettingsView: View {
     @AppStorage(PrefKey.showSeasonalSection) private var showSeasonalSection = false
     @SceneStorage("settingsTab") private var selectedTab: SettingsTab = .general
     @State private var showResetConfirm = false
+    @State private var resetError: String?
     @State private var showImportPicker = false
     @State private var importMessage: String?
     @State private var showProUpgrade = false
@@ -88,10 +89,24 @@ struct SettingsView: View {
         .navigationTitle("Settings")
         .confirmationDialog("Reset All Data?", isPresented: $showResetConfirm) {
             Button("Reset Everything", role: .destructive) {
-                Task { await dataStore.resetAll() }
+                Task {
+                    do {
+                        try await dataStore.resetAll()
+                    } catch {
+                        resetError = error.localizedDescription
+                    }
+                }
             }
         } message: {
-            Text("This will delete all your tasks, completions, XP, and achievements. This cannot be undone.")
+            Text("This permanently deletes local data and removes every household collaborator from CloudKit. If iCloud is unavailable, the reset will be cancelled.")
+        }
+        .alert("Couldn't reset data", isPresented: Binding(
+            get: { resetError != nil },
+            set: { if !$0 { resetError = nil } }
+        )) {
+            Button("OK", role: .cancel) { resetError = nil }
+        } message: {
+            Text(resetError ?? "The shared household could not be cleaned up.")
         }
         .fileImporter(isPresented: $showImportPicker, allowedContentTypes: [.json]) { result in
             handleImport(result)

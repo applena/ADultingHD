@@ -25,7 +25,14 @@ private enum RootRecordName {
 }
 
 enum ZoneName {
+    /// The pre-multi-household zone retained only for migrating existing users.
     static let household = "HouseholdZone"
+
+    /// CloudKit zones are the sharing boundary, so every new local household
+    /// must have an identity that cannot collide with a prior share.
+    static func uniqueHousehold(for id: UUID) -> String {
+        "Household-\(id.uuidString)"
+    }
 }
 
 // MARK: - CloudKitSync
@@ -118,6 +125,53 @@ final class CloudKitSync: ObservableObject {
             configuredSubscriptionZones.insert(zoneName)
         } catch {
             logger.error("☁️ Subscription setup failed: \(error.localizedDescription)")
+        }
+    }
+
+    /// Permanently removes a household's CloudKit data before its local row is
+    /// deleted. Owners delete the private zone, which also removes its share
+    /// and revokes every participant. Joined users delete their share record
+    /// from the shared database, which leaves the owner's household intact.
+    func removeHouseholdCloudData(for household: Household) async throws {
+        guard isAvailable else {
+            throw CloudKitSyncError.iCloudUnavailable(status: syncError ?? "unknown")
+        }
+
+        do {
+            if household.ownerIsCurrentUser {
+                let zones = try await privateDB.allRecordZones()
+                let exists = zones.contains { $0.zoneID.zoneName == household.zoneName }
+                if exists {
+                    do {
+                        try await privateDB.deleteZone(withID: zoneID(for: household))
+                        logger.info("☁️ Deleted household zone \(household.zoneName, privacy: .public) and revoked participants")
+                    } catch {
+                        // A second device may have completed the deletion
+                        // after the zone list was fetched. Treat that race as
+                        // already-cleaned data so local deletion can finish.
+                        if !isMissingCloudKitObject(error) { throw error }
+                    }
+                }
+            } else {
+                let rootID = rootRecordID(for: household)
+                do {
+                    let root = try await sharedDB.record(for: rootID)
+                    if let shareReference = root.share {
+                        _ = try await sharedDB.modifyRecords(saving: [], deleting: [shareReference.recordID])
+                        logger.info("☁️ Left shared household zone \(household.zoneName, privacy: .public)")
+                    }
+                } catch {
+                    // A zone already removed by its owner is already cleaned
+                    // up from this participant's point of view.
+                    if !isMissingCloudKitObject(error) { throw error }
+                }
+            }
+            configuredSubscriptionZones.remove(household.zoneName)
+            shareURL = nil
+        } catch let error as CloudKitSyncError {
+            throw error
+        } catch {
+            throw CloudKitSyncError.householdCleanupFailed(underlying: error)
         }
     }
 
@@ -316,6 +370,7 @@ final class CloudKitSync: ObservableObject {
             ?? "Shared Household"
         logger.info("☁️ Accepted household share zone=\(zoneID.zoneName, privacy: .public) owner=\(zoneID.ownerName, privacy: .public)")
         return AcceptedShareInfo(
+            shareRecordName: metadata.share.recordID.recordName,
             zoneName: zoneID.zoneName,
             ownerUserRecordName: zoneID.ownerName,
             title: title
@@ -350,12 +405,18 @@ final class CloudKitSync: ObservableObject {
     private func rootRecordID(for household: Household) -> CKRecord.ID {
         CKRecord.ID(recordName: RootRecordName.household, zoneID: zoneID(for: household))
     }
+
+    private func isMissingCloudKitObject(_ error: Error) -> Bool {
+        guard let cloudKitError = error as? CKError else { return false }
+        return cloudKitError.code == .unknownItem || cloudKitError.code == .zoneNotFound
+    }
 }
 
 /// Returned by `CloudKitSync.acceptShare` so `DataStore` can persist the new
 /// joined household row with the zone identity needed to address it across
 /// future app launches.
 struct AcceptedShareInfo: Sendable {
+    let shareRecordName: String
     let zoneName: String
     let ownerUserRecordName: String
     let title: String
@@ -373,6 +434,7 @@ struct CloudKitPayload {
 
 enum CloudKitSyncError: Error, LocalizedError {
     case shareCreationFailed(underlying: Error? = nil, detail: String? = nil)
+    case householdCleanupFailed(underlying: Error? = nil, detail: String? = nil)
     case zoneNotFound
     case iCloudUnavailable(status: String)
 
@@ -382,6 +444,10 @@ enum CloudKitSyncError: Error, LocalizedError {
             if let detail { return "Share creation failed: \(detail)" }
             if let underlying { return "Share creation failed: \(underlying.localizedDescription)" }
             return "Share creation failed (no detail)"
+        case .householdCleanupFailed(let underlying, let detail):
+            if let detail { return "Household cleanup failed: \(detail)" }
+            if let underlying { return "Household cleanup failed: \(underlying.localizedDescription)" }
+            return "Household cleanup failed (no detail)"
         case .zoneNotFound:
             return "CloudKit zone not found"
         case .iCloudUnavailable(let status):
@@ -417,6 +483,21 @@ private extension CKDatabase {
                 switch result {
                 case .success: cont.resume(returning: zone)
                 case .failure(let e): cont.resume(throwing: e)
+                }
+            }
+            self.add(op)
+        }
+    }
+
+    func deleteZone(withID zoneID: CKRecordZone.ID) async throws {
+        try await withCheckedThrowingContinuation { cont in
+            let op = CKModifyRecordZonesOperation(recordZonesToSave: nil, recordZoneIDsToDelete: [zoneID])
+            op.modifyRecordZonesResultBlock = { result in
+                switch result {
+                case .success:
+                    cont.resume(returning: ())
+                case .failure(let error):
+                    cont.resume(throwing: error)
                 }
             }
             self.add(op)

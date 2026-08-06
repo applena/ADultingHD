@@ -11,6 +11,7 @@ struct HouseholdListView: View {
     @State private var renameTarget: Household?
     @State private var renameText: String = ""
     @State private var deleteTarget: Household?
+    @State private var deleteError: String?
     @State private var showCreateSheet = false
     @State private var inviteError: String?
     @State private var isGeneratingInvite = false
@@ -107,12 +108,30 @@ struct HouseholdListView: View {
             presenting: deleteTarget
         ) { target in
             Button("Delete", role: .destructive) {
-                Task { await dataStore.deleteHousehold(target.id) }
+                Task {
+                    do {
+                        try await dataStore.deleteHousehold(target.id)
+                    } catch {
+                        deleteError = error.localizedDescription
+                    }
+                }
                 deleteTarget = nil
             }
             Button("Cancel", role: .cancel) { deleteTarget = nil }
-        } message: { _ in
-            Text("This deletes the household's task list and supply stock. Members will be removed. Your XP, level, and streak are unaffected.")
+        } message: { target in
+            if target.ownerIsCurrentUser {
+                Text("This permanently deletes the household's data and removes every collaborator from it. Your XP, level, and streak are unaffected.")
+            } else {
+                Text("This removes your access to the shared household and deletes its local data on this device. The owner's household is unchanged.")
+            }
+        }
+        .alert("Couldn't delete household", isPresented: Binding(
+            get: { deleteError != nil },
+            set: { if !$0 { deleteError = nil } }
+        )) {
+            Button("OK", role: .cancel) { deleteError = nil }
+        } message: {
+            Text(deleteError ?? "The household could not be cleaned up.")
         }
         .sheet(item: $shareSheetPayload) { payload in
             CloudShareSheet(
