@@ -64,3 +64,4 @@ Quick map:
 After completing a significant feature or enhancement:
 1. Run `/simplify` (again if code has changed since the pre-build run) and fix any remaining issues
 2. Commit and push to the default branch
+3. If the change ships something a tracker issue or GOALS.md milestone describes as planned/unimplemented, close or update that issue and reconcile GOALS.md in the same PR — don't let shipped work linger as open backlog. Run `/do:replan --issues` periodically to catch anything missed.

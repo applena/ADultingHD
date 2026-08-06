@@ -436,6 +436,18 @@ final class DataStore {
 
     // MARK: - Supply Stock
 
+    var lowSupplyCount: Int {
+        supplyStock.values.filter { $0 == .low }.count
+    }
+
+    var outOfStockSupplyCount: Int {
+        supplyStock.values.filter { $0 == .out }.count
+    }
+
+    var supplyAttentionCount: Int {
+        lowSupplyCount + outOfStockSupplyCount
+    }
+
     var shoppingList: [String] {
         supplyStock.filter { $0.value == .low || $0.value == .out }
             .keys.sorted()
