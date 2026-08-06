@@ -6,7 +6,13 @@ Make adulting suck less by turning household chores into a game worth playing.
 
 ## Mission
 
-ADultingHD exists because household maintenance is necessary, repetitive, and deeply unmotivating. By layering RPG-style progression mechanics — XP, levels, streaks, achievements — on top of real chores, the app transforms "I have to clean the bathroom" into "I'm 200 XP from leveling up." The goal is a native iOS/macOS app that makes household management genuinely engaging for individuals and families, without requiring accounts, cloud services, or subscriptions.
+ADultingHD exists because household maintenance is necessary, repetitive, and deeply unmotivating. The app has three selling points, and every feature traces back to one of them:
+
+1. **Tell you exactly what to do, today** — Not just a task name, but a description, and room for step-by-step instructions and the supplies it needs, so a chore doesn't have to start with "wait, how do I even do this."
+2. **Divide the labor** — Invite the people you live with into your household (via a native iCloud share — no ADultingHD account to create) so chores can be assigned to whoever's doing them, and everyone can see who did what, and when.
+3. **Make it a game** — RPG-style progression — XP, levels, streaks, achievements — turns "I have to clean the bathroom" into "I'm 200 XP from leveling up."
+
+The goal is a native iOS/macOS app that makes household management genuinely engaging for individuals and families, without requiring a custom account system, a server, or a subscription.
 
 ---
 
@@ -14,7 +20,7 @@ ADultingHD exists because household maintenance is necessary, repetitive, and de
 
 1. **Gamification is the product, not a gimmick** — Every feature decision filters through "does this make chores feel more rewarding?" XP calculations, streak mechanics, and achievement unlocks are first-class concerns, not afterthoughts bolted onto a task list.
 
-2. **Offline-first, private by default** — All data lives on-device as JSON files. No server, no account creation, no telemetry. Users own their data completely.
+2. **Offline-first, private by default** — All data lives on-device as JSON files first. No custom server, no ADultingHD account, no telemetry. Cross-device sync and household invites ride on the user's existing iCloud account (JSON mirrored to iCloud Documents; household sharing via `CKShare`) rather than a backend we operate — so multi-person households work without anyone signing up for anything new. Users own their data completely.
 
 3. **Cross-platform with native feel** — iOS and macOS from a single codebase, but each platform gets its own navigation paradigm (TabView vs. NavigationSplitView) and layout tuning. No lowest-common-denominator UI.
 
@@ -32,7 +38,8 @@ The app delivers a full gamification cycle: discover tasks, complete them with q
 
 - **Core loop** — Completing any task feels immediately rewarding through XP gains, streak maintenance, and progress toward the next level
 - **Depth** — Achievements, seasonal suggestions, quality ratings, and category mastery give long-term players new goals to chase
-- **Household play** — Multiple profiles with independent progression and a shared leaderboard make chores a friendly competition
+- **Task clarity** — Every task carries a description and a supply list; tasks can also carry ordered step-by-step instructions (`ChecklistItem.instructions`) for when "what" isn't enough and a chore needs a "how"
+- **Household play** — Shipped via CloudKit `CKShare`: a household owner invites others (even across Apple IDs) through the native share sheet; accepted invites sync the same task list, completions, and leaderboard. Tasks can carry a `defaultAssigneeId` so a household can divide chores by member, and the activity feed/leaderboard shows who did what and when
 - **Passive engagement** — Widgets and notifications keep the game present without requiring the app to be open
 - **Supply awareness** — Task-linked inventory tracking bridges the gap between "what needs doing" and "what do I need to buy"
 
@@ -57,7 +64,7 @@ ADultingHD becomes the default way a household thinks about maintenance — not 
 
 - **Not a general-purpose to-do app** — ADultingHD is specifically for recurring household tasks. One-off reminders, work projects, and grocery lists belong elsewhere.
 
-- **No cloud sync or accounts** — Simplicity and privacy outweigh cross-device sync. If sync becomes necessary, it should use platform-native mechanisms (iCloud), not a custom backend.
+- **No custom backend or ADultingHD account** — Cross-device sync and household invites are shipped, but they ride entirely on the user's existing iCloud account (iCloud Documents mirroring + CloudKit `CKShare`). There is no server we operate and no separate account to create just to use the app.
 
 - **No social features beyond the household** — The leaderboard is for your family, not the internet. No sharing, no public profiles, no social pressure mechanics.
 
