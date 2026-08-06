@@ -24,6 +24,8 @@
 		1B89BFD27BDC7BF01730F544 /* HouseholdView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 695F786CFF2DBB9CFFC3FB57 /* HouseholdView.swift */; };
 		2136E85F041B701A3FC3A6F8 /* HouseholdSwitcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0393A2B006DEC68B74588B38 /* HouseholdSwitcher.swift */; };
 		217DCA6798A2B5FEBC6F3F36 /* CelebrationOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = C83482BE393F043CC98D85D5 /* CelebrationOverlay.swift */; };
+		25C17D5FAF5A3204ACF04EEB /* RecurrenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6B16200DEE379710BDC731E /* RecurrenceTests.swift */; };
+		2760A02D9D2F9136B7695DBA /* RecurrenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6B16200DEE379710BDC731E /* RecurrenceTests.swift */; };
 		27FFD28F0F6424E3309F598A /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 3A3517C461E95902B75B83EC /* Assets.xcassets */; };
 		29CCC391251B81468E3C4D89 /* DashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5396E4C1C4C3ECF26BB2EAFA /* DashboardView.swift */; };
 		2A7E63B6DE2268ADD3EA7169 /* NotificationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5F315AD0A00703DCF818D81 /* NotificationManager.swift */; };
@@ -37,6 +39,7 @@
 		39B3C852206DB89E94730D9B /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 595B8FFDEAA880BB683CE951 /* Theme.swift */; };
 		3BAB900BC70ACCDC13B6DFAA /* ADultingHDApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5EAA3948D9FC1F50504D54B1 /* ADultingHDApp.swift */; };
 		3DC91DE434871AB06678003F /* StorageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC655FB6ECD683EFB08D9D2A /* StorageTests.swift */; };
+		3E40B0431B7B7A5679FEC254 /* Recurrence.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF1CF56CB3F7513581C10151 /* Recurrence.swift */; };
 		40EB5B76C13D61C37F3B012B /* CloudShareSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50B7A549DD9609592F8E379E /* CloudShareSheet.swift */; };
 		464FA6A8B7D4398D40560971 /* HouseholdListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D2415835B6B9246CBCB2B51 /* HouseholdListView.swift */; };
 		4686ADD3BCC33DFE1FAEE9F5 /* StoreManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82F1A54B24D8CEE886570DD5 /* StoreManager.swift */; };
@@ -95,6 +98,7 @@
 		D01170ED32D390FC87CD5772 /* ICloudMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3657A503A8E12F538794820B /* ICloudMonitor.swift */; };
 		D174FED66D5EF21EF209C0E3 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 730BB50D556F5975680168A8 /* PrivacyInfo.xcprivacy */; };
 		D34A296E21D0680E7FD36A53 /* ScheduleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1404A4A0405FEE3627DCF6ED /* ScheduleView.swift */; };
+		D438598B63318FAF91F633A6 /* Recurrence.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF1CF56CB3F7513581C10151 /* Recurrence.swift */; };
 		D5ED0D8A6525358B05C0F0B6 /* WelcomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 124C98670AF61F31F83E9446 /* WelcomeView.swift */; };
 		D897D7C3E7496EC9CF18BE21 /* CloudShareSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50B7A549DD9609592F8E379E /* CloudShareSheet.swift */; };
 		DCBFC7323C498C4BCACA07F2 /* WelcomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 124C98670AF61F31F83E9446 /* WelcomeView.swift */; };
@@ -175,12 +179,14 @@
 		8EE3AD45631FE25F14C022B1 /* StatsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatsView.swift; sourceTree = "<group>"; };
 		94BE46FE41B7C1EA8E502F61 /* Products.storekit */ = {isa = PBXFileReference; path = Products.storekit; sourceTree = "<group>"; };
 		9842B7EFD24606C323FF2B0A /* TaskListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskListView.swift; sourceTree = "<group>"; };
+		A6B16200DEE379710BDC731E /* RecurrenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecurrenceTests.swift; sourceTree = "<group>"; };
 		A7A30BDBD828F7148288710C /* DataStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DataStore.swift; sourceTree = "<group>"; };
 		AB0B77A6011E1BFCF8CBD20D /* SeasonalTasks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SeasonalTasks.swift; sourceTree = "<group>"; };
 		AC0D49B9607490BDBDF8E190 /* CloudKitSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitSync.swift; sourceTree = "<group>"; };
 		AC655FB6ECD683EFB08D9D2A /* StorageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageTests.swift; sourceTree = "<group>"; };
 		ADEF2B5DEB9BCCF7E7E71E62 /* ADultingHDWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ADultingHDWidget.swift; sourceTree = "<group>"; };
 		AE96F106523C9887126C1272 /* ADultingHD.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = ADultingHD.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		AF1CF56CB3F7513581C10151 /* Recurrence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Recurrence.swift; sourceTree = "<group>"; };
 		B54CC3BCB4829D7DA2F17D3B /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
 		B5605C177F218758D1F3CCD8 /* ADultingHDTests_macOS.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ADultingHDTests_macOS.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		BBF9F9EF33AED52C9BCD464D /* TaskCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskCatalog.swift; sourceTree = "<group>"; };
@@ -265,6 +271,7 @@
 				84C447DACC7370EA8A6AF043 /* CloudKitRecordTests.swift */,
 				12E42443B93064A0049A2DE8 /* ModelTests.swift */,
 				E47DD27D62AD23DAEE39C772 /* NewFeatureTests.swift */,
+				A6B16200DEE379710BDC731E /* RecurrenceTests.swift */,
 				AC655FB6ECD683EFB08D9D2A /* StorageTests.swift */,
 			);
 			path = ADultingHDTests;
@@ -440,6 +447,7 @@
 				8E4E23E901E5476ADB2336D1 /* AvatarModels.swift */,
 				D11A106E8C2F206C19D308D2 /* Household.swift */,
 				B54CC3BCB4829D7DA2F17D3B /* Models.swift */,
+				AF1CF56CB3F7513581C10151 /* Recurrence.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -663,6 +671,7 @@
 				A78B723C3B169F7807F6EDD6 /* CloudKitRecordTests.swift in Sources */,
 				6337C10485FA4AB0AFC8D431 /* ModelTests.swift in Sources */,
 				5B6D8E8798E0F52D5D76F8C7 /* NewFeatureTests.swift in Sources */,
+				2760A02D9D2F9136B7695DBA /* RecurrenceTests.swift in Sources */,
 				3DC91DE434871AB06678003F /* StorageTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -699,6 +708,7 @@
 				716FE347214FE37EC6B948A6 /* NotificationManager.swift in Sources */,
 				32F0A7EC40BD37AD900B9FCB /* ProUpgradeView.swift in Sources */,
 				7CACF0641D27EEF7C56F3CE1 /* ProfileView.swift in Sources */,
+				D438598B63318FAF91F633A6 /* Recurrence.swift in Sources */,
 				D34A296E21D0680E7FD36A53 /* ScheduleView.swift in Sources */,
 				6EA755C6B47C601D4AC5214A /* SeasonalTasks.swift in Sources */,
 				2C4F273A0464A9E089084803 /* SettingsView.swift in Sources */,
@@ -747,6 +757,7 @@
 				2A7E63B6DE2268ADD3EA7169 /* NotificationManager.swift in Sources */,
 				1128FE1BD6788B6DC4414AAC /* ProUpgradeView.swift in Sources */,
 				08B24DF878A7259865426EFB /* ProfileView.swift in Sources */,
+				3E40B0431B7B7A5679FEC254 /* Recurrence.swift in Sources */,
 				58806CAFF4D1779134CED3F5 /* ScheduleView.swift in Sources */,
 				C0BA3A041B6A36D4DB2AA8C5 /* SeasonalTasks.swift in Sources */,
 				E6A654229380129922988B89 /* SettingsView.swift in Sources */,
@@ -771,6 +782,7 @@
 				03EB977A2C59485BBAE3B8BC /* CloudKitRecordTests.swift in Sources */,
 				0C4892190E1675E2621AC90E /* ModelTests.swift in Sources */,
 				6D3913B7404D76076FFBD3EC /* NewFeatureTests.swift in Sources */,
+				25C17D5FAF5A3204ACF04EEB /* RecurrenceTests.swift in Sources */,
 				B719C8440B8AA15C2D29DE11 /* StorageTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

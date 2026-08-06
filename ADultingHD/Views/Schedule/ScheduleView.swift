@@ -13,15 +13,24 @@ struct ScheduleView: View {
         return (0..<7).compactMap { calendar.date(byAdding: .day, value: $0, to: start) }
     }
 
-    /// Bucket each active task into every day in `dates` on which it's due.
-    /// Due-on-date semantics live in `HouseholdTask.isDue(on:)`; this is just
-    /// the bucketing wrapper so the view computes it once per render instead
-    /// of once per day-cell.
+    /// Bucket each active task by day across `dates`. Today gets
+    /// carry-forward semantics (`isDue(on:)` — anything due or overdue as of
+    /// today lands there, matching the app's main due list) so a missed
+    /// task actually shows up as today's problem instead of vanishing.
+    /// Future days show only each task's exact next occurrence — a forecast
+    /// view isn't the place to repeat an already-overdue backlog item across
+    /// every remaining day of the week.
     private func tasksByDate(for dates: [Date]) -> [Date: [HouseholdTask]] {
         var map: [Date: [HouseholdTask]] = Dictionary(uniqueKeysWithValues: dates.map { ($0, []) })
+        let today = calendar.startOfDay(for: Date())
         for task in dataStore.activeTasks {
-            for date in dates where task.isDue(on: date) {
-                map[date, default: []].append(task)
+            guard let occurrence = task.nextOccurrence(calendar: calendar) else { continue }
+            for date in dates {
+                let isToday = calendar.isDate(date, inSameDayAs: today)
+                let matches = isToday
+                    ? Recurrence.isDue(occurrence: occurrence, on: date, calendar: calendar)
+                    : calendar.isDate(occurrence, inSameDayAs: date)
+                if matches { map[date, default: []].append(task) }
             }
         }
         return map
@@ -54,6 +63,22 @@ struct ScheduleView: View {
         }
     }
 
+    private var dueSummaryChip: some View {
+        let overdueCount = dataStore.overdueTasks.count
+        return HStack(spacing: 12) {
+            Label("\(dataStore.dueTasks.count) due", systemImage: "clock.fill")
+                .font(.subheadline)
+                .foregroundStyle(Theme.streakOrange)
+            if overdueCount > 0 {
+                Label("\(overdueCount) overdue", systemImage: "exclamationmark.triangle.fill")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Theme.overdueRed)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .card()
+    }
+
     private func iOSLayout(
         dates: [Date],
         tasksByDate: [Date: [HouseholdTask]],
@@ -69,13 +94,7 @@ struct ScheduleView: View {
                 .card()
 
             if dueCount > 0 {
-                HStack(spacing: 12) {
-                    Label("\(dueCount) due", systemImage: "clock.fill")
-                        .font(.subheadline)
-                        .foregroundStyle(Theme.streakOrange)
-                }
-                .frame(maxWidth: .infinity)
-                .card()
+                dueSummaryChip
             }
 
             if !todayByCategory.isEmpty {
@@ -111,13 +130,7 @@ struct ScheduleView: View {
                 scheduleHeader(todayTasks: todayTasks, todayByCategory: todayByCategory, dueCount: dueCount)
 
                 if dueCount > 0 {
-                    HStack(spacing: 12) {
-                        Label("\(dueCount) due", systemImage: "clock.fill")
-                            .font(.subheadline)
-                            .foregroundStyle(Theme.streakOrange)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .card()
+                    dueSummaryChip
                 }
 
                 if !todayByCategory.isEmpty {
@@ -310,6 +323,7 @@ struct ScheduleView: View {
             }
 
             ForEach(tasks) { task in
+                let status = task.dueStatus()
                 HStack(spacing: 8) {
                     Image(systemName: task.category.icon)
                         .foregroundStyle(Theme.categoryColor(task.category))
@@ -317,9 +331,15 @@ struct ScheduleView: View {
                     Text(task.name)
                         .font(.subheadline)
                     Spacer()
-                    Text("\(task.estimatedMinutes)m")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    if status.isOverdue {
+                        Text("\(status.daysOverdue)d overdue")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(Theme.overdueRed)
+                    } else {
+                        Text("\(task.estimatedMinutes)m")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
 

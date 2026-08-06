@@ -80,15 +80,24 @@ final class NotificationManager {
         center.removePendingNotificationRequests(withIdentifiers: ["daily_reminder"])
     }
 
+    /// Schedules a one-shot reminder for `task`'s current occurrence
+    /// (`task.dueDate`, from the same recurrence engine that drives due-task
+    /// sorting and Schedule bucketing). Re-adding with the same identifier
+    /// replaces any existing pending request for this task, so callers can
+    /// call this again whenever the occurrence might have changed —
+    /// on completion, on edit, and on day rollover — without needing to
+    /// cancel first.
     func scheduleTaskReminder(for task: HouseholdTask) {
-        guard let dueDate = task.dueDate else { return }
+        guard isAuthorized, let dueDate = task.dueDate else { return }
 
         let content = UNMutableNotificationContent()
         content.title = "\(task.name) is due!"
         content.body = "\(task.category.rawValue) task — \(task.estimatedMinutes) min, +\(task.xpReward) XP"
         content.sound = .default
 
-        let components = Calendar.current.dateComponents([.year, .month, .day, .hour], from: dueDate)
+        var components = Calendar.current.dateComponents([.year, .month, .day], from: dueDate)
+        components.hour = reminderHour
+        components.minute = reminderMinute
         let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
         let request = UNNotificationRequest(identifier: "task_\(task.id.uuidString)", content: content, trigger: trigger)
 

@@ -3,6 +3,9 @@ import SwiftUI
 import WidgetKit
 import CloudKit
 import os
+#if os(iOS)
+import UIKit
+#endif
 
 private let logger = Logger(subsystem: "net.shadowpuppet.ADultingHD", category: "DataStore")
 
@@ -63,6 +66,16 @@ final class DataStore {
 
     private enum PendingReload { case local, cloudKit }
 
+    /// Today's start-of-day, tracked as `@Observable` state so `dueTasks`/
+    /// `overdueTasks` re-evaluate when the calendar day rolls over while the
+    /// app is foregrounded — SwiftUI has no other reason to re-render those
+    /// views, since nothing about `tasks` itself changed. Advanced only by
+    /// `refreshForCurrentDay()`.
+    private(set) var currentDay: Date = Calendar.current.startOfDay(for: Date())
+
+    @ObservationIgnored
+    private var dayRolloverObserverTokens: [NSObjectProtocol] = []
+
     /// True only when the compile-time `Features.cloudKitSharing` is on AND the
     /// user has explicitly opted into sharing. The compile-time gate matters
     /// because `CKContainer(identifier:)` traps at launch if the container
@@ -81,8 +94,38 @@ final class DataStore {
     // MARK: - Derived State
 
     var activeTasks: [HouseholdTask] { tasks.filter(\.isActive) }
-    var dueTasks: [HouseholdTask] { activeTasks.filter(\.isDue).sorted { ($0.dueDate ?? .distantPast) < ($1.dueDate ?? .distantPast) } }
-    var overdueTasks: [HouseholdTask] { activeTasks.filter(\.isOverdue) }
+
+    /// (task, occurrence) for every active, currently-due task, sorted by
+    /// occurrence ascending (longest-missed first). Computed once per
+    /// task — rather than inside `dueTasks`/`overdueTasks`' own sort
+    /// comparators — so `nextOccurrence()`'s calendar search doesn't rerun
+    /// on every comparison, and `overdueTasks` can reuse the same sorted,
+    /// already-filtered list instead of re-deriving it.
+    private var sortedDueTasksWithOccurrence: [(task: HouseholdTask, occurrence: Date)] {
+        activeTasks
+            .compactMap { task -> (task: HouseholdTask, occurrence: Date)? in
+                guard let occurrence = task.nextOccurrence(),
+                      Recurrence.isDue(occurrence: occurrence, on: currentDay, calendar: .current)
+                else { return nil }
+                return (task, occurrence)
+            }
+            .sorted { $0.occurrence < $1.occurrence }
+    }
+
+    /// Active tasks due on or before `currentDay`, longest-missed first.
+    /// Overdue tasks (earlier occurrence) always sort above tasks due today,
+    /// since sorting is purely by occurrence date ascending.
+    var dueTasks: [HouseholdTask] { sortedDueTasksWithOccurrence.map(\.task) }
+
+    /// The subset of `dueTasks` whose occurrence has actually passed —
+    /// carried-forward misses, not merely due today. Surfaced in the task
+    /// list, Schedule, and dashboard so carry-forward is visible, not just
+    /// a silent sort-order nudge.
+    var overdueTasks: [HouseholdTask] {
+        sortedDueTasksWithOccurrence
+            .filter { Recurrence.isOverdue(occurrence: $0.occurrence, on: currentDay, calendar: .current) }
+            .map(\.task)
+    }
 
     var todayCompletions: [TaskCompletion] {
         completions.filter { Calendar.current.isDateInToday($0.completedAt) }
@@ -330,6 +373,7 @@ final class DataStore {
 
         if let idx = tasks.firstIndex(where: { $0.id == task.id }) {
             tasks[idx].lastCompleted = Date()
+            notificationManager?.scheduleTaskReminder(for: tasks[idx])
         }
 
         let periodBonus = applyPeriodBonusesIfEarned(at: completion.completedAt)
@@ -372,15 +416,29 @@ final class DataStore {
 
     // MARK: - Task Management
 
+    /// Schedules or cancels `task`'s local reminder to match its current
+    /// `isActive` state. Called after any mutation that could change
+    /// whether a reminder should exist or what occurrence it should fire
+    /// against — completion, activation toggle, add, or edit.
+    private func syncReminder(for task: HouseholdTask) {
+        if task.isActive {
+            notificationManager?.scheduleTaskReminder(for: task)
+        } else {
+            notificationManager?.cancelTaskReminder(for: task)
+        }
+    }
+
     func toggleTask(_ task: HouseholdTask) async {
         if let idx = tasks.firstIndex(where: { $0.id == task.id }) {
             tasks[idx].isActive.toggle()
+            syncReminder(for: tasks[idx])
             await store.saveTasks(tasks, for: activeHouseholdId)
         }
     }
 
     func addCustomTask(_ task: HouseholdTask) async {
         tasks.append(task)
+        syncReminder(for: task)
         await store.saveTasks(tasks, for: activeHouseholdId)
     }
 
@@ -393,12 +451,23 @@ final class DataStore {
 
     func deleteTask(_ task: HouseholdTask) async {
         tasks.removeAll { $0.id == task.id }
+        notificationManager?.cancelTaskReminder(for: task)
         await store.saveTasks(tasks, for: activeHouseholdId)
     }
 
     func updateTask(_ task: HouseholdTask) async {
         if let idx = tasks.firstIndex(where: { $0.id == task.id }) {
-            tasks[idx] = task
+            var updated = task
+            // Editing the recurrence rule of a task that's never been
+            // completed gives it a fresh start instead of re-anchoring to a
+            // stale creation date — see `HouseholdTask.createdAt`. A
+            // completed task's occurrence depends only on `lastCompleted`,
+            // so this is a no-op for it either way.
+            if updated.lastCompleted == nil && tasks[idx].recurrenceRule != updated.recurrenceRule {
+                updated.createdAt = Date()
+            }
+            tasks[idx] = updated
+            syncReminder(for: updated)
             await store.saveTasks(tasks, for: activeHouseholdId)
         }
     }
@@ -411,6 +480,7 @@ final class DataStore {
     func seedOnboardingTasks(categories allowed: Set<TaskCategory>) async {
         guard !allowed.isEmpty else { return }
         tasks = defaultHouseholdTasks.filter { allowed.contains($0.category) }
+        for task in tasks { syncReminder(for: task) }
         await store.saveTasks(tasks, for: activeHouseholdId)
     }
 
@@ -944,27 +1014,68 @@ final class DataStore {
 
     // MARK: - iCloud Documents Sync
 
+    /// Registers a MainActor-dispatched observer for `name` and appends its
+    /// token to `tokens`. Shared by `startSyncObserver()` and
+    /// `startDayRolloverObserver()` so each doesn't re-implement the
+    /// addObserver + `Task { @MainActor in ... }` + token-bookkeeping
+    /// boilerplate.
+    private func observe(_ name: Notification.Name, into tokens: inout [NSObjectProtocol], handler: @escaping @MainActor () async -> Void) {
+        tokens.append(
+            NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { _ in
+                Task { @MainActor in await handler() }
+            }
+        )
+    }
+
     /// Start listening for remote iCloud and CloudKit changes. Safe to call once.
     func startSyncObserver() {
         guard syncObserverTokens.isEmpty else { return }
 
-        syncObserverTokens.append(
-            NotificationCenter.default.addObserver(forName: .dataDidSync, object: nil, queue: .main) { [weak self] _ in
-                Task { @MainActor in
-                    await self?.load()
-                    logger.info("☁️ reloaded from iCloud sync")
-                }
-            }
-        )
+        observe(.dataDidSync, into: &syncObserverTokens) { [weak self] in
+            await self?.load()
+            logger.info("☁️ reloaded from iCloud sync")
+        }
 
-        syncObserverTokens.append(
-            NotificationCenter.default.addObserver(forName: .cloudKitRemoteChange, object: nil, queue: .main) { [weak self] _ in
-                Task { @MainActor in
-                    await self?.pullFromCloudKit()
-                    logger.info("☁️ pulled from CloudKit remote change")
-                }
-            }
-        )
+        observe(.cloudKitRemoteChange, into: &syncObserverTokens) { [weak self] in
+            await self?.pullFromCloudKit()
+            logger.info("☁️ pulled from CloudKit remote change")
+        }
+    }
+
+    // MARK: - Midnight Rollover
+
+    /// Start listening for the calendar day changing (or the system clock
+    /// jumping, e.g. time zone travel) so `refreshForCurrentDay()` runs
+    /// while the app is foregrounded, not only on next launch. Safe to call
+    /// once.
+    func startDayRolloverObserver() {
+        guard dayRolloverObserverTokens.isEmpty else { return }
+        for name in [Notification.Name.NSCalendarDayChanged, Notification.Name.NSSystemClockDidChange] {
+            observe(name, into: &dayRolloverObserverTokens) { [weak self] in self?.refreshForCurrentDay() }
+        }
+        #if os(iOS)
+        observe(UIApplication.significantTimeChangeNotification, into: &dayRolloverObserverTokens) { [weak self] in self?.refreshForCurrentDay() }
+        #endif
+    }
+
+    /// Re-anchors `currentDay` to today. A no-op if the calendar day hasn't
+    /// actually changed. Otherwise recomputes derived due/overdue state
+    /// (via the `currentDay` observable), refreshes the widget's snapshot so
+    /// its due count updates without requiring an app launch, and
+    /// reschedules pending local task reminders against each task's current
+    /// occurrence. Call on `scenePhase` becoming `.active` in addition to
+    /// the notification-driven path in `startDayRolloverObserver()`, so a
+    /// resume-from-background catches a rollover that happened while
+    /// suspended.
+    func refreshForCurrentDay() {
+        let today = Calendar.current.startOfDay(for: Date())
+        guard today != currentDay else { return }
+        currentDay = today
+        updateWidgetData()
+        for task in activeTasks {
+            notificationManager?.scheduleTaskReminder(for: task)
+        }
+        logger.info("🌅 Rolled over to new day, recomputed due/overdue state")
     }
 
     /// Drain any CKShare invites that arrived before SwiftUI was ready

@@ -14,7 +14,7 @@ enum Theme {
     static let levelPurple = Color(red: 0.47, green: 0.38, blue: 0.95)
     static let successGreen = Color(red: 0.30, green: 0.78, blue: 0.65)
     static let warningRed = Color(red: 0.93, green: 0.36, blue: 0.36)
-    static let overdueRed = Color(red: 0.93, green: 0.36, blue: 0.36).opacity(0.85)
+    static let overdueRed = warningRed.opacity(0.85)
 
     // Fun accent colors for welcome / highlights
     static let coral = Color(red: 0.98, green: 0.45, blue: 0.45)

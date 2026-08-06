@@ -79,7 +79,8 @@ struct TaskDetailView: View {
     // MARK: - Header
 
     private func headerCard(_ task: HouseholdTask) -> some View {
-        VStack(spacing: 12) {
+        let status = task.dueStatus()
+        return VStack(spacing: 12) {
             HStack(alignment: .top) {
                 Image(systemName: task.category.icon)
                     .font(.largeTitle)
@@ -100,7 +101,14 @@ struct TaskDetailView: View {
                     Text("+\(task.xpReward) XP")
                         .font(.title3.bold())
                         .foregroundStyle(Theme.xpGold)
-                    if task.isDue {
+                    if status.isOverdue {
+                        Text("\(status.daysOverdue)D OVERDUE")
+                            .font(.caption.bold())
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 2)
+                            .background(Theme.overdueRed, in: Capsule())
+                    } else if status.isDue {
                         Text("DUE")
                             .font(.caption.bold())
                             .foregroundStyle(.white)

@@ -495,6 +495,7 @@ extension HouseholdTask {
         r["supplies"]         = supplies as CKRecordValue
         r["isActive"]         = (isActive ? 1 : 0) as CKRecordValue
         r["lastCompleted"]    = lastCompleted as CKRecordValue?
+        r["createdAt"]        = createdAt as CKRecordValue?
         r["defaultAssigneeId"] = defaultAssigneeId?.uuidString as CKRecordValue?
         r["scheduledWeekdays"] = scheduledWeekdays.isEmpty ? nil : scheduledWeekdays as CKRecordValue?
         r["scheduledDayOfMonth"] = scheduledDayOfMonth as CKRecordValue?
@@ -526,6 +527,7 @@ extension HouseholdTask {
         self.supplies = record["supplies"] as? [String] ?? []
         self.isActive = (record["isActive"] as? Int ?? 1) == 1
         self.lastCompleted = record["lastCompleted"] as? Date
+        self.createdAt = record["createdAt"] as? Date ?? Date()
         self.defaultAssigneeId = (record["defaultAssigneeId"] as? String).flatMap(UUID.init)
         self.scheduledWeekdays = record["scheduledWeekdays"] as? [Int] ?? []
         self.scheduledDayOfMonth = record["scheduledDayOfMonth"] as? Int
