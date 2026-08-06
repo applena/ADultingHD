@@ -92,24 +92,16 @@ struct DashboardView: View {
         }
     }
 
-    @ViewBuilder
-    private var primaryTaskSection: some View {
-        if dataStore.tasks.isEmpty { emptyTasksSection }
-        else if dataStore.dueTasks.isEmpty { caughtUpSection }
-        else { dueTasksSection }
-    }
+    // MARK: - Layouts
 
     #if os(iOS)
     private var iOSLayout: some View {
         VStack(spacing: Theme.sectionSpacing) {
             heroSection
             tipBanner
-            if let superstar = dataStore.weeklySuperstar {
-                superstarCallout(superstar)
-            }
             statsRow
-            primaryTaskSection
-            if !dataStore.todayCompletions.isEmpty { recentCompletionsSection }
+            todaysTasksSection
+            completedTasksSection
             if seasonalSectionVisible { seasonalSection }
         }
         .padding()
@@ -117,37 +109,28 @@ struct DashboardView: View {
     #endif
 
     #if os(macOS)
-    private var hasRightColumnContent: Bool {
-        !dataStore.todayCompletions.isEmpty || (seasonalSectionVisible && !seasonalSuggestions.isEmpty)
-    }
-
     private var macOSLayout: some View {
         VStack(spacing: Theme.sectionSpacing) {
-            // Full-width top strip: hero + stats side by side
+            // Full-width top strip: hero + stats/tip side by side
             HStack(alignment: .top, spacing: Theme.sectionSpacing) {
                 heroSection
                     .frame(maxWidth: .infinity)
                 VStack(spacing: Theme.sectionSpacing) {
                     statsRow
                     tipBanner
-                    if let superstar = dataStore.weeklySuperstar {
-                        superstarCallout(superstar)
-                    }
                 }
                 .frame(maxWidth: 320)
             }
 
-            // Main body: due tasks left, secondary content right
+            // Main body: today's tasks left, completed (+ seasonal) right
             HStack(alignment: .top, spacing: Theme.sectionSpacing) {
-                primaryTaskSection
+                todaysTasksSection
                     .frame(maxWidth: .infinity)
-                if hasRightColumnContent {
-                    VStack(spacing: Theme.sectionSpacing) {
-                        if !dataStore.todayCompletions.isEmpty { recentCompletionsSection }
-                        if seasonalSectionVisible { seasonalSection }
-                    }
-                    .frame(maxWidth: 320)
+                VStack(spacing: Theme.sectionSpacing) {
+                    completedTasksSection
+                    if seasonalSectionVisible { seasonalSection }
                 }
+                .frame(maxWidth: 320)
             }
         }
         .padding(.horizontal, 20)
@@ -158,47 +141,23 @@ struct DashboardView: View {
 
     // MARK: - Hero Section
 
+    /// Just the greeting header — the avatar/level/XP recap that used to
+    /// live here was redundant with `statsRow` and the Profile tab, and
+    /// made the dashboard feel busy (issue #16). Total XP and level detail
+    /// still live in Profile.
     private var heroSection: some View {
         let hasDueTasks = !dataStore.dueTasks.isEmpty
         let hasOverdueTasks = !dataStore.overdueTasks.isEmpty
-        return VStack(alignment: .leading, spacing: 16) {
-            LandingHeader(
-                eyebrow: dataStore.activeHousehold.name,
-                title: greeting,
-                subtitle: subtitle,
-                icon: hasDueTasks ? "clock.badge.exclamationmark.fill" : "checkmark.seal.fill",
-                color: !hasDueTasks
-                    ? Theme.successGreen
-                    : (hasOverdueTasks ? Theme.overdueRed : Theme.streakOrange)
-            )
-            .accessibilityIdentifier("home-root-header")
-
-            HStack(alignment: .top, spacing: 12) {
-                CompactAvatarView(avatarState: dataStore.profile.avatarState, size: 44)
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(dataStore.profile.levelTitle)
-                        .font(.subheadline.weight(.medium))
-                        .fixedSize(horizontal: false, vertical: true)
-                    ProgressView(value: dataStore.profile.xpProgress)
-                        .tint(Theme.levelPurple)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-                VStack(alignment: .trailing, spacing: 2) {
-                    Text("\(dataStore.profile.totalXP)")
-                        .font(.title3.bold())
-                        .foregroundStyle(Theme.xpGold)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.7)
-                    Text("Total XP")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-            .card()
-        }
+        return LandingHeader(
+            eyebrow: dataStore.activeHousehold.name,
+            title: greeting,
+            subtitle: subtitle,
+            icon: hasDueTasks ? "clock.badge.exclamationmark.fill" : "checkmark.seal.fill",
+            color: !hasDueTasks
+                ? Theme.successGreen
+                : (hasOverdueTasks ? Theme.overdueRed : Theme.streakOrange)
+        )
+        .accessibilityIdentifier("home-root-header")
     }
 
     // MARK: - Tip Banner
@@ -219,34 +178,6 @@ struct DashboardView: View {
         .background(Theme.xpGold.opacity(0.08), in: RoundedRectangle(cornerRadius: Theme.cornerRadius))
     }
 
-    // MARK: - Superstar of the Week
-
-    /// Compact callout for this week's XP leader. Only shown when
-    /// `DataStore.weeklySuperstar` resolves to a clear leader — that already
-    /// excludes solo households, a scoreless week, and ties (see
-    /// `WeeklyLeaderboard.superstar`) — so no extra gating is needed here.
-    /// The full leaderboard lives in `StatsView`.
-    private func superstarCallout(_ superstar: WeeklyXPEntry) -> some View {
-        HStack(spacing: 10) {
-            Image(systemName: "crown.fill")
-                .font(.title3)
-                .foregroundStyle(Theme.xpGold)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(superstar.profile.id == dataStore.profile.id ? "You're the Superstar of the Week!" : "\(superstar.profile.name) is Superstar of the Week")
-                    .font(.subheadline.weight(.semibold))
-                    .fixedSize(horizontal: false, vertical: true)
-                Text("+\(superstar.weeklyXP) XP this week")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            Spacer()
-        }
-        .padding(12)
-        .background(Theme.xpGold.opacity(0.08), in: RoundedRectangle(cornerRadius: Theme.cornerRadius))
-    }
-
     // MARK: - Stats Row
 
     private var statsRow: some View {
@@ -256,12 +187,6 @@ struct DashboardView: View {
                 value: "\(dataStore.profile.currentStreak)d",
                 icon: "flame.fill",
                 color: dataStore.profile.currentStreak > 0 ? Theme.streakOrange : .secondary
-            )
-            StatCard(
-                title: "Done Today",
-                value: "\(dataStore.todayCompletions.count)",
-                icon: "checkmark.circle.fill",
-                color: Theme.successGreen
             )
             StatCard(
                 title: "XP Today",
@@ -276,12 +201,54 @@ struct DashboardView: View {
         storeManager.canCreateCustomTask(existingCount: dataStore.customTaskCount)
     }
 
-    private var emptyTasksSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Label("No tasks yet", systemImage: "checklist")
-                .font(.headline)
-                .foregroundStyle(Theme.accent)
+    // MARK: - Today's Tasks
 
+    /// Everything currently due, always under one clearly-labeled card —
+    /// the "very clear Today's Tasks section" from issue #16. Checking a
+    /// task off here (`DueTaskRow`) advances its next occurrence past
+    /// today, so it naturally drops out of this list and reappears in
+    /// `completedTasksSection` below without any extra bookkeeping.
+    private var todaysTasksSection: some View {
+        let dueTasks = dataStore.dueTasks
+        let overdueCount = dataStore.overdueTasks.count
+        return VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Label("Today's Tasks", systemImage: "checklist")
+                    .font(.headline)
+                Spacer()
+                if overdueCount > 0 {
+                    Text("\(overdueCount) overdue")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Theme.overdueRed)
+                }
+                if !dueTasks.isEmpty {
+                    Text("\(dueTasks.count)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            if dataStore.tasks.isEmpty {
+                emptyTasksContent
+            } else if dueTasks.isEmpty {
+                caughtUpContent
+            } else {
+                ForEach(dueTasks.prefix(10)) { task in
+                    DueTaskRow(task: task) { selectedTask = task }
+                }
+                if dueTasks.count > 10 {
+                    Text("+ \(dueTasks.count - 10) more...")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .padding(.leading, 4)
+                }
+            }
+        }
+        .card()
+    }
+
+    private var emptyTasksContent: some View {
+        VStack(alignment: .leading, spacing: 12) {
             Text("Add your first task and it'll show up here whenever it's due.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
@@ -300,56 +267,49 @@ struct DashboardView: View {
             }
             .buttonStyle(.plain)
         }
-        .card()
     }
 
-    private var caughtUpSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Label("Today is clear", systemImage: "sparkles")
-                .font(.headline)
+    private var caughtUpContent: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Label("Nothing due right now", systemImage: "sparkles")
+                .font(.subheadline.weight(.semibold))
                 .foregroundStyle(Theme.successGreen)
-
-            Text("No tasks are currently due. Browse the catalog, check supplies, or keep the streak alive when the next task appears.")
-                .font(.subheadline)
+            Text("Browse the catalog or check supplies while you wait for the next task.")
+                .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
-
-            HStack(spacing: 10) {
-                MetricPill(title: "Active", value: "\(dataStore.activeTasks.count)", icon: "checklist", color: Theme.accent)
-                MetricPill(title: "Done today", value: "\(dataStore.todayCompletions.count)", icon: "checkmark.circle.fill", color: Theme.successGreen)
-            }
         }
-        .card()
     }
 
-    // MARK: - Due Tasks
+    // MARK: - Completed Tasks
 
-    private var dueTasksSection: some View {
-        let overdueCount = dataStore.overdueTasks.count
+    /// Tasks checked off today. Kept as its own clearly-labeled card, always
+    /// visible even when empty, so it's obvious at a glance where a checked
+    /// task lands — and, per issue #16, where to go undo an accidental tap.
+    private var completedTasksSection: some View {
+        let completions = dataStore.todayCompletions
         return VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Label("Up Next", systemImage: "arrow.right.circle.fill")
+                Label("Completed Tasks", systemImage: "checkmark.seal.fill")
                     .font(.headline)
+                    .foregroundStyle(Theme.successGreen)
                 Spacer()
-                if overdueCount > 0 {
-                    Text("\(overdueCount) overdue")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(Theme.overdueRed)
+                if !completions.isEmpty {
+                    Text("\(completions.count)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
-                Text("\(dataStore.dueTasks.count) tasks")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
             }
 
-            ForEach(dataStore.dueTasks.prefix(10)) { task in
-                DueTaskRow(task: task) { selectedTask = task }
-            }
-
-            if dataStore.dueTasks.count > 10 {
-                Text("+ \(dataStore.dueTasks.count - 10) more...")
-                    .font(.caption)
+            if completions.isEmpty {
+                Text("Nothing checked off yet today. Completed tasks land here so an accidental tap is easy to undo.")
+                    .font(.subheadline)
                     .foregroundStyle(.secondary)
-                    .padding(.leading, 4)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                ForEach(completions) { completion in
+                    CompletedTaskRow(completion: completion)
+                }
             }
         }
         .card()
@@ -411,31 +371,6 @@ struct DashboardView: View {
             }
         }
     }
-
-    // MARK: - Recent Completions
-
-    private var recentCompletionsSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Label("Completed Today", systemImage: "checkmark.seal.fill")
-                .font(.headline)
-                .foregroundStyle(Theme.successGreen)
-
-            ForEach(dataStore.todayCompletions) { completion in
-                HStack {
-                    Text(completion.taskName)
-                        .font(.subheadline)
-                    Spacer()
-                    Text("+\(completion.totalXP) XP")
-                        .font(.caption.bold())
-                        .foregroundStyle(Theme.xpGold)
-                    Text(completion.completedAt, style: .time)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-            }
-        }
-        .card()
-    }
 }
 
 // MARK: - Due Task Row
@@ -447,16 +382,12 @@ struct DueTaskRow: View {
     /// button below so tapping to complete a task and tapping to edit it
     /// don't fight over the same gesture.
     let onSelect: () -> Void
-    @State private var pendingCompletion: Task<Void, Never>?
-
-    /// Tapping the checkmark marks the task done immediately in the UI, but
-    /// the completion isn't committed to the data store until this window
-    /// elapses — tapping again before then cancels it, so an accidental tap
-    /// can be undone right away instead of requiring a full "uncomplete"
-    /// that would have to unwind XP, streaks, and achievements.
-    private static let undoWindow: Duration = .seconds(2)
-
-    private var isChecked: Bool { pendingCompletion != nil }
+    /// Guards against a double-tap completing the same task twice before
+    /// `completeTask` finishes and the row leaves Today's Tasks — completion
+    /// isn't idempotent (each call records a new `TaskCompletion` and grants
+    /// XP/coins again), unlike the Completed Tasks row's undo button, which
+    /// a repeat tap safely no-ops.
+    @State private var isCompleting = false
 
     var body: some View {
         let status = task.dueStatus()
@@ -499,41 +430,62 @@ struct DueTaskRow: View {
             Spacer()
 
             Button {
-                toggleCompletion()
+                guard !isCompleting else { return }
+                isCompleting = true
+                Task {
+                    await dataStore.completeTask(task)
+                    isCompleting = false
+                }
             } label: {
-                Image(systemName: isChecked ? "checkmark.circle.fill" : "checkmark.circle")
+                Image(systemName: "checkmark.circle")
                     .font(.title3)
                     .foregroundStyle(Theme.successGreen)
             }
             .buttonStyle(.plain)
-            .animation(.easeInOut(duration: 0.15), value: isChecked)
-            .accessibilityLabel(isChecked ? "Undo complete" : "Mark complete")
+            .disabled(isCompleting)
+            .accessibilityLabel("Mark complete")
         }
         .padding(.vertical, 4)
-        .onDisappear {
-            // Reset (not just cancel) so a stale cancelled Task can't leave
-            // the checkmark showing "checked" the next time this row is
-            // shown — e.g. if navigating to another task's detail causes
-            // this row to disappear mid-undo-window.
-            pendingCompletion?.cancel()
-            pendingCompletion = nil
-        }
     }
+}
 
-    private func toggleCompletion() {
-        // Second tap before the undo window elapsed — cancel the pending
-        // completion instead of ever writing it.
-        if let pending = pendingCompletion {
-            pending.cancel()
-            pendingCompletion = nil
-            return
-        }
+// MARK: - Completed Task Row
 
-        pendingCompletion = Task {
-            try? await Task.sleep(for: Self.undoWindow)
-            guard !Task.isCancelled else { return }
-            await dataStore.completeTask(task)
+struct CompletedTaskRow: View {
+    @Environment(DataStore.self) private var dataStore
+    let completion: TaskCompletion
+
+    var body: some View {
+        HStack(spacing: 10) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(completion.taskName)
+                    .font(.subheadline.weight(.medium))
+                    .fixedSize(horizontal: false, vertical: true)
+                HStack(spacing: 6) {
+                    Text("+\(completion.totalXP) XP")
+                        .font(.caption.bold())
+                        .foregroundStyle(Theme.xpGold)
+                    Text(completion.completedAt, style: .time)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Spacer()
+
+            // Tapping the checkmark undoes the completion — the "easily
+            // uncheck an accidental tap" affordance from issue #16.
+            Button {
+                Task { await dataStore.uncompleteTask(completion) }
+            } label: {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.title3)
+                    .foregroundStyle(Theme.successGreen)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Undo complete")
         }
+        .padding(.vertical, 4)
     }
 }
 

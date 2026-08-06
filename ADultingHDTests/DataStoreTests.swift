@@ -32,6 +32,34 @@ final class DataStoreTests: XCTestCase {
         return task
     }
 
+    // `completeTask`'s daily/weekly/monthly consistency bonuses gate on
+    // "already awarded" flags in the real `UserDefaults.standard` (there's
+    // no injectable store), keyed by today's/this week's/this month's date —
+    // so a flag left over from an earlier test run *today* would silently
+    // suppress a bonus this run expects, and a bonus this run awards would
+    // leak into a later run today. Clear them before and after every test in
+    // this file so completeTask/uncompleteTask coverage is deterministic
+    // regardless of when or how many times the suite has already run today.
+    override func setUp() {
+        super.setUp()
+        clearPeriodBonusFlags()
+    }
+
+    override func tearDown() {
+        clearPeriodBonusFlags()
+        super.tearDown()
+    }
+
+    // `nonisolated` because it only touches `UserDefaults.standard` (thread-safe,
+    // no actor affinity), letting `setUp()`/`tearDown()` call it synchronously
+    // from XCTestCase's nonisolated hooks without hopping onto the main actor.
+    private nonisolated func clearPeriodBonusFlags() {
+        let defaults = UserDefaults.standard
+        for key in defaults.dictionaryRepresentation().keys where key.hasPrefix("bonus_awarded_") {
+            defaults.removeObject(forKey: key)
+        }
+    }
+
     func testUpdateTaskClearsOverrideWhenRecurrenceRuleChanges() async {
         let dataStore = DataStore()
         let original = makeTask()
@@ -134,5 +162,101 @@ final class DataStoreTests: XCTestCase {
         await dataStore.rescheduleTask(task, to: pastDay, on: today, calendar: utc)
 
         XCTAssertNil(dataStore.tasks.first?.scheduledOverrideDate)
+    }
+
+    // MARK: - completeTask / uncompleteTask (Dashboard's Completed Tasks undo, issue #16)
+
+    func testUncompleteTaskReversesXPCoinsAndCompletionCount() async {
+        let dataStore = DataStore()
+        let task = makeTask(frequency: .daily)
+        // A second, never-completed due task keeps `dueTasks` non-empty so
+        // completing `task` doesn't also trigger the daily consistency
+        // bonus (see `testUncompleteTaskReversesPeriodBonus...` below) —
+        // this test is only about the base per-completion XP/coins/count.
+        var decoy = makeTask(frequency: .daily)
+        decoy.name = "Decoy — stays due"
+        dataStore.tasks = [task, decoy]
+
+        await dataStore.completeTask(task)
+        let completion = try! XCTUnwrap(dataStore.completions.first)
+        let xpAfterComplete = dataStore.profile.totalXP
+        let coinsAfterComplete = dataStore.profile.coins
+        XCTAssertEqual(xpAfterComplete, completion.totalXP)
+        XCTAssertEqual(dataStore.profile.totalTasksCompleted, 1)
+        XCTAssertNil(completion.periodBonuses)
+
+        await dataStore.uncompleteTask(completion)
+
+        XCTAssertTrue(dataStore.completions.isEmpty)
+        XCTAssertEqual(dataStore.profile.totalXP, xpAfterComplete - completion.totalXP)
+        XCTAssertEqual(dataStore.profile.coins, coinsAfterComplete - completion.totalXP)
+        XCTAssertEqual(dataStore.profile.totalTasksCompleted, 0)
+        XCTAssertNil(dataStore.tasks.first?.lastCompleted)
+    }
+
+    func testUncompleteTaskReversesPeriodBonusesAndAllowsReearningThem() async {
+        let dataStore = DataStore()
+        let task = makeTask(frequency: .daily)
+        dataStore.tasks = [task]
+
+        // Completing the household's only active task simultaneously clears
+        // the day, the week, and the month, earning all three consistency
+        // bonuses on top of the completion's own XP — this is the exact
+        // scenario issue #16's review turned up as a permanent XP leak:
+        // undoing this completion must claw every one of those bonuses back
+        // too, not just the completion's own XP.
+        await dataStore.completeTask(task)
+        let completion = try! XCTUnwrap(dataStore.completions.first)
+        let periodBonuses = try! XCTUnwrap(completion.periodBonuses)
+        XCTAssertEqual(Set(periodBonuses.keys), ["daily", "weekly", "monthly"])
+        let periodBonusTotal = periodBonuses.values.reduce(0, +)
+        XCTAssertGreaterThan(periodBonusTotal, 0)
+        let xpAfterComplete = dataStore.profile.totalXP
+        XCTAssertEqual(xpAfterComplete, completion.totalXP + periodBonusTotal)
+
+        await dataStore.uncompleteTask(completion)
+
+        XCTAssertEqual(dataStore.profile.totalXP, xpAfterComplete - completion.totalXP - periodBonusTotal)
+
+        // Every "already awarded" gate must also be cleared — otherwise
+        // completing the task again for real would silently grant none of
+        // these bonuses.
+        await dataStore.completeTask(task)
+        let secondCompletion = try! XCTUnwrap(dataStore.completions.first)
+        XCTAssertEqual(secondCompletion.periodBonuses?.values.reduce(0, +), periodBonusTotal)
+    }
+
+    func testUncompleteTaskUnwindsStreakWhenItWasTodaysOnlyCompletion() async {
+        let dataStore = DataStore()
+        let task = makeTask(frequency: .daily)
+        dataStore.tasks = [task]
+
+        await dataStore.completeTask(task)
+        XCTAssertEqual(dataStore.profile.currentStreak, 1)
+        let completion = try! XCTUnwrap(dataStore.completions.first)
+
+        await dataStore.uncompleteTask(completion)
+
+        XCTAssertEqual(dataStore.profile.currentStreak, 0)
+        XCTAssertNil(dataStore.profile.lastActiveDate)
+    }
+
+    func testUncompleteTaskLeavesStreakAloneWhenOtherCompletionsRemainToday() async {
+        let dataStore = DataStore()
+        let taskA = makeTask(frequency: .daily)
+        var taskB = makeTask(frequency: .daily)
+        taskB.name = "Task B"
+        dataStore.tasks = [taskA, taskB]
+
+        await dataStore.completeTask(taskA)
+        await dataStore.completeTask(taskB)
+        XCTAssertEqual(dataStore.profile.currentStreak, 1)
+
+        let completionA = try! XCTUnwrap(dataStore.completions.first { $0.taskId == taskA.id })
+        await dataStore.uncompleteTask(completionA)
+
+        // Task B is still completed today, so today still counts as active.
+        XCTAssertEqual(dataStore.profile.currentStreak, 1)
+        XCTAssertEqual(dataStore.completions.count, 1)
     }
 }
