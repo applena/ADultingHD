@@ -30,6 +30,7 @@ struct StatsView: View {
                 #else
                 VStack(spacing: Theme.sectionSpacing) {
                     statsHeader
+                    superstarSection
                     if storeManager.isPro {
                         xpPerDayChart(aggregates: aggregates)
                         completionTrendChart(aggregates: aggregates)
@@ -51,6 +52,7 @@ struct StatsView: View {
     private func macOSLayout(aggregates: StatsAggregates) -> some View {
         VStack(spacing: Theme.sectionSpacing) {
             statsHeader
+            superstarSection
             if storeManager.isPro {
                 HStack(alignment: .top, spacing: Theme.sectionSpacing) {
                     xpPerDayChart(aggregates: aggregates).frame(maxWidth: .infinity)
@@ -79,6 +81,84 @@ struct StatsView: View {
             color: Theme.successGreen
         )
         .accessibilityIdentifier("stats-root-header")
+    }
+
+    // MARK: - Superstar of the Week
+
+    /// Weekly XP leaderboard + "superstar" callout. Hidden entirely for
+    /// solo households — see `DataStore.hasMultipleAssignees` — since there's
+    /// no one to compete against.
+    @ViewBuilder
+    private var superstarSection: some View {
+        if dataStore.hasMultipleAssignees {
+            let entries = dataStore.weeklyLeaderboard
+            let superstar = WeeklyLeaderboard.superstar(among: entries)
+            VStack(alignment: .leading, spacing: 10) {
+                Label("Superstar of the Week", systemImage: "crown.fill")
+                    .font(.headline)
+                    .foregroundStyle(Theme.xpGold)
+
+                Text(superstarSubtitle(entries: entries, superstar: superstar))
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                ForEach(Array(entries.enumerated()), id: \.element.id) { index, entry in
+                    weeklyLeaderboardRow(entry: entry, rank: index + 1, isSuperstar: entry.id == superstar?.id)
+                }
+            }
+            .card()
+        }
+    }
+
+    private func superstarSubtitle(entries: [WeeklyXPEntry], superstar: WeeklyXPEntry?) -> String {
+        if let superstar {
+            return superstar.profile.id == dataStore.profile.id
+                ? "You're leading the household this week!"
+                : "\(superstar.profile.name) is leading the household this week!"
+        }
+        if entries.allSatisfy({ $0.weeklyXP == 0 }) {
+            return "No XP earned yet this week — first to complete a task takes the crown."
+        }
+        return "It's a tie! Complete one more task to take the lead."
+    }
+
+    private func weeklyLeaderboardRow(entry: WeeklyXPEntry, rank: Int, isSuperstar: Bool) -> some View {
+        HStack(spacing: 12) {
+            Text("\(rank)")
+                .font(.headline)
+                .foregroundStyle(isSuperstar ? Theme.xpGold : .secondary)
+                .frame(width: 20)
+
+            Image(systemName: entry.profile.avatar)
+                .font(.title3)
+                .foregroundStyle(entry.profile.id == dataStore.profile.id ? Theme.levelPurple : .secondary)
+
+            HStack(spacing: 4) {
+                Text(entry.profile.name)
+                    .font(.subheadline.weight(.medium))
+                if entry.profile.id == dataStore.profile.id {
+                    Text("YOU")
+                        .font(.caption2.bold())
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 4)
+                        .padding(.vertical, 1)
+                        .background(Theme.levelPurple, in: Capsule())
+                }
+                if isSuperstar {
+                    Image(systemName: "crown.fill")
+                        .font(.caption)
+                        .foregroundStyle(Theme.xpGold)
+                }
+            }
+
+            Spacer()
+
+            Text("+\(entry.weeklyXP) XP")
+                .font(.subheadline.bold())
+                .foregroundStyle(Theme.xpGold)
+        }
+        .padding(.vertical, 4)
     }
 
     // MARK: - XP Per Day (last 14 days)

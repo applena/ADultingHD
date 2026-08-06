@@ -104,6 +104,9 @@ struct DashboardView: View {
         VStack(spacing: Theme.sectionSpacing) {
             heroSection
             tipBanner
+            if let superstar = dataStore.weeklySuperstar {
+                superstarCallout(superstar)
+            }
             statsRow
             primaryTaskSection
             if !dataStore.todayCompletions.isEmpty { recentCompletionsSection }
@@ -127,6 +130,9 @@ struct DashboardView: View {
                 VStack(spacing: Theme.sectionSpacing) {
                     statsRow
                     tipBanner
+                    if let superstar = dataStore.weeklySuperstar {
+                        superstarCallout(superstar)
+                    }
                 }
                 .frame(maxWidth: 320)
             }
@@ -208,6 +214,34 @@ struct DashboardView: View {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(12)
+        .background(Theme.xpGold.opacity(0.08), in: RoundedRectangle(cornerRadius: Theme.cornerRadius))
+    }
+
+    // MARK: - Superstar of the Week
+
+    /// Compact callout for this week's XP leader. Only shown when
+    /// `DataStore.weeklySuperstar` resolves to a clear leader — that already
+    /// excludes solo households, a scoreless week, and ties (see
+    /// `WeeklyLeaderboard.superstar`) — so no extra gating is needed here.
+    /// The full leaderboard lives in `StatsView`.
+    private func superstarCallout(_ superstar: WeeklyXPEntry) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: "crown.fill")
+                .font(.title3)
+                .foregroundStyle(Theme.xpGold)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(superstar.profile.id == dataStore.profile.id ? "You're the Superstar of the Week!" : "\(superstar.profile.name) is Superstar of the Week")
+                    .font(.subheadline.weight(.semibold))
+                    .fixedSize(horizontal: false, vertical: true)
+                Text("+\(superstar.weeklyXP) XP this week")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
         }
         .padding(12)
         .background(Theme.xpGold.opacity(0.08), in: RoundedRectangle(cornerRadius: Theme.cornerRadius))
@@ -391,7 +425,7 @@ struct DashboardView: View {
                     Text(completion.taskName)
                         .font(.subheadline)
                     Spacer()
-                    Text("+\(completion.xpEarned + completion.streakBonus) XP")
+                    Text("+\(completion.totalXP) XP")
                         .font(.caption.bold())
                         .foregroundStyle(Theme.xpGold)
                     Text(completion.completedAt, style: .time)

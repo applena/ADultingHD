@@ -139,6 +139,18 @@ enum Weekday: Int, CaseIterable, Identifiable {
     }
 }
 
+extension Calendar {
+    /// The calendar week (per this calendar's `.weekOfYear` boundary)
+    /// containing `date`. The single source of truth for "this week" —
+    /// shared by `DataStore`'s weekly consistency bonus
+    /// (`earnedWeeklyConsistencyBonus`/`bonusPeriodKey`) and
+    /// `WeeklyLeaderboard`'s XP aggregation — so both agree on where a week
+    /// starts and ends.
+    func weekInterval(containing date: Date) -> DateInterval? {
+        dateInterval(of: .weekOfYear, for: date)
+    }
+}
+
 func shortMonthName(_ month: Int) -> String {
     let symbols = Calendar.current.shortMonthSymbols
     guard (1...symbols.count).contains(month) else { return "" }
@@ -406,6 +418,10 @@ struct TaskCompletion: Codable, Identifiable {
     let streakBonus: Int
     let notes: String?
     var profileId: UUID?  // nil = legacy data; set to completing member's profile id
+
+    /// XP this completion contributed, including any streak bonus. The
+    /// canonical sum wherever a completion's XP is displayed or totaled.
+    var totalXP: Int { xpEarned + streakBonus }
 }
 
 // MARK: - Household Activity Feed
