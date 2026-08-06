@@ -19,14 +19,24 @@ struct CloudShareSheet: View {
     let share: CKShare
     let container: CKContainer
     let householdName: String
+    /// Fired the moment the share is successfully saved to CloudKit — i.e. an
+    /// invite has actually gone out. Distinct from `onDismiss` because the
+    /// sheet often stays open after this (e.g. while Messages composes), and
+    /// callers need to know "an invite was sent" independent of "the sheet
+    /// closed" so onboarding can update its UI without waiting on a dismissal
+    /// that may never trigger the same delegate callback.
+    var onShareSaved: () -> Void = {}
     let onDismiss: () -> Void
 
     var body: some View {
         #if os(iOS)
-        CloudShareSheetIOS(share: share, container: container, householdName: householdName, onDismiss: onDismiss)
-            .ignoresSafeArea()
+        CloudShareSheetIOS(
+            share: share, container: container, householdName: householdName,
+            onShareSaved: onShareSaved, onDismiss: onDismiss
+        )
+        .ignoresSafeArea()
         #else
-        MacInviteFallback(share: share, householdName: householdName, onDismiss: onDismiss)
+        MacInviteFallback(share: share, householdName: householdName, onShareSaved: onShareSaved, onDismiss: onDismiss)
         #endif
     }
 }
@@ -37,10 +47,11 @@ private struct CloudShareSheetIOS: UIViewControllerRepresentable {
     let share: CKShare
     let container: CKContainer
     let householdName: String
+    let onShareSaved: () -> Void
     let onDismiss: () -> Void
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(householdName: householdName, onDismiss: onDismiss)
+        Coordinator(householdName: householdName, onShareSaved: onShareSaved, onDismiss: onDismiss)
     }
 
     func makeUIViewController(context: Context) -> UICloudSharingController {
@@ -53,18 +64,43 @@ private struct CloudShareSheetIOS: UIViewControllerRepresentable {
 
     final class Coordinator: NSObject, UICloudSharingControllerDelegate {
         let householdName: String
+        let onShareSaved: () -> Void
         let onDismiss: () -> Void
 
-        init(householdName: String, onDismiss: @escaping () -> Void) {
+        init(householdName: String, onShareSaved: @escaping () -> Void, onDismiss: @escaping () -> Void) {
             self.householdName = householdName
+            self.onShareSaved = onShareSaved
             self.onDismiss = onDismiss
         }
 
         func itemTitle(for csc: UICloudSharingController) -> String? {
-            householdName
+            "Join \"\(householdName)\" on ADultingHD"
         }
 
-        func cloudSharingControllerDidSaveShare(_ csc: UICloudSharingController) {}
+        func itemThumbnailData(for csc: UICloudSharingController) -> Data? {
+            // Without a thumbnail, Messages/Mail render the invite as a bare
+            // link with no image — easy to mistake for spam. Attaching the
+            // app icon gives the preview card a recognizable source.
+            Self.appIconThumbnailData
+        }
+
+        // UIKit calls itemThumbnailData(for:) repeatedly while the share
+        // sheet is on screen (e.g. once per activity the user scrolls past).
+        // The app icon never changes for the process lifetime, so decode and
+        // PNG-encode it once instead of repeating that work on every call.
+        private static let appIconThumbnailData: Data? = {
+            guard
+                let icons = Bundle.main.infoDictionary?["CFBundleIcons"] as? [String: Any],
+                let primaryIcons = icons["CFBundlePrimaryIcon"] as? [String: Any],
+                let iconFiles = primaryIcons["CFBundleIconFiles"] as? [String],
+                let iconName = iconFiles.last
+            else { return nil }
+            return UIImage(named: iconName)?.pngData()
+        }()
+
+        func cloudSharingControllerDidSaveShare(_ csc: UICloudSharingController) {
+            onShareSaved()
+        }
 
         func cloudSharingControllerDidStopSharing(_ csc: UICloudSharingController) {
             onDismiss()
@@ -83,6 +119,7 @@ private struct CloudShareSheetIOS: UIViewControllerRepresentable {
 private struct MacInviteFallback: View {
     let share: CKShare
     let householdName: String
+    let onShareSaved: () -> Void
     let onDismiss: () -> Void
 
     var body: some View {
@@ -99,6 +136,12 @@ private struct MacInviteFallback: View {
                 Button {
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(url.absoluteString, forType: .string)
+                    // macOS has no Messages/Mail hand-off to confirm a send,
+                    // so treat "copied the link" as the closest equivalent to
+                    // iOS's cloudSharingControllerDidSaveShare — it's the
+                    // point the user has actually taken action to share it,
+                    // not just the point the sheet happened to render.
+                    onShareSaved()
                 } label: {
                     Label("Copy Link", systemImage: "doc.on.doc")
                 }
