@@ -36,13 +36,14 @@ The app delivers a full gamification cycle: discover tasks, complete them with q
 - **Passive engagement** — Widgets and notifications keep the game present without requiring the app to be open
 - **Supply awareness** — Task-linked inventory tracking bridges the gap between "what needs doing" and "what do I need to buy"
 
-### v2.0 — Smarter Scheduling *(inferred)*
+### v2.0 — Smarter Scheduling *(shipped, with one gap)*
 
-The app moves beyond tracking what's due to actively helping users plan their time. Scheduling becomes intelligent — estimating daily effort, batching tasks by location, and guiding users through focused "power hour" sessions with timers. The experience shifts from reactive ("what's overdue?") to proactive ("here's your optimal 45-minute block").
+The app moves beyond tracking what's due to actively helping users plan their time. `ScheduleView` estimates daily effort, batches tasks by room/category, and `PowerHourView` guides users through a focused, timed, sequential completion flow. The experience is proactive ("here's your optimal block") rather than purely reactive.
 
-- **Time intelligence** — Users see effort estimates and can make informed decisions about what to tackle today
-- **Spatial batching** — Tasks grouped by room/category reduce context-switching and make cleaning sessions efficient
-- **Guided sessions** — Power hour mode turns a task list into a coached workflow with pacing and completion tracking
+- **Time intelligence** — Shipped. The schedule header and category batch rows show per-task and per-day minute totals so users can see effort before committing.
+- **Spatial batching** — Shipped. Today's tasks group into collapsible category sections (`todayBatchesCard`) so a cleaning run can move room-to-room instead of task-to-task.
+- **Guided sessions** — Shipped. "Start Power Hour" launches a coached, timed, one-task-at-a-time flow with pacing and completion tracking.
+- **Flexible rescheduling** — Not yet built. Tasks are due on dates computed purely from frequency (`HouseholdTask.isDue(on:)`); there's no way to drag a task to a different day and have that stick. Tracked separately (see PLAN.md / issue tracker) rather than blocking this milestone.
 
 ---
 
