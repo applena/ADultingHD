@@ -382,6 +382,12 @@ struct DueTaskRow: View {
     /// button below so tapping to complete a task and tapping to edit it
     /// don't fight over the same gesture.
     let onSelect: () -> Void
+    /// Guards against a double-tap completing the same task twice before
+    /// `completeTask` finishes and the row leaves Today's Tasks — completion
+    /// isn't idempotent (each call records a new `TaskCompletion` and grants
+    /// XP/coins again), unlike the Completed Tasks row's undo button, which
+    /// a repeat tap safely no-ops.
+    @State private var isCompleting = false
 
     var body: some View {
         let status = task.dueStatus()
@@ -424,13 +430,19 @@ struct DueTaskRow: View {
             Spacer()
 
             Button {
-                Task { await dataStore.completeTask(task) }
+                guard !isCompleting else { return }
+                isCompleting = true
+                Task {
+                    await dataStore.completeTask(task)
+                    isCompleting = false
+                }
             } label: {
                 Image(systemName: "checkmark.circle")
                     .font(.title3)
                     .foregroundStyle(Theme.successGreen)
             }
             .buttonStyle(.plain)
+            .disabled(isCompleting)
             .accessibilityLabel("Mark complete")
         }
         .padding(.vertical, 4)

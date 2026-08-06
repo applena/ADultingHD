@@ -402,10 +402,17 @@ final class DataStore {
             notificationManager?.scheduleTaskReminder(for: tasks[idx])
         }
 
-        let periodBonus = applyPeriodBonusesIfEarned(at: completion.completedAt)
-        if periodBonus > 0 {
-            profile.totalXP += periodBonus
-            logger.info("Applied consistency bonus: +\(periodBonus)XP")
+        let periodBonuses = applyPeriodBonusesIfEarned(at: completion.completedAt)
+        let periodBonusTotal = periodBonuses.values.reduce(0, +)
+        if periodBonusTotal > 0 {
+            profile.totalXP += periodBonusTotal
+            // Recorded on the completion itself (not just applied to
+            // `profile.totalXP`) so `uncompleteTask` can reverse exactly
+            // this bonus later — see `TaskCompletion.periodBonuses`.
+            if let completionIdx = completions.firstIndex(where: { $0.id == completion.id }) {
+                completions[completionIdx].periodBonuses = periodBonuses
+            }
+            logger.info("Applied consistency bonus: +\(periodBonusTotal)XP")
         }
 
         let previousLevel = profile.level
@@ -443,29 +450,51 @@ final class DataStore {
     /// Reverses a same-day task completion — the paired action to
     /// `completeTask` that lets the Dashboard's "Completed Tasks" section
     /// undo an accidental checkmark tap. XP, coins, and the completion
-    /// count roll back exactly. Unlocked achievements are intentionally
-    /// left alone, matching how most gamified apps treat achievements as
-    /// permanent once earned. The streak only unwinds when this was the
-    /// day's *only* completion — if other tasks are still completed today,
-    /// today already counts as an active day and the streak stays put.
+    /// count roll back exactly, including any daily/weekly/monthly
+    /// consistency bonus this specific completion triggered (see
+    /// `TaskCompletion.periodBonuses`) — the "already awarded" gate for
+    /// that period is cleared too, so the bonus can genuinely be re-earned
+    /// if the day/week/month is completed for real afterward. Unlocked
+    /// achievements are intentionally left alone, matching how most
+    /// gamified apps treat achievements as permanent once earned. The
+    /// streak only unwinds when this was the day's *only* completion — if
+    /// other tasks are still completed today, today already counts as an
+    /// active day and the streak stays put.
     ///
-    /// This is a best-effort inverse of `updateStreak()`, not a perfect one:
-    /// it correctly restores the "first completion ever" and "consecutive
-    /// day" cases, but if this completion was the one that *restarted* a
-    /// previously-broken streak, the prior streak length was already
-    /// discarded by `updateStreak()` when it completed (that function only
-    /// stores the current count, not history) — so undo lands on 0 rather
-    /// than the true prior value in that narrow case. Fixing that properly
-    /// would mean deriving the streak from completion history on every read
-    /// instead of incrementally mutating a single stored integer, which is
-    /// a larger engine change than this same-day undo affordance calls for.
+    /// Two known, narrow gaps, left as-is rather than risk a worse bug:
+    /// - **Streak restart.** This is a best-effort inverse of
+    ///   `updateStreak()`, not a perfect one: it correctly restores the
+    ///   "first completion ever" and "consecutive day" cases, but if this
+    ///   completion was the one that *restarted* a previously-broken streak,
+    ///   the prior streak length was already discarded by `updateStreak()`
+    ///   (it only stores the current count, not history) — so undo lands on
+    ///   0 rather than the true prior value in that narrow case.
+    /// - **`longestStreak`.** If this completion happened to set a new
+    ///   all-time record, that record isn't revoked here — telling "this
+    ///   undo just erased a genuine new record" apart from "this undo is
+    ///   undoing a streak that merely *tied* an earlier, still-valid
+    ///   record" isn't possible without the same history `currentStreak`
+    ///   already lacks, and guessing wrong would erase a legitimate record.
+    ///
+    /// Both are tracked in issue #40 (deriving streak state from completion
+    /// history instead of incrementally-mutated fields would fix both).
     func uncompleteTask(_ completion: TaskCompletion) async {
         guard let idx = completions.firstIndex(where: { $0.id == completion.id }) else { return }
         completions.remove(at: idx)
 
-        profile.totalXP = max(0, profile.totalXP - completion.totalXP)
+        let periodBonusTotal = completion.periodBonuses?.values.reduce(0, +) ?? 0
+        profile.totalXP = max(0, profile.totalXP - completion.totalXP - periodBonusTotal)
+        // Period bonuses are never added to coins in `completeTask` — only
+        // the completion's own XP is, so only that (not the period bonus)
+        // comes back out here. The `max(0, ...)` clamp also means coins
+        // already spent (e.g. in the Avatar Shop) between completing and
+        // undoing are forgiven rather than tracked as a deficit — accepted
+        // as the simplest safe behavior for what should be a rare window.
         profile.coins = max(0, profile.coins - completion.totalXP)
         profile.totalTasksCompleted = max(0, profile.totalTasksCompleted - 1)
+        for period in completion.periodBonuses?.keys ?? [String: Int]().keys {
+            revokeAward(for: period, at: completion.completedAt)
+        }
 
         if let taskIdx = tasks.firstIndex(where: { $0.id == completion.taskId }) {
             let lastRemaining = completions.filter { $0.taskId == completion.taskId }.map(\.completedAt).max()
@@ -481,7 +510,7 @@ final class DataStore {
         }
 
         await save()
-        logger.info("Uncompleted '\(completion.taskName)' -\(completion.totalXP)XP")
+        logger.info("Uncompleted '\(completion.taskName)' -\(completion.totalXP + periodBonusTotal)XP")
     }
 
     // MARK: - Task Management
@@ -756,22 +785,30 @@ final class DataStore {
 
     // MARK: - Consistency Bonuses
 
-    private func applyPeriodBonusesIfEarned(at date: Date) -> Int {
-        var totalBonus = 0
+    /// Returns the period bonuses newly earned by the completion at `date`,
+    /// keyed by period name — empty when none fired. Returning the breakdown
+    /// (rather than just a total) lets the caller attribute it to the
+    /// triggering `TaskCompletion` via `TaskCompletion.periodBonuses`, which
+    /// `uncompleteTask` needs to reverse this exactly later.
+    private func applyPeriodBonusesIfEarned(at date: Date) -> [String: Int] {
+        var bonuses: [String: Int] = [:]
 
         if dueTasks.isEmpty {
-            totalBonus += awardIfFirst(for: "daily", at: date, xp: dailyClearBonusXP)
+            let xp = awardIfFirst(for: "daily", at: date, xp: dailyClearBonusXP)
+            if xp > 0 { bonuses["daily"] = xp }
         }
 
         if earnedWeeklyConsistencyBonus(at: date) {
-            totalBonus += awardIfFirst(for: "weekly", at: date, xp: weeklyConsistencyBonusXP)
+            let xp = awardIfFirst(for: "weekly", at: date, xp: weeklyConsistencyBonusXP)
+            if xp > 0 { bonuses["weekly"] = xp }
         }
 
         if earnedMonthlyConsistencyBonus(at: date) {
-            totalBonus += awardIfFirst(for: "monthly", at: date, xp: monthlyConsistencyBonusXP)
+            let xp = awardIfFirst(for: "monthly", at: date, xp: monthlyConsistencyBonusXP)
+            if xp > 0 { bonuses["monthly"] = xp }
         }
 
-        return totalBonus
+        return bonuses
     }
 
     private func earnedWeeklyConsistencyBonus(at date: Date) -> Bool {
@@ -804,6 +841,17 @@ final class DataStore {
         guard !defaults.bool(forKey: key) else { return 0 }
         defaults.set(true, forKey: key)
         return xp
+    }
+
+    /// Clears the "already awarded" flag `awardIfFirst` set for `period` at
+    /// `date` — the paired action `uncompleteTask` calls when undoing the
+    /// specific completion that earned that period's bonus, so the bonus can
+    /// genuinely be re-earned if the period is completed for real afterward.
+    /// Safe to call unconditionally: only the one completion that won the
+    /// award ever carries it in `periodBonuses`, so this never fires for a
+    /// period this undo didn't actually earn.
+    private func revokeAward(for period: String, at date: Date) {
+        UserDefaults.standard.removeObject(forKey: bonusPeriodKey(period: period, date: date))
     }
 
     private func bonusPeriodKey(period: String, date: Date) -> String {
