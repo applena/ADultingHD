@@ -9,7 +9,6 @@ enum SupplySortMode: String, CaseIterable {
 struct SuppliesView: View {
     @Environment(DataStore.self) private var dataStore
     @State private var searchText = ""
-    @State private var showShoppingList = false
     @State private var sortMode: SupplySortMode = .byStatus
 
     private typealias SupplyEntry = (name: String, tasks: [HouseholdTask], stock: SupplyStock)
@@ -53,44 +52,75 @@ struct SuppliesView: View {
 
     var body: some View {
         List {
-            // Header with sort picker
             Section {
-                HStack {
-                    Image(systemName: "cart.fill")
-                        .font(.title2)
-                        .foregroundStyle(Theme.accent)
-                    VStack(alignment: .leading) {
-                        Text("\(allEntries.count) supplies")
-                            .font(.headline)
-                        Text("across \(dataStore.activeTasks.count) active tasks")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    Spacer()
+                LandingHeader(
+                    eyebrow: dataStore.activeHousehold.name,
+                    title: "Keep the quest kit stocked",
+                    subtitle: "\(allEntries.count) supplies across \(dataStore.activeTasks.count) active tasks.",
+                    icon: "basket.fill",
+                    color: Theme.coral
+                )
+                .accessibilityIdentifier("supplies-root-header")
+                .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 8, trailing: 16))
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
+            }
 
-                    Picker("Sort", selection: $sortMode) {
-                        ForEach(SupplySortMode.allCases, id: \.self) { mode in
-                            Text(mode.rawValue).tag(mode)
-                        }
+            Section {
+                VStack(spacing: 12) {
+                    HStack(spacing: 10) {
+                        MetricPill(
+                            title: "Low",
+                            value: "\(dataStore.lowSupplyCount)",
+                            icon: "exclamationmark.triangle.fill",
+                            color: Theme.streakOrange
+                        )
+                        .frame(maxWidth: .infinity, alignment: .leading)
+
+                        MetricPill(
+                            title: "Out",
+                            value: "\(dataStore.outOfStockSupplyCount)",
+                            icon: "xmark.circle.fill",
+                            color: Theme.warningRed
+                        )
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
-                    .pickerStyle(.menu)
-                    .labelsHidden()
+
+                    HStack {
+                        Text("Group supplies")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Picker("Sort supplies", selection: $sortMode) {
+                            ForEach(SupplySortMode.allCases, id: \.self) { mode in
+                                Text(mode.rawValue).tag(mode)
+                            }
+                        }
+                        .pickerStyle(.menu)
+                        .labelsHidden()
+                        .fixedSize()
+                    }
 
                     if !dataStore.shoppingList.isEmpty {
-                        Button {
-                            showShoppingList = true
+                        NavigationLink {
+                            ShoppingListView()
                         } label: {
-                            HStack(spacing: 4) {
-                                Image(systemName: "list.bullet.clipboard")
+                            HStack {
+                                Label("Open Shopping List", systemImage: "list.bullet.clipboard.fill")
+                                    .font(.subheadline.weight(.semibold))
+                                Spacer()
                                 Text("\(dataStore.shoppingList.count)")
+                                    .font(.caption.bold())
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 4)
+                                    .background(Theme.warningRed.opacity(0.15), in: Capsule())
                             }
-                            .font(.caption.bold())
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(Theme.warningRed.opacity(0.15), in: Capsule())
                             .foregroundStyle(Theme.warningRed)
                         }
                         .buttonStyle(.plain)
+                        .accessibilityIdentifier("supplies-shopping-list-button")
+                        .accessibilityLabel("Shopping list")
+                        .accessibilityValue("\(dataStore.lowSupplyCount) low, \(dataStore.outOfStockSupplyCount) out of stock")
                     }
                 }
             }
@@ -104,14 +134,31 @@ struct SuppliesView: View {
                 categoryGroupedContent
             }
         }
+        .rootTabScrollClearance()
         #if os(macOS)
         .listStyle(.inset)
-        #endif
         .searchable(text: $searchText, prompt: "Search supplies...")
         .navigationTitle("Supplies")
-        .sheet(isPresented: $showShoppingList) {
-            ShoppingListView()
+        #else
+        .scrollContentBackground(.hidden)
+        .background { ScreenBackground() }
+        .toolbar {
+            ToolbarItem(placement: .principal) {
+                HStack(spacing: 8) {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundStyle(.secondary)
+                    TextField("Search supplies...", text: $searchText)
+                        .textFieldStyle(.plain)
+                        .accessibilityLabel("Search supplies")
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .frame(maxWidth: 280)
+                .background(Color.primary.opacity(0.06), in: Capsule())
+            }
         }
+        #endif
+        .rootTabNavigation("Supplies")
     }
 
     // MARK: - By Status
@@ -261,45 +308,39 @@ extension SupplyStock {
 struct ShoppingListView: View {
     @Environment(DataStore.self) private var dataStore
     @Environment(StoreManager.self) private var storeManager
-    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        NavigationStack {
-            List {
-                if dataStore.shoppingList.isEmpty {
-                    Text("All stocked up!")
-                        .foregroundStyle(.secondary)
-                } else {
-                    ForEach(dataStore.shoppingList, id: \.self) { supply in
-                        let stock = dataStore.supplyStock[supply] ?? .out
-                        HStack {
-                            Image(systemName: stock == .out ? "xmark.circle.fill" : "exclamationmark.triangle.fill")
-                                .foregroundStyle(stock == .out ? Theme.warningRed : Theme.streakOrange)
-                            Text(supply)
-                            Spacer()
-                            Button {
-                                Task { await dataStore.setSupplyStock(supply, stock: .inStock) }
-                            } label: {
-                                Image(systemName: "checkmark.circle")
-                                    .foregroundStyle(Theme.successGreen)
-                            }
-                            .buttonStyle(.plain)
+        List {
+            if dataStore.shoppingList.isEmpty {
+                Text("All stocked up!")
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(dataStore.shoppingList, id: \.self) { supply in
+                    let stock = dataStore.supplyStock[supply] ?? .out
+                    HStack {
+                        Image(systemName: stock == .out ? "xmark.circle.fill" : "exclamationmark.triangle.fill")
+                            .foregroundStyle(stock == .out ? Theme.warningRed : Theme.streakOrange)
+                        Text(supply)
+                        Spacer()
+                        Button {
+                            Task { await dataStore.setSupplyStock(supply, stock: .inStock) }
+                        } label: {
+                            Image(systemName: "checkmark.circle")
+                                .foregroundStyle(Theme.successGreen)
                         }
+                        .buttonStyle(.plain)
                     }
                 }
             }
-            .navigationTitle("Shopping List")
-            #if os(iOS)
-            .navigationBarTitleDisplayMode(.inline)
-            #endif
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { dismiss() }
-                }
-                if !dataStore.shoppingList.isEmpty && storeManager.isPro {
-                    ToolbarItem(placement: .primaryAction) {
-                        ShareLink(item: shareText)
-                    }
+        }
+        .navigationTitle("Shopping List")
+        #if os(iOS)
+        .navigationBarTitleDisplayMode(.inline)
+        #endif
+        .toolbar {
+            if !dataStore.shoppingList.isEmpty && storeManager.isPro {
+                ToolbarItem(placement: .primaryAction) {
+                    ShareLink(item: shareText)
                 }
             }
         }

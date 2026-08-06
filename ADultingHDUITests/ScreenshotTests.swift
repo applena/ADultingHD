@@ -38,10 +38,10 @@ final class ScreenshotTests: XCTestCase {
         sleep(1)
         capture("03_Schedule")
 
-        // 4. Stats (Pro analytics)
-        navigateTo("Stats")
+        // 4. Supplies and shopping-list status
+        navigateTo("Supplies")
         sleep(1)
-        capture("04_Stats")
+        capture("04_Supplies")
 
         // 5. Profile (achievements, avatar, leaderboard)
         navigateTo("Profile")
@@ -62,7 +62,7 @@ final class ScreenshotTests: XCTestCase {
             (name: "Home", header: "home-root-header"),
             (name: "Tasks", header: "tasks-root-header"),
             (name: "Schedule", header: "schedule-root-header"),
-            (name: "Stats", header: "stats-root-header"),
+            (name: "Supplies", header: "supplies-root-header"),
             (name: "Profile", header: "profile-root-header"),
         ]
 
@@ -106,6 +106,44 @@ final class ScreenshotTests: XCTestCase {
                 "The floating tab bar should not cover the final Profile row"
             )
         }
+    }
+
+    func testSuppliesNavigationAndShoppingList() throws {
+        navigateTo("Supplies")
+
+        let header = app.descendants(matching: .any)
+            .matching(identifier: "supplies-root-header")
+            .firstMatch
+        XCTAssertTrue(header.waitForExistence(timeout: 5), "Supplies should be reachable from iOS navigation")
+
+        let shoppingListButton = app.buttons["supplies-shopping-list-button"]
+        XCTAssertTrue(shoppingListButton.waitForExistence(timeout: 3), "Shopping list should expose low and out-of-stock supplies")
+        shoppingListButton.tap()
+
+        XCTAssertTrue(
+            app.navigationBars["Shopping List"].waitForExistence(timeout: 3),
+            "Shopping list should open from Supplies"
+        )
+        XCTAssertTrue(app.staticTexts["Toilet cleaner"].exists, "Out-of-stock demo supplies should appear in the shopping list")
+    }
+
+    func testDetailedStatsRemainReachableFromProfile() throws {
+        navigateTo("Profile")
+
+        let statsLink = app.descendants(matching: .any)
+            .matching(identifier: "profile-detailed-stats-link")
+            .firstMatch
+        let profileScroll = app.scrollViews.firstMatch
+        for _ in 0..<6 where !statsLink.isHittable {
+            profileScroll.swipeUp()
+        }
+        XCTAssertTrue(statsLink.isHittable, "Detailed Stats should remain reachable after Supplies takes the fourth tab")
+        statsLink.tap()
+
+        let statsHeader = app.descendants(matching: .any)
+            .matching(identifier: "stats-root-header")
+            .firstMatch
+        XCTAssertTrue(statsHeader.waitForExistence(timeout: 3), "Profile should navigate to Detailed Stats")
     }
 
     /// Navigate to a tab - handles both iPhone (TabBar) and iPad (sidebar) layouts

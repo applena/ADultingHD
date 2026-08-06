@@ -106,6 +106,12 @@ struct MacContentView: View {
 
 #if os(iOS)
 struct IOSContentView: View {
+    @Environment(DataStore.self) private var dataStore
+
+    private var supplyAccessibilityValue: String {
+        "\(dataStore.lowSupplyCount) low, \(dataStore.outOfStockSupplyCount) out of stock"
+    }
+
     var body: some View {
         TabView {
             NavigationStack { DashboardView() }
@@ -117,8 +123,13 @@ struct IOSContentView: View {
             NavigationStack { ScheduleView() }
                 .tabItem { Label("Schedule", systemImage: "calendar") }
 
-            NavigationStack { StatsView() }
-                .tabItem { Label("Stats", systemImage: "chart.bar.fill") }
+            NavigationStack { SuppliesView() }
+                .tabItem {
+                    Label("Supplies", systemImage: "basket.fill")
+                        .accessibilityLabel("Supplies")
+                        .accessibilityValue(Text(supplyAccessibilityValue))
+                }
+                .badge(dataStore.supplyAttentionCount)
 
             NavigationStack { ProfileView() }
                 .tabItem { Label("Profile", systemImage: "person.crop.circle.fill") }
