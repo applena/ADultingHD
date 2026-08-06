@@ -59,6 +59,7 @@ targets:
     platform: [iOS, macOS]
     sources:
       - ADultingHD
+      - path: Shared/SharedDefaults.swift
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: net.shadowpuppet.ADultingHD
@@ -114,7 +115,7 @@ targets:
       iOS: "17.0"
     sources:
       - ADultingHDWidget
-      - path: ADultingHD/Storage/SharedDefaults.swift
+      - path: Shared/SharedDefaults.swift
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: net.shadowpuppet.ADultingHD.widget
