@@ -405,7 +405,15 @@ struct DashboardView: View {
 struct DueTaskRow: View {
     @Environment(DataStore.self) private var dataStore
     let task: HouseholdTask
-    @State private var showComplete = false
+    @State private var isChecked = false
+    @State private var pendingCompletion: Task<Void, Never>?
+
+    /// Tapping the checkmark marks the task done immediately in the UI, but
+    /// the completion isn't committed to the data store until this window
+    /// elapses — tapping again before then cancels it, so an accidental tap
+    /// can be undone right away instead of requiring a full "uncomplete"
+    /// that would have to unwind XP, streaks, and achievements.
+    private static let undoWindow: Duration = .seconds(2)
 
     var body: some View {
         let status = task.dueStatus()
@@ -437,18 +445,39 @@ struct DueTaskRow: View {
             Spacer()
 
             Button {
-                showComplete = true
+                toggleCompletion()
             } label: {
-                Image(systemName: "checkmark.circle")
+                Image(systemName: isChecked ? "checkmark.circle.fill" : "checkmark.circle")
                     .font(.title3)
                     .foregroundStyle(Theme.successGreen)
             }
             .buttonStyle(.plain)
-            .sheet(isPresented: $showComplete) {
-                CompleteTaskSheet(task: task)
-            }
+            .animation(.easeInOut(duration: 0.15), value: isChecked)
+            .accessibilityLabel(isChecked ? "Undo complete" : "Mark complete")
         }
         .padding(.vertical, 4)
+        .onDisappear { pendingCompletion?.cancel() }
+    }
+
+    private func toggleCompletion() {
+        if isChecked {
+            // Second tap before the undo window elapsed — cancel the
+            // pending completion instead of ever writing it.
+            pendingCompletion?.cancel()
+            pendingCompletion = nil
+            isChecked = false
+            return
+        }
+
+        isChecked = true
+        pendingCompletion = Task {
+            do {
+                try await Task.sleep(for: Self.undoWindow)
+            } catch {
+                return // Cancelled by the undo tap.
+            }
+            await dataStore.completeTask(task)
+        }
     }
 }
 
