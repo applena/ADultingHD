@@ -23,6 +23,7 @@ struct ProfileView: View {
                     profileHeader
                     levelCard
                     statsGrid
+                    detailedStatsLink
                     achievementsSection
                     if storeManager.isPro && dataStore.householdProfiles.count > 1 {
                         leaderboardPreview
@@ -145,6 +146,38 @@ struct ProfileView: View {
             StatCard(title: "Best Streak", value: "\(dataStore.profile.longestStreak)d", icon: "trophy.fill", color: Theme.xpGold)
             StatCard(title: "Achievements", value: "\(unlockedCount)/\(totalCount)", icon: "medal.fill", color: Theme.levelPurple)
         }
+    }
+
+    private var detailedStatsLink: some View {
+        NavigationLink {
+            StatsView()
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "chart.bar.xaxis")
+                    .font(.title2)
+                    .foregroundStyle(Theme.successGreen)
+                    .frame(width: 44, height: 44)
+                    .background(Theme.successGreen.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Detailed Stats")
+                        .font(.headline)
+                    Text("Trends, category breakdowns, and XP history")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer()
+
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+            }
+            .card()
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("profile-detailed-stats-link")
     }
 
     // MARK: - Achievements
