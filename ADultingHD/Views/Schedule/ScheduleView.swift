@@ -5,6 +5,11 @@ struct ScheduleView: View {
     @State private var selectedDate = Date()
     @State private var showPowerHour = false
     @State private var expandedCategories: Set<TaskCategory> = []
+    /// The day card currently under a drag-to-reschedule hover, used to draw
+    /// its drop-target highlight. `nil` when nothing is being dragged over
+    /// any card. Shared by both `iOSLayout` and `macOSLayout` since they
+    /// both render day cards through the same `weekDayCard`.
+    @State private var dropTargetDate: Date?
 
     private var calendar: Calendar { Calendar.current }
 
@@ -324,7 +329,12 @@ struct ScheduleView: View {
 
             ForEach(tasks) { task in
                 let status = task.dueStatus()
-                HStack(spacing: 8) {
+                // Daily tasks are "due" every day by design, so dragging one
+                // to another day wouldn't have a distinct effect — only
+                // weekly/monthly-ish tasks with a specific scheduled day are
+                // worth the drag-to-reschedule affordance (issue #25).
+                let isReschedulable = task.frequency != .daily
+                let row = HStack(spacing: 8) {
                     Image(systemName: task.category.icon)
                         .foregroundStyle(Theme.categoryColor(task.category))
                         .frame(width: 20)
@@ -340,6 +350,17 @@ struct ScheduleView: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
+                    if isReschedulable {
+                        Image(systemName: "line.3.horizontal")
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                            .accessibilityHidden(true)
+                    }
+                }
+                if isReschedulable {
+                    row.draggable(task.id.uuidString)
+                } else {
+                    row
                 }
             }
 
@@ -357,6 +378,21 @@ struct ScheduleView: View {
         }
         .padding(Theme.cardPadding)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: Theme.cornerRadius))
+        .overlay {
+            if let dropTargetDate, calendar.isDate(dropTargetDate, inSameDayAs: date) {
+                RoundedRectangle(cornerRadius: Theme.cornerRadius)
+                    .strokeBorder(Theme.accent, lineWidth: 2)
+            }
+        }
+        .dropDestination(for: String.self) { items, _ in
+            guard let idString = items.first,
+                  let taskId = UUID(uuidString: idString),
+                  let task = dataStore.tasks.first(where: { $0.id == taskId }) else { return false }
+            Task { await dataStore.rescheduleTask(task, to: date) }
+            return true
+        } isTargeted: { isTargeted in
+            dropTargetDate = isTargeted ? date : nil
+        }
     }
 }
 

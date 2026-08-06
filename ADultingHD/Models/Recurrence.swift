@@ -28,6 +28,13 @@ enum Recurrence {
     ///   matching calendar day on or after creation — which may already be
     ///   in the past, so a never-completed scheduled task CAN still become
     ///   overdue once that first occurrence passes.
+    /// - `scheduledOverrideDate`, when non-nil, wins outright: it's a one-off
+    ///   manual reschedule (see `HouseholdTask.scheduledOverrideDate`) that
+    ///   replaces the computed occurrence for this cycle only, without
+    ///   touching `frequency`/`scheduledWeekdays`/`scheduledDayOfMonth`. It's
+    ///   handled here rather than by callers so every consumer of this
+    ///   function keeps agreeing on "when is this task's next occurrence" —
+    ///   the whole point of centralizing the engine in the first place.
     static func nextOccurrence(
         frequency: TaskFrequency,
         scheduledWeekdays: [Int],
@@ -35,8 +42,13 @@ enum Recurrence {
         scheduledMonth: Int?,
         lastCompleted: Date?,
         createdAt: Date,
+        scheduledOverrideDate: Date? = nil,
         calendar: Calendar
     ) -> Date {
+        if let override = scheduledOverrideDate {
+            return calendar.startOfDay(for: override)
+        }
+
         let createdDay = calendar.startOfDay(for: createdAt)
 
         switch frequency {

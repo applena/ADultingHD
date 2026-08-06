@@ -90,6 +90,31 @@ final class CloudKitRecordTests: XCTestCase {
         XCTAssertEqual(decoded?.scheduledMonth, 4)
     }
 
+    func testTaskRoundTrip_scheduledOverrideDate() {
+        var task = HouseholdTask(
+            id: UUID(), name: "Vacuum", description: "",
+            category: .livingRoom, frequency: .weekly, estimatedMinutes: 15,
+            difficulty: .easy, supplies: [], isActive: true
+        )
+        task.scheduledWeekdays = [Weekday.monday.rawValue]
+        task.scheduledOverrideDate = Date(timeIntervalSince1970: 1_700_500_000)
+
+        let decoded = HouseholdTask(from: task.toCKRecord(zone: zone))
+        XCTAssertEqual(decoded?.scheduledOverrideDate, task.scheduledOverrideDate)
+        // The override doesn't displace the recurring schedule it's synced alongside.
+        XCTAssertEqual(decoded?.scheduledWeekdays, [Weekday.monday.rawValue])
+    }
+
+    func testTaskRoundTrip_nilScheduledOverrideDate() {
+        let task = HouseholdTask(
+            id: UUID(), name: "Dust shelves", description: "",
+            category: .livingRoom, frequency: .weekly, estimatedMinutes: 10,
+            difficulty: .easy, supplies: [], isActive: true
+        )
+        let decoded = HouseholdTask(from: task.toCKRecord(zone: zone))
+        XCTAssertNil(decoded?.scheduledOverrideDate)
+    }
+
     func testTaskDecode_missingRequiredField_returnsNil() {
         let record = CKRecord(
             recordType: RecordType.task,

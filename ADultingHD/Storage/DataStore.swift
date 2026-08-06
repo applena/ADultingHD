@@ -383,6 +383,10 @@ final class DataStore {
 
         if let idx = tasks.firstIndex(where: { $0.id == task.id }) {
             tasks[idx].lastCompleted = Date()
+            // A completion resolves any manual reschedule — the next
+            // occurrence goes back to being computed from the recurring
+            // schedule, anchored to this completion, like any other task.
+            tasks[idx].scheduledOverrideDate = nil
             notificationManager?.scheduleTaskReminder(for: tasks[idx])
         }
 
@@ -480,6 +484,26 @@ final class DataStore {
             syncReminder(for: updated)
             await store.saveTasks(tasks, for: activeHouseholdId)
         }
+    }
+
+    /// Moves `task`'s next occurrence to `date` for this cycle only — the
+    /// drag-to-reschedule action in `ScheduleView`'s week view (issue #25).
+    /// Scoped to a single occurrence: the task's recurring
+    /// `frequency`/`scheduledWeekdays`/`scheduledDayOfMonth` are untouched,
+    /// and completing the task later clears the override (see
+    /// `completeTask`). Dropping a task back onto the day it's already
+    /// occurring on is a no-op. A thin wrapper around `updateTask` — it
+    /// shares that method's persistence (dual-write, reminder sync) rather
+    /// than a heavier one-off, and `RecurrenceRule` excludes
+    /// `scheduledOverrideDate` so this can't spuriously trigger the
+    /// never-completed-task `createdAt` reset meant for real schedule edits.
+    func rescheduleTask(_ task: HouseholdTask, to date: Date, calendar: Calendar = .current) async {
+        let targetDay = calendar.startOfDay(for: date)
+        guard let currentOccurrence = task.nextOccurrence(calendar: calendar),
+              !calendar.isDate(currentOccurrence, inSameDayAs: targetDay) else { return }
+        var updated = task
+        updated.scheduledOverrideDate = targetDay
+        await updateTask(updated)
     }
 
     /// Seed the starter catalog for the categories the user picked during

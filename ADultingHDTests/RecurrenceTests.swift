@@ -28,6 +28,7 @@ final class RecurrenceTests: XCTestCase {
         scheduledDayOfMonth: Int? = nil,
         scheduledMonth: Int? = nil,
         lastCompleted: Date? = nil,
+        scheduledOverrideDate: Date? = nil,
         createdAt: Date
     ) -> HouseholdTask {
         var task = HouseholdTask(
@@ -38,6 +39,7 @@ final class RecurrenceTests: XCTestCase {
         task.scheduledWeekdays = scheduledWeekdays
         task.scheduledDayOfMonth = scheduledDayOfMonth
         task.scheduledMonth = scheduledMonth
+        task.scheduledOverrideDate = scheduledOverrideDate
         task.createdAt = createdAt
         return task
     }
@@ -233,5 +235,63 @@ final class RecurrenceTests: XCTestCase {
         XCTAssertEqual(intervalMissed.daysOverdue(on: referenceDate, calendar: utc), 1)
         XCTAssertEqual(dueToday.daysOverdue(on: referenceDate, calendar: utc), 0)
         XCTAssertFalse(dueToday.isOverdue(on: referenceDate, calendar: utc))
+    }
+
+    // MARK: - Manual reschedule override (issue #25)
+
+    func testOverrideWinsOverComputedOccurrence() {
+        // Scheduled for Monday, but manually dragged to Wednesday: the
+        // occurrence should be Wednesday, not the computed Monday match.
+        let createdAt = utcDate(2024, 3, 4) // Monday
+        let override = utcDate(2024, 3, 6) // Wednesday
+        let task = makeTask(
+            frequency: .weekly, scheduledWeekdays: [Weekday.monday.rawValue],
+            scheduledOverrideDate: override, createdAt: createdAt
+        )
+        XCTAssertEqual(task.nextOccurrence(calendar: utc), utc.startOfDay(for: override))
+        XCTAssertFalse(task.isDue(on: utcDate(2024, 3, 4), calendar: utc), "should not be due on the original computed day")
+        XCTAssertTrue(task.isDue(on: override, calendar: utc), "should be due on the overridden day")
+    }
+
+    func testOverrideDoesNotChangeUnderlyingRecurrenceRule() {
+        // The override is a one-off move — the stored schedule fields it's
+        // layered on top of are untouched, so once cleared the task returns
+        // to its normal cadence rather than adopting the override day.
+        let task = makeTask(
+            frequency: .weekly, scheduledWeekdays: [Weekday.monday.rawValue],
+            scheduledOverrideDate: utcDate(2024, 3, 6), createdAt: utcDate(2024, 3, 4)
+        )
+        XCTAssertEqual(task.scheduledWeekdays, [Weekday.monday.rawValue])
+
+        var cleared = task
+        cleared.scheduledOverrideDate = nil
+        XCTAssertEqual(cleared.nextOccurrence(calendar: utc), utc.startOfDay(for: utcDate(2024, 3, 4)))
+    }
+
+    func testOverriddenOccurrenceCarriesForwardWhenLeftUncompleted() {
+        // An override that isn't completed by its target day behaves like
+        // any other fixed occurrence: it becomes overdue via carry-forward,
+        // it doesn't silently revert to the computed schedule.
+        let override = utcDate(2024, 3, 6)
+        let task = makeTask(frequency: .weekly, scheduledOverrideDate: override, createdAt: utcDate(2024, 3, 1))
+        let threeDaysLater = utcDate(2024, 3, 9)
+        XCTAssertTrue(task.isDue(on: threeDaysLater, calendar: utc))
+        XCTAssertTrue(task.isOverdue(on: threeDaysLater, calendar: utc))
+        XCTAssertEqual(task.daysOverdue(on: threeDaysLater, calendar: utc), 3)
+    }
+
+    func testOverrideIsIgnoredForInactiveTask() {
+        var task = makeTask(frequency: .weekly, scheduledOverrideDate: utcDate(2024, 3, 6), createdAt: utcDate(2024, 3, 4))
+        task.isActive = false
+        XCTAssertNil(task.nextOccurrence(calendar: utc))
+        XCTAssertFalse(task.isDue(on: utcDate(2024, 3, 6), calendar: utc))
+    }
+
+    func testOverrideNormalizesToStartOfDay() {
+        // A drop target picked from a time-of-day-bearing Date (e.g. a
+        // DatePicker selection) still compares as a whole calendar day.
+        let overrideWithTime = utc.date(from: DateComponents(year: 2024, month: 3, day: 6, hour: 21, minute: 45))!
+        let task = makeTask(frequency: .weekly, scheduledOverrideDate: overrideWithTime, createdAt: utcDate(2024, 3, 4))
+        XCTAssertEqual(task.nextOccurrence(calendar: utc), utcDate(2024, 3, 6, hour: 0))
     }
 }

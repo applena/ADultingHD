@@ -239,6 +239,17 @@ struct HouseholdTask: Codable, Identifiable, Hashable {
     /// Ordered steps the user ticks off while completing the task. Empty
     /// for simple single-action tasks.
     var checklist: [ChecklistItem] = []
+    /// One-off manual reschedule set by dragging a task to a different day
+    /// in `ScheduleView`'s week view (see issue #25). When set,
+    /// `nextOccurrence` returns this date directly instead of deriving one
+    /// from `frequency`/`scheduledWeekdays`/`scheduledDayOfMonth` — the
+    /// override moves a single occurrence, never the recurring schedule
+    /// itself. `DataStore.completeTask` clears it on completion so the next
+    /// occurrence resumes the normal cadence computed from that completion.
+    /// If left uncompleted, the moved occurrence is just as fixed as any
+    /// normal occurrence: it becomes overdue via carry-forward once the
+    /// moved-to day passes, same as `Recurrence`'s existing semantics.
+    var scheduledOverrideDate: Date? = nil
 
     var xpReward: Int {
         Self.computeXP(difficulty: difficulty, frequency: frequency, estimatedMinutes: estimatedMinutes)
@@ -260,8 +271,9 @@ struct HouseholdTask: Codable, Identifiable, Hashable {
     var isDue: Bool { isDue(on: Date()) }
 
     /// The fixed day this task's occurrence falls on — see
-    /// `Recurrence.nextOccurrence` for the full model. `nil` for inactive
-    /// tasks, which are never due.
+    /// `Recurrence.nextOccurrence` for the full model, including how
+    /// `scheduledOverrideDate` takes precedence over the computed schedule.
+    /// `nil` for inactive tasks, which are never due.
     func nextOccurrence(calendar: Calendar = .current) -> Date? {
         guard isActive else { return nil }
         return Recurrence.nextOccurrence(
@@ -271,6 +283,7 @@ struct HouseholdTask: Codable, Identifiable, Hashable {
             scheduledMonth: scheduledMonth,
             lastCompleted: lastCompleted,
             createdAt: createdAt,
+            scheduledOverrideDate: scheduledOverrideDate,
             calendar: calendar
         )
     }
