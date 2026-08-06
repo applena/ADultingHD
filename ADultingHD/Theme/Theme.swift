@@ -7,6 +7,10 @@ enum Theme {
 
     // Cozy Domestic Adventure foundations
     static let cream = Color(red: 1.00, green: 0.97, blue: 0.93)
+    static let parchment = Color(red: 0.98, green: 0.93, blue: 0.84)
+    static let adventureBlue = Color(red: 0.08, green: 0.20, blue: 0.35)
+    static let hearthGold = Color(red: 0.94, green: 0.58, blue: 0.16)
+    static let leafGreen = Color(red: 0.24, green: 0.43, blue: 0.29)
 
     // Gamification — curated soft palette
     static let xpGold = Color(red: 0.96, green: 0.68, blue: 0.26)
@@ -75,6 +79,9 @@ enum Theme {
         return UIColor(red: 1.00, green: 0.97, blue: 0.93, alpha: 1)
     })
     #endif
+
+    static let onboardingContentMaxWidth: CGFloat = 760
+    static let onboardingArtworkCornerRadius: CGFloat = 20
 
     /// Grid column count: 4 on macOS wide layouts, 2 on iOS.
     static var gridColumns: Int {

@@ -1,6 +1,6 @@
 # ADultingHD Design System — Cozy Domestic Adventure
 
-Status: exploratory direction, not a locked visual specification.
+Status: active v1 direction, intentionally open to iteration.
 
 ADultingHD should make ordinary maintenance feel like visible progress through a
 home, not like operating a generic analytics dashboard. The visual metaphor is
@@ -40,11 +40,11 @@ real feature set before coding.
 
 | Token | Value | Use |
 | --- | --- | --- |
-| `ink` | `#1F2A44` | Primary text, navigation, strong outlines |
+| `adventureBlue` | `#143359` | Primary actions and strong outlines |
 | `cream` | `#FFF8ED` | Warm base surface and illustration transition |
-| `coral` | `#F46F61` | Primary action and urgent emphasis |
-| `questGold` | `#E9A23B` | XP, path, reward, and streak highlights |
-| `sage` | `#59A985` | Complete/success and living spaces |
+| `coral` | `#FA7373` | Urgent emphasis and warm highlights |
+| `hearthGold` | `#F09329` | XP, path, reward, and streak highlights |
+| `leafGreen` | `#3D6E4A` | Complete/success and living spaces |
 | `sky` | `#70A7E8` | Information and bathroom/clean-water cues |
 | `plum` | `#765BC6` | Level progression and rare achievements |
 
@@ -101,9 +101,10 @@ the system still feels discoverable.
 
 ### Primary action
 
-Coral filled button, 50–56 pt tall, full width in onboarding. Loading preserves
-the label width, progress is announced through accessibility, and disabled
-states retain readable contrast.
+Deep-navy filled button, 50–56 pt tall, full width in onboarding. Loading
+preserves the label width, progress is announced through accessibility, and
+disabled states retain readable contrast. Coral and gold remain accents rather
+than competing calls to action.
 
 ## Screen direction
 
@@ -160,3 +161,17 @@ states retain readable contrast.
 - Respect Reduce Motion and Reduce Transparency.
 - Add screenshot coverage for onboarding plus Home, Tasks, Schedule, Supplies,
   Stats, and Profile at compact and regular widths.
+
+## Production asset mapping
+
+The untouched ImageGen masters and exact prompts live in `docs/design/`. App
+exports are versioned separately under
+`ADultingHD/App/Assets.xcassets/Onboarding/`:
+
+- `Onboarding/WelcomeHeroV1` selects compact iPhone, full iPad, and wide macOS
+  crops of the connected-house illustration.
+- `Onboarding/DailyLoopV1` selects compact iPhone, full iPad, and wide macOS
+  crops of the task-to-reward illustration.
+
+The artwork contains no UI copy. SwiftUI supplies localizable text, adaptive
+layout, semantic progress, and concise VoiceOver descriptions around it.
