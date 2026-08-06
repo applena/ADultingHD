@@ -98,11 +98,19 @@ if $BUILD_IOS; then
     # not Admin/Profile-Management scope. An upload-scope key cannot auto-
     # register new capabilities via `-allowProvisioningUpdates` during archive,
     # so any capability mismatch (App Groups, Push, iCloud) fails the archive
-    # outright. Unsigned archive + signed export sidesteps that, but see the
-    # post-export re-sign below that reinjects the real entitlements — the
-    # export step alone produces a binary with only a minimal entitlements
-    # dict (team-id + application-identifier + beta-reports-active +
-    # get-task-allow) which makes CKContainer(identifier:) trap at runtime.
+    # outright.
+    #
+    # The archive stays unsigned here; the next step seeds it with the real
+    # production entitlements using whatever codesigning identity is present
+    # on this machine (normally "Apple Development" — no Apple Distribution
+    # private key required), and `-exportArchive` below then re-signs it with
+    # the Distribution authority via the authenticated App Store Connect API
+    # key. Skipping the seed step leaves the export with only a minimal
+    # entitlements dict (team-id + application-identifier +
+    # beta-reports-active + get-task-allow), which makes
+    # CKContainer(identifier:) trap at runtime. See
+    # docs/cloudkit-sharing.md#deploysh-re-sign-dance-ios for the full story
+    # and prerequisites.
     xcodebuild archive \
         -project "$PROJECT" \
         -scheme "$SCHEME_IOS" \
@@ -114,6 +122,108 @@ if $BUILD_IOS; then
         CODE_SIGNING_REQUIRED=NO \
         -quiet
     echo "✅ iOS archive complete"
+
+    ARCHIVE_APP="$ARCHIVE_IOS/Products/Applications/ADultingHD.app"
+    if [ ! -d "$ARCHIVE_APP" ]; then
+        echo "❌ Archived app bundle not found at $ARCHIVE_APP"
+        exit 1
+    fi
+
+    # Seed the unsigned archive with the production entitlement set. This
+    # must happen BEFORE -exportArchive — an archive that never had these
+    # entitlements embedded gets exported with only the minimal dict
+    # described above.
+    #
+    # Signing here uses whichever local codesigning identity is available
+    # (set DEPLOY_SEED_SIGN_IDENTITY in .env to force a specific one). That
+    # identity never reaches TestFlight — it only exists so the archive
+    # carries concrete, non-wildcarded entitlement values for
+    # `-exportArchive` to re-sign for distribution against. No local Apple
+    # Distribution private key is required anywhere in this script; a
+    # standard "Apple Development" cert (the one Xcode already uses for
+    # local device builds) is sufficient.
+    # Note: every `grep` below is deliberately followed by `|| true`. With
+    # `set -euo pipefail`, a `grep` that finds no match exits 1 and — because
+    # it sits inside a pipeline feeding a variable assignment — that would
+    # otherwise abort the whole script right here instead of falling through
+    # to the next identity type or the "none found" error below.
+    SEED_IDENTITY="${DEPLOY_SEED_SIGN_IDENTITY:-}"
+    if [ -z "$SEED_IDENTITY" ]; then
+        CODESIGN_IDENTITIES=$(security find-identity -v -p codesigning 2>/dev/null || true)
+        SEED_IDENTITY=$(echo "$CODESIGN_IDENTITIES" | grep "Apple Development" | head -1 | sed -E 's/^.*"(.*)"$/\1/' || true)
+        if [ -z "$SEED_IDENTITY" ]; then
+            SEED_IDENTITY=$(echo "$CODESIGN_IDENTITIES" | grep "Apple Distribution" | head -1 | sed -E 's/^.*"(.*)"$/\1/' || true)
+        fi
+    fi
+    if [ -z "$SEED_IDENTITY" ]; then
+        echo "❌ No local codesigning identity found in the login keychain."
+        echo "   Install an 'Apple Development' certificate + private key (Xcode ->"
+        echo "   Settings -> Accounts -> Manage Certificates, or download one from"
+        echo "   developer.apple.com) and re-run. See"
+        echo "   docs/cloudkit-sharing.md#deploysh-re-sign-dance-ios for details."
+        exit 1
+    fi
+    echo "🔏 Seeding archive with production entitlements using local identity"
+
+    # Production iOS entitlements. Must match what the App ID actually
+    # grants, minus any wildcards/development-only keys that App Store
+    # Connect validation rejects (`icloud-services = *`,
+    # `ubiquity-kvstore-identifier = TEAMID.*`,
+    # `icloud-container-development-container-identifiers`).
+    SEED_ENTITLEMENTS="$BUILD_DIR/entitlements_ios_production.plist"
+    cat > "$SEED_ENTITLEMENTS" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>application-identifier</key>
+    <string>$TEAM_ID.net.shadowpuppet.ADultingHD</string>
+    <key>aps-environment</key>
+    <string>production</string>
+    <key>beta-reports-active</key>
+    <true/>
+    <key>com.apple.security.application-groups</key>
+    <array>
+        <string>group.net.shadowpuppet.ADultingHD</string>
+    </array>
+    <key>com.apple.developer.icloud-container-environment</key>
+    <string>Production</string>
+    <key>com.apple.developer.icloud-container-identifiers</key>
+    <array>
+        <string>iCloud.net.shadowpuppet.ADultingHD</string>
+    </array>
+    <key>com.apple.developer.icloud-services</key>
+    <array>
+        <string>CloudDocuments</string>
+        <string>CloudKit</string>
+    </array>
+    <key>com.apple.developer.team-identifier</key>
+    <string>$TEAM_ID</string>
+    <key>com.apple.developer.ubiquity-container-identifiers</key>
+    <array>
+        <string>iCloud.net.shadowpuppet.ADultingHD</string>
+    </array>
+    <key>get-task-allow</key>
+    <false/>
+    <key>keychain-access-groups</key>
+    <array>
+        <string>$TEAM_ID.*</string>
+        <string>com.apple.token</string>
+    </array>
+</dict>
+</plist>
+EOF
+
+    codesign --force --sign "$SEED_IDENTITY" \
+        --entitlements "$SEED_ENTITLEMENTS" \
+        --preserve-metadata=identifier,flags,runtime \
+        "$ARCHIVE_APP"
+    if ! codesign -d --entitlements :- "$ARCHIVE_APP" 2>/dev/null \
+        | grep -q "com.apple.developer.icloud-container-identifiers"; then
+        echo "❌ Archive seeding did not embed CloudKit entitlements — aborting"
+        exit 1
+    fi
+    echo "✅ Archive seeded with production entitlements"
 
     cat > "$BUILD_DIR/exportOptions_ios.plist" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
@@ -147,83 +257,47 @@ EOF
         exit 1
     fi
 
-    # Re-sign the app with entitlements that include CloudKit. The
-    # -exportArchive step above embeds the correct distribution profile (which
-    # grants iCloud via the App ID) but signs the binary with a minimal
-    # entitlements dict — just application-identifier, beta-reports-active,
-    # team-identifier, get-task-allow. CKContainer(identifier:) traps at
-    # runtime on a binary with no icloud entitlements claimed.
-    #
-    # Using the profile's granted Entitlements dict directly doesn't work
-    # either: Apple's App Store validator rejects wildcarded values
-    # (`icloud-services = *`, `ubiquity-kvstore-identifier = TEAMID.*`) and
-    # development-only keys (`icloud-container-development-container-identifiers`).
-    # Xcode normally rewrites these to specific values when signing during
-    # archive — we emulate that rewrite here.
-    echo "🔏 Re-signing with iOS distribution entitlements (CloudKit included)..."
-    RESIGN_DIR="$BUILD_DIR/resign_ios"
-    rm -rf "$RESIGN_DIR" && mkdir -p "$RESIGN_DIR"
-    (cd "$RESIGN_DIR" && unzip -q "$IPA_PATH")
-    APP_BUNDLE="$RESIGN_DIR/Payload/ADultingHD.app"
+    # Verify the exported IPA before upload: it must be signed by the Apple
+    # Distribution authority for our team, and it must carry the full
+    # production entitlement set. Abort rather than upload if either check
+    # fails — a minimally-entitled or wrongly-signed binary sails through
+    # TestFlight processing but traps at runtime on CKContainer(identifier:).
+    echo "🔍 Verifying exported IPA signature and entitlements..."
+    VERIFY_DIR="$BUILD_DIR/verify_ios"
+    rm -rf "$VERIFY_DIR" && mkdir -p "$VERIFY_DIR"
+    (cd "$VERIFY_DIR" && unzip -q "$IPA_PATH")
+    APP_BUNDLE="$VERIFY_DIR/Payload/ADultingHD.app"
 
-    # Build the production iOS entitlements dict. Must match what the
-    # embedded profile grants, minus any wildcards/development-only keys
-    # that App Store Connect validation rejects.
-    cat > "$RESIGN_DIR/signing.entitlements" <<EOF
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>application-identifier</key>
-    <string>TYQ32QCF6K.net.shadowpuppet.ADultingHD</string>
-    <key>aps-environment</key>
-    <string>production</string>
-    <key>beta-reports-active</key>
-    <true/>
-    <key>com.apple.developer.icloud-container-environment</key>
-    <string>Production</string>
-    <key>com.apple.developer.icloud-container-identifiers</key>
-    <array>
-        <string>iCloud.net.shadowpuppet.ADultingHD</string>
-    </array>
-    <key>com.apple.developer.icloud-services</key>
-    <array>
-        <string>CloudDocuments</string>
-        <string>CloudKit</string>
-    </array>
-    <key>com.apple.developer.team-identifier</key>
-    <string>TYQ32QCF6K</string>
-    <key>com.apple.developer.ubiquity-container-identifiers</key>
-    <array>
-        <string>iCloud.net.shadowpuppet.ADultingHD</string>
-    </array>
-    <key>get-task-allow</key>
-    <false/>
-    <key>keychain-access-groups</key>
-    <array>
-        <string>TYQ32QCF6K.*</string>
-        <string>com.apple.token</string>
-    </array>
-</dict>
-</plist>
-EOF
-
-    SIGN_IDENTITY="Apple Distribution: ShadowPuppet, LLC (TYQ32QCF6K)"
-    codesign --force --sign "$SIGN_IDENTITY" \
-        --entitlements "$RESIGN_DIR/signing.entitlements" \
-        --preserve-metadata=identifier,flags,runtime \
-        "$APP_BUNDLE"
-    # Rebuild the IPA
-    rm -f "$IPA_PATH"
-    (cd "$RESIGN_DIR" && zip -qr "$IPA_PATH" Payload)
-    # Verify CloudKit entitlements now present in the binary
-    if ! codesign -d --entitlements :- "$APP_BUNDLE" 2>/dev/null \
-        | grep -q "com.apple.developer.icloud-container-identifiers"; then
-        echo "❌ Re-sign did not include CloudKit entitlements — aborting"
-        codesign -d --entitlements :- "$APP_BUNDLE" 2>&1 | head -20
+    CODESIGN_INFO=$(codesign -dvvv "$APP_BUNDLE" 2>&1)
+    if ! echo "$CODESIGN_INFO" | grep -q "Authority=Apple Distribution: "; then
+        echo "❌ Exported IPA is not signed by an Apple Distribution authority — aborting upload"
         exit 1
     fi
-    echo "✅ Re-signed with full entitlements"
+    if ! echo "$CODESIGN_INFO" | grep -q "TeamIdentifier=$TEAM_ID"; then
+        echo "❌ Exported IPA TeamIdentifier does not match expected $TEAM_ID — aborting upload"
+        exit 1
+    fi
+
+    APP_ENTITLEMENTS=$(codesign -d --entitlements :- "$APP_BUNDLE" 2>/dev/null)
+    for key in \
+        "com.apple.developer.icloud-container-identifiers" \
+        "com.apple.developer.icloud-services" \
+        "com.apple.developer.ubiquity-container-identifiers" \
+        "aps-environment" \
+        "keychain-access-groups" \
+        "com.apple.security.application-groups"
+    do
+        if ! echo "$APP_ENTITLEMENTS" | grep -q "$key"; then
+            echo "❌ Exported IPA missing required entitlement: $key — aborting upload"
+            exit 1
+        fi
+    done
+    if ! echo "$APP_ENTITLEMENTS" | grep -A1 "get-task-allow" | grep -q "<false/>"; then
+        echo "❌ Exported IPA has get-task-allow != false (not a distribution build) — aborting upload"
+        exit 1
+    fi
+    rm -rf "$VERIFY_DIR"
+    echo "✅ IPA verified: Apple Distribution authority, team $TEAM_ID, full production entitlements"
 
     echo "🚀 Uploading iOS to TestFlight..."
     IOS_UPLOAD_LOG="$BUILD_DIR/ios_upload.log"
