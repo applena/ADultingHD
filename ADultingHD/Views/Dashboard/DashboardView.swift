@@ -22,7 +22,7 @@ private let gameTips: [String] = [
     "Longer tasks earn a time bonus — every 10 minutes adds +2 XP.",
     "Reach level 5 to unlock the Panda and the Crown in the shop!",
     "Completing a task early (before it's due) can unlock the Early Bird achievement.",
-    "Seasonal tasks appear on your dashboard — add them before the season ends!",
+    "Turn on Seasonal Tasks in Settings to get suggestions for the current season!",
 ]
 
 struct DashboardView: View {
