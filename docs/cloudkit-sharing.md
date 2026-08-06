@@ -134,7 +134,7 @@ so xcodegen writes them consistently):
 <string>development</string>   <!-- flipped to production by deploy.sh re-sign -->
 ```
 
-## deploy.sh re-sign dance (iOS)
+## deploy.sh re-sign dance (iOS) {#deploysh-re-sign-dance-ios}
 
 ### Why it exists
 
@@ -154,25 +154,92 @@ as if the entitlement wasn't granted.
 
 ### The fix in `deploy.sh`
 
-After `-exportArchive` produces the IPA, the deploy script:
+Earlier revisions of this script re-signed the *exported IPA* after the
+fact, using a hardcoded local `Apple Distribution: ShadowPuppet, LLC
+(TYQ32QCF6K)` identity. That broke the day a release machine had
+authenticated-export access (via the App Store Connect API key) but not
+the Distribution private key itself — export succeeded, the post-export
+`codesign` step failed with "no identity found", and there was no safe
+fallback (uploading the un-re-signed IPA ships a binary with only
+minimal entitlements). See issue #28.
 
-1. Unzips the IPA
-2. Writes a **hardcoded iOS-distribution entitlements plist** (see the
-   heredoc in `deploy.sh` — it's deliberately literal because the
-   profile's raw grants contain wildcards and dev-only keys that App
-   Store Connect validation rejects: `icloud-services=*`,
+The script now seeds entitlements into the **archive**, before export,
+instead of re-signing the exported IPA after:
+
+1. `xcodebuild archive` produces the unsigned `.xcarchive` as before.
+2. `deploy.sh` locates a local codesigning identity — preferring "Apple
+   Development" (the same cert Xcode already uses for local device
+   builds), falling back to "Apple Distribution" if present, or
+   `DEPLOY_SEED_SIGN_IDENTITY` from `.env` if set. **No Apple
+   Distribution private key is required for this step.**
+3. It writes a **production iOS entitlements plist** (built from
+   `$TEAM_ID` in `.env`, not hardcoded — see the heredoc in `deploy.sh`)
+   and `codesign`s the archive's `.app` bundle in place with it. The
+   values are deliberately literal/non-wildcarded because the profile's
+   raw grants contain wildcards and dev-only keys that App Store Connect
+   validation rejects: `icloud-services=*`,
    `ubiquity-kvstore-identifier=TEAMID.*`,
-   `icloud-container-development-container-identifiers`)
-3. Re-signs the .app bundle with `codesign --force --sign <Apple
-   Distribution> --entitlements <that plist> --preserve-metadata=
-   identifier,flags,runtime`
-4. Grep-verifies the re-signed binary actually contains
-   `com.apple.developer.icloud-container-identifiers` before uploading
-5. Rebuilds the IPA for altool upload
+   `icloud-container-development-container-identifiers`.
+4. `xcodebuild -exportArchive` runs as before, authenticated via the
+   App Store Connect API key. Because the archive now carries concrete
+   entitlement values instead of nothing, the Distribution-signed export
+   carries them through too.
+5. `deploy.sh` unzips the **exported IPA** and verifies, before upload:
+   - `codesign -dvvv` shows `Authority=Apple Distribution: …` and
+     `TeamIdentifier=$TEAM_ID` (the export step, not the seed step,
+     determines the final signing authority)
+   - `codesign -d --entitlements :-` includes the CloudKit container,
+     CloudKit/CloudDocuments services, ubiquity container, `aps-
+     environment`, `keychain-access-groups`, and
+     `com.apple.security.application-groups` (the widget's shared
+     container) keys, and `get-task-allow` is `false`
+   - Any failed check `exit 1`s before the upload step runs
 
 **If you ever change the capabilities in `ADultingHD.entitlements`, also
-update the hardcoded entitlements block in `deploy.sh`.** Otherwise the
-new capability will be silently stripped from TestFlight builds.
+update the production entitlements heredoc AND the verification key list in
+`deploy.sh`.** Otherwise the new capability will be silently stripped from
+TestFlight builds, or a stale check will pass without actually covering it.
+This hand-maintained duplication (the same keys live in
+`ADultingHD/App/ADultingHD.entitlements`, `project.yml`, and now two spots
+in `deploy.sh`) is a known tradeoff, not an oversight: App Store Connect
+validation rejects the wildcard/dev-only values Apple's own provisioning
+profile grants (see the cheat sheet below), so the script can't just read
+the checked-in `.entitlements` file verbatim — it has to override specific
+keys with production-safe literal values. A follow-up that derives the
+verification key list (not the seed values, which must stay overridden)
+from `ADultingHD/App/ADultingHD.entitlements` via `PlistBuddy`/`plutil`
+would close that gap; deferred out of this change to keep the signing-path
+fix isolated and reviewable on its own.
+
+### Prerequisites
+
+- An **Apple Development** certificate + private key in the release
+  machine's login keychain (`security find-identity -v -p codesigning`
+  should list it). This is the same cert used for everyday local
+  `xcodebuild build`/`test` runs — nothing extra to provision.
+- The App Store Connect API key in `.env`
+  (`APPSTORE_API_PRIVATE_KEY_PATH` / `APPSTORE_API_KEY_ID` /
+  `APPSTORE_ISSUER_ID`) still needs Upload scope, same as before.
+- An Apple Distribution certificate/key is **not** required on the
+  machine running `deploy.sh` — Distribution signing happens on Apple's
+  side during the authenticated `-exportArchive` call.
+- Nothing in the seed/verify steps prints private key material or API
+  key contents; only the resolved identity's *name* (a certificate
+  common name, not a secret) and codesign/entitlements metadata are
+  logged.
+
+### What's been verified by execution vs. inspection only
+
+Build 38 validated steps 1-5 above end-to-end on a real release machine:
+unsigned archive → Apple Development seed → authenticated export →
+Apple Distribution-signed IPA with full production entitlements →
+passed upload. The current `deploy.sh` code implementing that flow has
+been syntax-checked (`bash -n`) and reviewed by inspection, but has
+**not** been re-run through a live `xcodebuild archive`/`-exportArchive`
+cycle since this refactor (no Xcode/codesigning environment available
+where the change was made). Run a real `./deploy.sh --skip-tests`
+dry run on a machine with Xcode and the API key configured before
+trusting it for a release.
 
 ### The validation error cheat sheet
 
