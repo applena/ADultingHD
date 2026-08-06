@@ -432,8 +432,19 @@ struct TaskCompletion: Codable, Identifiable {
     let notes: String?
     var profileId: UUID?  // nil = legacy data; set to completing member's profile id
 
-    /// XP this completion contributed, including any streak bonus. The
-    /// canonical sum wherever a completion's XP is displayed or totaled.
+    /// Daily/weekly/monthly consistency bonus XP this completion happened to
+    /// trigger, keyed by period name ("daily"/"weekly"/"monthly") — see
+    /// `DataStore.applyPeriodBonusesIfEarned`. nil for legacy data or a
+    /// completion that triggered no period bonus. Recorded so
+    /// `DataStore.uncompleteTask` can reverse exactly the bonus this specific
+    /// completion earned (and only this one — the award is a first-completion-
+    /// in-the-period gate, so no other completion in the same period carries it).
+    var periodBonuses: [String: Int]?
+
+    /// XP this completion contributed, including any streak bonus. Excludes
+    /// `periodBonuses` (those are added straight to `profile.totalXP`, not
+    /// attributed to a single task) — the canonical sum wherever a single
+    /// completion's XP is displayed or totaled.
     var totalXP: Int { xpEarned + streakBonus }
 }
 
