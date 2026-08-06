@@ -9,6 +9,7 @@ struct SettingsView: View {
     @Environment(NotificationManager.self) private var notificationManager
     @Environment(StoreManager.self) private var storeManager
 
+    @AppStorage(PrefKey.showSeasonalSection) private var showSeasonalSection = false
     @SceneStorage("settingsTab") private var selectedTab: SettingsTab = .general
     @State private var showResetConfirm = false
     @State private var showImportPicker = false
@@ -186,6 +187,12 @@ struct SettingsView: View {
             Section("Task Management") {
                 NavigationLink { ManageTasksView() } label: {
                     Label("Manage Active Tasks", systemImage: "checklist")
+                }
+                if storeManager.isPro {
+                    Toggle("Seasonal Task Suggestions", isOn: $showSeasonalSection)
+                    Text("Show a dashboard card suggesting tasks for the current season.")
+                        .font(.caption).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
         }
