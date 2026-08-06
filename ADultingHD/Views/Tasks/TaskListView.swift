@@ -297,6 +297,7 @@ struct TaskRow: View {
     let task: HouseholdTask
 
     var body: some View {
+        let status = task.dueStatus()
         HStack(spacing: 12) {
             Image(systemName: task.isActive ? "checkmark.circle.fill" : "circle")
                 .foregroundStyle(task.isActive ? Theme.successGreen : .gray)
@@ -310,9 +311,9 @@ struct TaskRow: View {
                     Text(task.name)
                         .font(.body.weight(.medium))
                         .strikethrough(!task.isActive, color: .secondary)
-                    if task.isDue && task.isActive {
+                    if status.isDue && task.isActive {
                         Circle()
-                            .fill(Theme.streakOrange)
+                            .fill(status.isOverdue ? Theme.overdueRed : Theme.streakOrange)
                             .frame(width: 7, height: 7)
                     }
                 }
@@ -324,6 +325,11 @@ struct TaskRow: View {
                     Text("\(task.estimatedMinutes)m")
                         .font(.caption)
                         .foregroundStyle(.tertiary)
+                    if task.isActive, status.isOverdue {
+                        Text("\(status.daysOverdue)d overdue")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(Theme.overdueRed)
+                    }
                 }
             }
 

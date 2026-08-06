@@ -12,6 +12,7 @@ struct ADultingHDApp: App {
     @State private var dataStore = DataStore()
     @State private var notificationManager = NotificationManager()
     @State private var storeManager = StoreManager()
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
         WindowGroup {
@@ -30,6 +31,7 @@ struct ADultingHDApp: App {
                     await dataStore.load()
                     ICloudMonitor.shared.start()
                     dataStore.startSyncObserver()
+                    dataStore.startDayRolloverObserver()
                     await dataStore.drainAcceptedShareInbox()
                     await notificationManager.checkAuthorizationStatus()
                     await storeManager.loadProducts()
@@ -38,6 +40,15 @@ struct ADultingHDApp: App {
                     guard let metadata = ShareAcceptance.metadata(from: activity) else { return }
                     Task { @MainActor in
                         await dataStore.registerJoinedHousehold(from: metadata)
+                    }
+                }
+                // Catches a calendar-day rollover that happened while the
+                // app was backgrounded/suspended — the NSCalendarDayChanged
+                // observer only fires while running, so resume needs its
+                // own check.
+                .onChange(of: scenePhase) { _, newPhase in
+                    if newPhase == .active {
+                        dataStore.refreshForCurrentDay()
                     }
                 }
         }

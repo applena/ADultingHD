@@ -101,8 +101,11 @@ enum TaskFrequency: String, Codable, CaseIterable, Identifiable {
         }
     }
 
-    /// Minimum elapsed days before a completion re-qualifies the task as due.
-    /// Slightly shorter than `days` so scheduled-day matches don't false-miss.
+    /// Days after a completion before `Recurrence` starts searching for the
+    /// next weekday/day-of-month match. Slightly shorter than `days` so it
+    /// lands on this cycle's occurrence whether the completion happened
+    /// early, late, or exactly on schedule, without ever finding the same
+    /// day that was just completed.
     var minGap: Int {
         switch self {
         case .daily: return 1
@@ -211,6 +214,15 @@ struct HouseholdTask: Codable, Identifiable, Hashable {
     var supplies: [String]
     var isActive: Bool
     var lastCompleted: Date?
+    /// When this task was added. Defaults to "now" for newly created tasks
+    /// (including legacy JSON/CloudKit records that predate this field, via
+    /// Codable's default-value fallback for a missing key). Used only as
+    /// the recurrence anchor for a task that has never been completed — see
+    /// `Recurrence.nextOccurrence`. `DataStore.updateTask` resets it to
+    /// "now" whenever a never-completed task's recurrence rule changes, so
+    /// editing a schedule always gives it a fresh start rather than
+    /// re-anchoring to a stale creation date.
+    var createdAt: Date = Date()
     /// Profile id of the member who should complete this task by default.
     /// Optional: `nil` means "anyone in the household." Populated via the
     /// assignee picker once the household has more than one member (members
@@ -247,49 +259,80 @@ struct HouseholdTask: Codable, Identifiable, Hashable {
 
     var isDue: Bool { isDue(on: Date()) }
 
-    /// Is this task due on or before the given reference date? Inactive tasks
-    /// are never due; tasks that have never been completed are always due.
-    func isDue(on referenceDate: Date) -> Bool {
-        guard isActive else { return false }
-        let cal = Calendar.current
-        let daysSince: Int
-        if let last = lastCompleted {
-            daysSince = cal.dateComponents([.day], from: last, to: referenceDate).day ?? 0
-        } else {
-            return true
-        }
-
-        switch frequency {
-        case .daily:
-            return daysSince >= 1
-        case .weekly, .biweekly, .twiceWeekly:
-            guard !scheduledWeekdays.isEmpty else { return daysSince >= frequency.days }
-            let today = cal.component(.weekday, from: referenceDate)
-            return scheduledWeekdays.contains(today) && daysSince >= frequency.minGap
-        case .monthly, .quarterly, .semiannually:
-            guard let dom = scheduledDayOfMonth else { return daysSince >= frequency.days }
-            return cal.component(.day, from: referenceDate) == dom && daysSince >= frequency.minGap
-        case .yearly:
-            guard let dom = scheduledDayOfMonth, let month = scheduledMonth else {
-                return daysSince >= frequency.days
-            }
-            return cal.component(.month, from: referenceDate) == month
-                && cal.component(.day, from: referenceDate) == dom
-                && daysSince >= frequency.minGap
-        }
+    /// The fixed day this task's occurrence falls on — see
+    /// `Recurrence.nextOccurrence` for the full model. `nil` for inactive
+    /// tasks, which are never due.
+    func nextOccurrence(calendar: Calendar = .current) -> Date? {
+        guard isActive else { return nil }
+        return Recurrence.nextOccurrence(
+            frequency: frequency,
+            scheduledWeekdays: scheduledWeekdays,
+            scheduledDayOfMonth: scheduledDayOfMonth,
+            scheduledMonth: scheduledMonth,
+            lastCompleted: lastCompleted,
+            createdAt: createdAt,
+            calendar: calendar
+        )
     }
 
-    var isOverdue: Bool {
-        guard isActive else { return false }
-        guard let last = lastCompleted else { return true }
-        let daysSince = Calendar.current.dateComponents([.day], from: last, to: Date()).day ?? 0
-        return daysSince > frequency.days + 1
+    /// Is this task due on or before the given reference date? Inactive
+    /// tasks are never due. A missed occurrence stays due on every
+    /// subsequent day (carry-forward) until it's completed — the occurrence
+    /// date doesn't move just because time passes.
+    func isDue(on referenceDate: Date, calendar: Calendar = .current) -> Bool {
+        guard let occurrence = nextOccurrence(calendar: calendar) else { return false }
+        return Recurrence.isDue(occurrence: occurrence, on: referenceDate, calendar: calendar)
     }
 
-    var dueDate: Date? {
-        guard isActive, let last = lastCompleted else { return nil }
-        return Calendar.current.date(byAdding: .day, value: frequency.days, to: last)
+    var isOverdue: Bool { isOverdue(on: Date()) }
+
+    /// Has this task's occurrence already passed as of the given reference
+    /// date? A never-completed task is not overdue until its first
+    /// occurrence has passed (see `Recurrence.nextOccurrence`).
+    func isOverdue(on referenceDate: Date, calendar: Calendar = .current) -> Bool {
+        guard let occurrence = nextOccurrence(calendar: calendar) else { return false }
+        return Recurrence.isOverdue(occurrence: occurrence, on: referenceDate, calendar: calendar)
     }
+
+    /// Whole calendar days this task has been overdue as of the given
+    /// reference date. Zero when not overdue. Used for "longest-missed
+    /// first" sort order and the overdue-age badge in the UI.
+    func daysOverdue(on referenceDate: Date = Date(), calendar: Calendar = .current) -> Int {
+        guard let occurrence = nextOccurrence(calendar: calendar) else { return 0 }
+        return Recurrence.daysOverdue(occurrence: occurrence, on: referenceDate, calendar: calendar)
+    }
+
+    /// `isDue`, `isOverdue`, and `daysOverdue` as of a single reference
+    /// date, computed from one `nextOccurrence()` lookup. Prefer this over
+    /// calling the three separately when a view needs more than one of
+    /// them — e.g. a row that shows both an overdue badge and a day count.
+    func dueStatus(on referenceDate: Date = Date(), calendar: Calendar = .current) -> (isDue: Bool, isOverdue: Bool, daysOverdue: Int) {
+        guard let occurrence = nextOccurrence(calendar: calendar) else { return (false, false, 0) }
+        return (
+            Recurrence.isDue(occurrence: occurrence, on: referenceDate, calendar: calendar),
+            Recurrence.isOverdue(occurrence: occurrence, on: referenceDate, calendar: calendar),
+            Recurrence.daysOverdue(occurrence: occurrence, on: referenceDate, calendar: calendar)
+        )
+    }
+
+    /// The stored fields that fully determine `Recurrence.nextOccurrence`'s
+    /// schedule — everything except `lastCompleted`/`createdAt`. Equal
+    /// values mean two tasks (or a task before/after an edit) compute the
+    /// same occurrence given the same completion history. Used by
+    /// `DataStore.updateTask` to detect a recurrence-rule change without
+    /// re-deriving which fields matter.
+    struct RecurrenceRule: Equatable {
+        let frequency: TaskFrequency
+        let scheduledWeekdays: [Int]
+        let scheduledDayOfMonth: Int?
+        let scheduledMonth: Int?
+    }
+
+    var recurrenceRule: RecurrenceRule {
+        RecurrenceRule(frequency: frequency, scheduledWeekdays: scheduledWeekdays, scheduledDayOfMonth: scheduledDayOfMonth, scheduledMonth: scheduledMonth)
+    }
+
+    var dueDate: Date? { nextOccurrence() }
 
     /// Human-readable description of when this task recurs — used in lists
     /// and detail views. Returns `nil` when no specific day is set.
@@ -316,7 +359,8 @@ struct HouseholdTask: Codable, Identifiable, Hashable {
 
     var daysSinceLastCompleted: Int? {
         guard let last = lastCompleted else { return nil }
-        return Calendar.current.dateComponents([.day], from: last, to: Date()).day
+        let calendar = Calendar.current
+        return calendar.dateComponents([.day], from: calendar.startOfDay(for: last), to: calendar.startOfDay(for: Date())).day
     }
 
     func hash(into hasher: inout Hasher) {

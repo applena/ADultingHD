@@ -44,8 +44,10 @@ struct DashboardView: View {
 
     private var subtitle: String {
         let due = dataStore.dueTasks.count
+        let overdue = dataStore.overdueTasks.count
         let streak = dataStore.profile.currentStreak
         if due == 0 { return "All caught up — you're crushing it!" }
+        if overdue > 0 { return "\(overdue) overdue — \(overdue == 1 ? "it's" : "they're") been waiting the longest." }
         if streak >= 7 { return "\(streak)-day streak! Keep it going." }
         if due > 5 { return "\(due) quests ready to conquer." }
         return "You've got \(due) tasks to tackle. You got this!"
@@ -145,13 +147,17 @@ struct DashboardView: View {
     // MARK: - Hero Section
 
     private var heroSection: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        let hasDueTasks = !dataStore.dueTasks.isEmpty
+        let hasOverdueTasks = !dataStore.overdueTasks.isEmpty
+        return VStack(alignment: .leading, spacing: 16) {
             LandingHeader(
                 eyebrow: dataStore.activeHousehold.name,
                 title: greeting,
                 subtitle: subtitle,
-                icon: dataStore.dueTasks.isEmpty ? "checkmark.seal.fill" : "clock.badge.exclamationmark.fill",
-                color: dataStore.dueTasks.isEmpty ? Theme.successGreen : Theme.streakOrange
+                icon: hasDueTasks ? "clock.badge.exclamationmark.fill" : "checkmark.seal.fill",
+                color: !hasDueTasks
+                    ? Theme.successGreen
+                    : (hasOverdueTasks ? Theme.overdueRed : Theme.streakOrange)
             )
             .accessibilityIdentifier("home-root-header")
 
@@ -279,11 +285,17 @@ struct DashboardView: View {
     // MARK: - Due Tasks
 
     private var dueTasksSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        let overdueCount = dataStore.overdueTasks.count
+        return VStack(alignment: .leading, spacing: 10) {
             HStack {
                 Label("Up Next", systemImage: "arrow.right.circle.fill")
                     .font(.headline)
                 Spacer()
+                if overdueCount > 0 {
+                    Text("\(overdueCount) overdue")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Theme.overdueRed)
+                }
                 Text("\(dataStore.dueTasks.count) tasks")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -396,6 +408,7 @@ struct DueTaskRow: View {
     @State private var showComplete = false
 
     var body: some View {
+        let status = task.dueStatus()
         HStack(spacing: 10) {
             Image(systemName: task.category.icon)
                 .foregroundStyle(Theme.categoryColor(task.category))
@@ -406,9 +419,15 @@ struct DueTaskRow: View {
                     .font(.subheadline.weight(.medium))
                     .fixedSize(horizontal: false, vertical: true)
                 HStack(spacing: 6) {
-                    Text("\(task.estimatedMinutes)m")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    if status.isOverdue {
+                        Text("\(status.daysOverdue)d overdue")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(Theme.overdueRed)
+                    } else {
+                        Text("\(task.estimatedMinutes)m")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                     Text("+\(task.xpReward) XP")
                         .font(.caption.bold())
                         .foregroundStyle(Theme.xpGold)
