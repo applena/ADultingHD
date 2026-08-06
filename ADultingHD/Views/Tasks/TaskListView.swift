@@ -297,7 +297,7 @@ struct TaskListView: View {
     /// assignee, so the filter would be a no-op.
     @ViewBuilder
     private var assigneeFilterRow: some View {
-        if dataStore.householdProfiles.count > 1 {
+        if dataStore.hasMultipleAssignees {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
                     ForEach(AssigneeFilter.allCases) { filter in

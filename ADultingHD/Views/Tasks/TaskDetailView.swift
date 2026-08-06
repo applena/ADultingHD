@@ -163,7 +163,7 @@ struct TaskDetailView: View {
                 DetailItem(label: "Last Done", value: "Never", icon: "calendar.badge.clock")
             }
 
-            if dataStore.householdProfiles.count > 1 {
+            if dataStore.hasMultipleAssignees {
                 Button { showAssigneePicker = true } label: {
                     DetailItem(label: "Assignee", value: assigneeDisplay(for: task), icon: "person.crop.circle")
                 }
@@ -392,14 +392,9 @@ struct AssigneePickerSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                Picker("Assignee", selection: $selected) {
-                    Text("Anyone").tag(UUID?.none)
-                    ForEach(dataStore.householdProfiles) { member in
-                        Text(member.name).tag(UUID?.some(member.id))
-                    }
-                }
-                .pickerStyle(.inline)
-                .labelsHidden()
+                AssigneePicker(profiles: dataStore.householdProfiles, selection: $selected)
+                    .pickerStyle(.inline)
+                    .labelsHidden()
             }
             .navigationTitle("Assignee")
             #if os(iOS)

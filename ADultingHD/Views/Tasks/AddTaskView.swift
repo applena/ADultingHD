@@ -103,13 +103,8 @@ private struct TaskFormView: View {
 
                     Stepper("Estimated: \(estimatedMinutes) min", value: $estimatedMinutes, in: 1...480, step: 5)
 
-                    if dataStore.householdProfiles.count > 1 {
-                        Picker("Assignee", selection: $assigneeId) {
-                            Text("Anyone").tag(UUID?.none)
-                            ForEach(dataStore.householdProfiles) { member in
-                                Text(member.name).tag(UUID?.some(member.id))
-                            }
-                        }
+                    if dataStore.hasMultipleAssignees {
+                        AssigneePicker(profiles: dataStore.householdProfiles, selection: $assigneeId)
                     }
                 }
 
@@ -256,6 +251,25 @@ private struct TaskFormView: View {
         Task {
             await onSave(task)
             dismiss()
+        }
+    }
+}
+
+// MARK: - Shared Assignee Picker
+
+/// "Who is this for" picker shared by the task creation/edit form
+/// (`TaskFormView`) and the tap-to-edit sheet on `TaskDetailView`
+/// (`AssigneePickerSheet`). `nil` selection means "Anyone."
+struct AssigneePicker: View {
+    let profiles: [UserProfile]
+    @Binding var selection: UUID?
+
+    var body: some View {
+        Picker("Assignee", selection: $selection) {
+            Text("Anyone").tag(UUID?.none)
+            ForEach(profiles) { member in
+                Text(member.name).tag(UUID?.some(member.id))
+            }
         }
     }
 }

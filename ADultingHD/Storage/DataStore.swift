@@ -163,6 +163,11 @@ final class DataStore {
         activeHousehold.members
     }
 
+    /// Whether the active household has more than one member — the single
+    /// source of truth for gating assignee pickers/filters, since solo
+    /// households have only one possible assignee.
+    var hasMultipleAssignees: Bool { householdProfiles.count > 1 }
+
     var leaderboard: [UserProfile] {
         householdProfiles.sorted { $0.totalXP > $1.totalXP }
     }
