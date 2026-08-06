@@ -296,7 +296,8 @@ struct FrequencyPickerSheet: View {
     init(task: HouseholdTask) {
         self.task = task
         self._selected = State(initialValue: task.frequency)
-        self._weekdays = State(initialValue: Set(task.scheduledWeekdays))
+        let initialWeekdays = task.scheduledWeekdays.isEmpty ? task.frequency.defaultWeekdays : task.scheduledWeekdays
+        self._weekdays = State(initialValue: Set(initialWeekdays))
         self._dayOfMonth = State(initialValue: task.scheduledDayOfMonth ?? 1)
         self._month = State(initialValue: task.scheduledMonth ?? 1)
     }
@@ -351,7 +352,7 @@ struct FrequencyPickerSheet: View {
 
     private func applyDefaults(for freq: TaskFrequency) {
         if freq.weekdayCount > 0 && weekdays.count != freq.weekdayCount {
-            weekdays = freq.weekdayCount == 2 ? [2, 5] : [2]
+            weekdays = Set(freq.defaultWeekdays)
         }
     }
 

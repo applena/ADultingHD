@@ -212,6 +212,7 @@ final class DataStore {
             profile = demo.profile
             completions = demo.completions
             supplyStock = demo.supplyStock
+            refreshStreakState()
             isLoaded = true
             logger.info("🎬 Demo data loaded")
             return
@@ -257,7 +258,7 @@ final class DataStore {
             await store.saveHouseholdIndex(householdIndex)
         }
 
-        updateStreak()
+        refreshStreakState()
         logger.info("DataStore loaded: \(self.tasks.count) tasks, level \(self.profile.level), household '\(self.activeHousehold.name, privacy: .public)'")
 
         if wasLoaded {
@@ -369,6 +370,7 @@ final class DataStore {
     // MARK: - Complete Task
 
     func completeTask(_ task: HouseholdTask, notes: String? = nil) async {
+        refreshStreakState()
         let streakBonus = profile.currentStreak > 0 ? min(profile.currentStreak * 2, 50) : 0
         let xpEarned = task.xpReward
 
@@ -418,7 +420,7 @@ final class DataStore {
         let previousLevel = profile.level
         let previousAchievements = profile.unlockedAchievements
 
-        updateStreak()
+        refreshStreakState()
         checkAchievements()
 
         // Trigger celebrations
@@ -456,28 +458,9 @@ final class DataStore {
     /// that period is cleared too, so the bonus can genuinely be re-earned
     /// if the day/week/month is completed for real afterward. Unlocked
     /// achievements are intentionally left alone, matching how most
-    /// gamified apps treat achievements as permanent once earned. The
-    /// streak only unwinds when this was the day's *only* completion — if
-    /// other tasks are still completed today, today already counts as an
-    /// active day and the streak stays put.
-    ///
-    /// Two known, narrow gaps, left as-is rather than risk a worse bug:
-    /// - **Streak restart.** This is a best-effort inverse of
-    ///   `updateStreak()`, not a perfect one: it correctly restores the
-    ///   "first completion ever" and "consecutive day" cases, but if this
-    ///   completion was the one that *restarted* a previously-broken streak,
-    ///   the prior streak length was already discarded by `updateStreak()`
-    ///   (it only stores the current count, not history) — so undo lands on
-    ///   0 rather than the true prior value in that narrow case.
-    /// - **`longestStreak`.** If this completion happened to set a new
-    ///   all-time record, that record isn't revoked here — telling "this
-    ///   undo just erased a genuine new record" apart from "this undo is
-    ///   undoing a streak that merely *tied* an earlier, still-valid
-    ///   record" isn't possible without the same history `currentStreak`
-    ///   already lacks, and guessing wrong would erase a legitimate record.
-    ///
-    /// Both are tracked in issue #40 (deriving streak state from completion
-    /// history instead of incrementally-mutated fields would fix both).
+    /// gamified apps treat achievements as permanent once earned. Streak and
+    /// best-streak values are recalculated from the remaining completion
+    /// history, so undoing a restart or record-setting day is also exact.
     func uncompleteTask(_ completion: TaskCompletion) async {
         guard let idx = completions.firstIndex(where: { $0.id == completion.id }) else { return }
         completions.remove(at: idx)
@@ -502,12 +485,7 @@ final class DataStore {
             syncReminder(for: tasks[taskIdx])
         }
 
-        if todayCompletions.isEmpty {
-            profile.currentStreak = max(0, profile.currentStreak - 1)
-            profile.lastActiveDate = profile.currentStreak == 0
-                ? nil
-                : Calendar.current.date(byAdding: .day, value: -1, to: currentDay)
-        }
+        refreshStreakState()
 
         await save()
         logger.info("Uncompleted '\(completion.taskName)' -\(completion.totalXP + periodBonusTotal)XP")
@@ -536,8 +514,9 @@ final class DataStore {
     }
 
     func addCustomTask(_ task: HouseholdTask) async {
-        tasks.append(task)
-        syncReminder(for: task)
+        let normalizedTask = task.withDefaultSchedule()
+        tasks.append(normalizedTask)
+        syncReminder(for: normalizedTask)
         await store.saveTasks(tasks, for: activeHouseholdId)
     }
 
@@ -618,7 +597,9 @@ final class DataStore {
     /// homescreen. The user can always add more from the catalog later.
     func seedOnboardingTasks(categories allowed: Set<TaskCategory>) async {
         guard !allowed.isEmpty else { return }
-        tasks = defaultHouseholdTasks.filter { allowed.contains($0.category) }
+        tasks = defaultHouseholdTasks
+            .filter { allowed.contains($0.category) }
+            .map { $0.withDefaultSchedule() }
         for task in tasks { syncReminder(for: task) }
         await store.saveTasks(tasks, for: activeHouseholdId)
     }
@@ -669,36 +650,15 @@ final class DataStore {
 
     // MARK: - Streak
 
-    private func updateStreak() {
-        let calendar = Calendar.current
-        let today = calendar.startOfDay(for: Date())
-
-        guard let lastActive = profile.lastActiveDate else {
-            if !todayCompletions.isEmpty {
-                profile.currentStreak = 1
-                profile.lastActiveDate = today
-            }
-            return
-        }
-
-        let lastActiveDay = calendar.startOfDay(for: lastActive)
-        let daysDiff = calendar.dateComponents([.day], from: lastActiveDay, to: today).day ?? 0
-
-        if daysDiff == 0 {
-            // Same day — streak unchanged
-        } else if daysDiff == 1 {
-            // Consecutive day
-            if !todayCompletions.isEmpty {
-                profile.currentStreak += 1
-                profile.lastActiveDate = today
-            }
-        } else {
-            // Streak broken
-            profile.currentStreak = todayCompletions.isEmpty ? 0 : 1
-            profile.lastActiveDate = todayCompletions.isEmpty ? nil : today
-        }
-
-        profile.longestStreak = max(profile.longestStreak, profile.currentStreak)
+    private func refreshStreakState(asOf date: Date = Date()) {
+        let summary = Recurrence.computeStreak(
+            from: completions,
+            asOf: date,
+            calendar: .current
+        )
+        profile.currentStreak = summary.currentStreak
+        profile.longestStreak = summary.longestStreak
+        profile.lastActiveDate = summary.lastActiveDate
     }
 
     // MARK: - Achievements

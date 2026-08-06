@@ -135,9 +135,9 @@ struct WelcomeView: View {
                         }
                         .padding(compactLayout(for: geometry.size.width) ? 18 : 26)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(.background, in: RoundedRectangle(cornerRadius: 20))
+                        .cardBackground()
                         .overlay {
-                            RoundedRectangle(cornerRadius: 20)
+                            RoundedRectangle(cornerRadius: Theme.cornerRadius)
                                 .strokeBorder(page.color.opacity(0.18))
                         }
 
@@ -197,12 +197,7 @@ struct WelcomeView: View {
     private func artwork(width: CGFloat) -> some View {
         switch currentPage {
         case .welcome:
-            onboardingImage(
-                "Onboarding/WelcomeHeroV1",
-                label: "A warmly lit home at night with a glowing path connecting each room",
-                height: compactLayout(for: width) ? 275 : 390,
-                alignment: .center
-            )
+            welcomeAppPreview(compact: compactLayout(for: width))
         case .howItWorks:
             onboardingImage(
                 "Onboarding/DailyLoopV1",
@@ -213,6 +208,117 @@ struct WelcomeView: View {
         default:
             decorativeBanner
         }
+    }
+
+    /// A small, code-native product preview keeps the welcome step grounded in
+    /// the real app instead of presenting a literal house layout that may not
+    /// match someone's home. SwiftUI owns the copy and accessibility here;
+    /// the preserved illustration assets remain available for future, additive
+    /// onboarding explorations without forcing them into the product flow.
+    private func welcomeAppPreview(compact: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .top, spacing: 12) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("TODAY AT A GLANCE")
+                        .font(.caption.weight(.heavy))
+                        .tracking(0.7)
+                        .foregroundStyle(Theme.coral)
+                    Text("Keep the next thing clear")
+                        .font(.title3.weight(.bold))
+                }
+
+                Spacer(minLength: 0)
+
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.title2)
+                    .foregroundStyle(Theme.leafGreen)
+                    .padding(9)
+                    .background(Theme.leafGreen.opacity(0.12), in: Circle())
+                    .accessibilityHidden(true)
+            }
+
+            HStack(spacing: 8) {
+                previewMetric(value: "3", label: "due", icon: "checklist", color: Theme.coral)
+                previewMetric(value: "42", label: "XP", icon: "sparkles", color: Theme.hearthGold)
+                previewMetric(value: "7d", label: "streak", icon: "flame.fill", color: Theme.leafGreen)
+            }
+
+            VStack(spacing: 0) {
+                previewTaskRow(
+                    title: "Clear the sink", room: "Kitchen", icon: "fork.knife",
+                    color: Theme.hearthGold, isComplete: false
+                )
+                Divider().opacity(0.45)
+                previewTaskRow(
+                    title: "Reset the bath", room: "Bathroom", icon: "shower",
+                    color: Theme.sky, isComplete: false
+                )
+                Divider().opacity(0.45)
+                previewTaskRow(
+                    title: "Put away laundry", room: "Laundry", icon: "washer",
+                    color: Theme.leafGreen, isComplete: true
+                )
+            }
+        }
+        .padding(compact ? 16 : 20)
+        .frame(maxWidth: .infinity)
+        .background(.background, in: RoundedRectangle(cornerRadius: Theme.cornerRadius))
+        .overlay {
+            RoundedRectangle(cornerRadius: Theme.cornerRadius)
+                .strokeBorder(Theme.adventureBlue.opacity(0.10))
+        }
+        .accessibilityHidden(true)
+    }
+
+    private func previewMetric(value: String, label: String, icon: String, color: Color) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 4) {
+                Image(systemName: icon)
+                    .font(.caption.weight(.semibold))
+                Text(value)
+                    .font(.headline.weight(.bold))
+            }
+            Text(label)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+        .foregroundStyle(color)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(color.opacity(0.10), in: RoundedRectangle(cornerRadius: Theme.chipCornerRadius))
+    }
+
+    private func previewTaskRow(
+        title: String,
+        room: String,
+        icon: String,
+        color: Color,
+        isComplete: Bool
+    ) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: icon)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(color)
+                .frame(width: 32, height: 32)
+                .background(color.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
+                .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.subheadline.weight(.semibold))
+                Text(room)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer(minLength: 0)
+
+            Image(systemName: isComplete ? "checkmark.circle.fill" : "circle")
+                .foregroundStyle(isComplete ? Theme.leafGreen : .secondary.opacity(0.55))
+                .accessibilityHidden(true)
+        }
+        .frame(minHeight: 44)
     }
 
     private func onboardingImage(
@@ -328,10 +434,7 @@ struct WelcomeView: View {
                         .multilineTextAlignment(.center)
                     }
                 }
-                .frame(maxWidth: .infinity, minHeight: 52)
-                .padding(.horizontal, 16)
-                .background(Theme.adventureBlue, in: RoundedRectangle(cornerRadius: 14))
-                .foregroundStyle(.white)
+                .adventurePrimaryAction()
             }
             .buttonStyle(.plain)
             .disabled(primaryButtonDisabled)
@@ -384,7 +487,7 @@ struct WelcomeView: View {
         }
         .frame(maxWidth: .infinity, minHeight: 70)
         .padding(.horizontal, 6)
-        .background(color.opacity(0.10), in: RoundedRectangle(cornerRadius: 14))
+        .background(color.opacity(0.10), in: RoundedRectangle(cornerRadius: Theme.chipCornerRadius))
     }
 
     private var howItWorksContent: some View {
@@ -421,7 +524,7 @@ struct WelcomeView: View {
             Spacer(minLength: 0)
         }
         .padding(12)
-        .background(color.opacity(0.08), in: RoundedRectangle(cornerRadius: 14))
+        .background(color.opacity(0.08), in: RoundedRectangle(cornerRadius: Theme.chipCornerRadius))
         .accessibilityElement(children: .combine)
     }
 
@@ -441,7 +544,7 @@ struct WelcomeView: View {
                 .padding(.horizontal, 5)
                 .background(
                     Theme.categoryColor(category).opacity(0.09),
-                    in: RoundedRectangle(cornerRadius: 14)
+                    in: RoundedRectangle(cornerRadius: Theme.chipCornerRadius)
                 )
             }
         }
@@ -512,10 +615,10 @@ struct WelcomeView: View {
                         .padding(.horizontal, 5)
                         .background(
                             selected ? color : color.opacity(0.08),
-                            in: RoundedRectangle(cornerRadius: 14)
+                            in: RoundedRectangle(cornerRadius: Theme.chipCornerRadius)
                         )
                         .overlay {
-                            RoundedRectangle(cornerRadius: 14)
+                            RoundedRectangle(cornerRadius: Theme.chipCornerRadius)
                                 .strokeBorder(color.opacity(selected ? 0 : 0.34), lineWidth: 1)
                         }
 
@@ -580,7 +683,7 @@ struct WelcomeView: View {
             Spacer(minLength: 0)
         }
         .padding(12)
-        .background(Theme.hearthGold.opacity(0.09), in: RoundedRectangle(cornerRadius: 14))
+        .background(Theme.hearthGold.opacity(0.09), in: RoundedRectangle(cornerRadius: Theme.chipCornerRadius))
         .accessibilityElement(children: .combine)
     }
 

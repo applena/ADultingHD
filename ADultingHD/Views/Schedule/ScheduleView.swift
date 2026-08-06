@@ -215,7 +215,7 @@ struct ScheduleView: View {
                         .font(.subheadline.weight(.semibold))
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 10)
-                        .background(Theme.streakOrange, in: RoundedRectangle(cornerRadius: 10))
+                        .background(Theme.streakOrange, in: RoundedRectangle(cornerRadius: Theme.chipCornerRadius))
                         .foregroundStyle(.white)
                 }
                 .buttonStyle(.plain)

@@ -101,6 +101,19 @@ enum TaskFrequency: String, Codable, CaseIterable, Identifiable {
         }
     }
 
+    /// Safe first-run choices for schedules that need a concrete weekday.
+    /// A weekly task without a weekday falls back to interval semantics and
+    /// appears immediately, which makes the Home screen look as if it ignores
+    /// the user's schedule. The task form uses these defaults until the user
+    /// picks a different day.
+    var defaultWeekdays: [Int] {
+        switch self {
+        case .twiceWeekly: [2, 5] // Monday and Thursday
+        case .weekly, .biweekly: [2] // Monday
+        default: []
+        }
+    }
+
     /// Days after a completion before `Recurrence` starts searching for the
     /// next weekday/day-of-month match. Slightly shorter than `days` so it
     /// lands on this cycle's occurrence whether the completion happened
@@ -355,6 +368,18 @@ struct HouseholdTask: Codable, Identifiable, Hashable {
 
     var recurrenceRule: RecurrenceRule {
         RecurrenceRule(frequency: frequency, scheduledWeekdays: scheduledWeekdays, scheduledDayOfMonth: scheduledDayOfMonth, scheduledMonth: scheduledMonth)
+    }
+
+    /// Applies the concrete defaults used when a catalog or starter task is
+    /// added without an explicit schedule. This keeps weekly tasks anchored to
+    /// a real day instead of silently falling back to "due immediately, then
+    /// every seven days."
+    func withDefaultSchedule() -> HouseholdTask {
+        var copy = self
+        if copy.frequency.weekdayCount > 0 && copy.scheduledWeekdays.isEmpty {
+            copy.scheduledWeekdays = copy.frequency.defaultWeekdays
+        }
+        return copy
     }
 
     var dueDate: Date? { nextOccurrence() }

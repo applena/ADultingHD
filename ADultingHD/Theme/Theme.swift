@@ -3,40 +3,44 @@ import SwiftUI
 enum Theme {
     // MARK: - Colors
 
-    static let accent = Color.accentColor
-
     // Cozy Domestic Adventure foundations
     static let cream = Color(red: 1.00, green: 0.97, blue: 0.93)
     static let parchment = Color(red: 0.98, green: 0.93, blue: 0.84)
     static let adventureBlue = Color(red: 0.08, green: 0.20, blue: 0.35)
     static let hearthGold = Color(red: 0.94, green: 0.58, blue: 0.16)
     static let leafGreen = Color(red: 0.24, green: 0.43, blue: 0.29)
+    static let coral = Color(red: 0.98, green: 0.45, blue: 0.45)
+    static let sky = Color(red: 0.44, green: 0.66, blue: 0.91)
+    static let plum = Color(red: 0.46, green: 0.36, blue: 0.78)
+
+    /// The design system uses navy as the primary action color. Keeping this
+    /// alias lets existing screens use the same semantic name while still
+    /// honoring the new visual direction.
+    static let accent = adventureBlue
 
     // Gamification — curated soft palette
-    static let xpGold = Color(red: 0.96, green: 0.68, blue: 0.26)
-    static let streakOrange = Color(red: 0.98, green: 0.52, blue: 0.33)
-    static let levelPurple = Color(red: 0.47, green: 0.38, blue: 0.95)
-    static let successGreen = Color(red: 0.30, green: 0.78, blue: 0.65)
-    static let warningRed = Color(red: 0.93, green: 0.36, blue: 0.36)
+    static let xpGold = hearthGold
+    static let streakOrange = hearthGold
+    static let levelPurple = plum
+    static let successGreen = leafGreen
+    static let warningRed = coral
     static let overdueRed = warningRed.opacity(0.85)
 
-    // Fun accent colors for welcome / highlights
-    static let coral = Color(red: 0.98, green: 0.45, blue: 0.45)
-    static let mint = Color(red: 0.40, green: 0.85, blue: 0.72)
-    static let lavender = Color(red: 0.68, green: 0.56, blue: 0.96)
-    static let sky = Color(red: 0.45, green: 0.72, blue: 0.98)
+    // Compatibility aliases for older call sites.
+    static let mint = leafGreen
+    static let lavender = plum
 
     static func categoryColor(_ category: TaskCategory) -> Color {
         switch category {
-        case .kitchen: Color(red: 0.96, green: 0.58, blue: 0.38)
-        case .bathroom: Color(red: 0.40, green: 0.69, blue: 0.94)
-        case .bedroom: Color(red: 0.68, green: 0.53, blue: 0.93)
-        case .livingRoom: Color(red: 0.48, green: 0.80, blue: 0.55)
-        case .laundry: Color(red: 0.38, green: 0.78, blue: 0.82)
-        case .outdoor: Color(red: 0.45, green: 0.82, blue: 0.58)
-        case .garage: Color(red: 0.58, green: 0.58, blue: 0.64)
-        case .office: Color(red: 0.48, green: 0.42, blue: 0.85)
-        case .general: Color(red: 0.72, green: 0.60, blue: 0.48)
+        case .kitchen: hearthGold
+        case .bathroom: sky
+        case .bedroom: plum
+        case .livingRoom: leafGreen
+        case .laundry: Color(red: 0.24, green: 0.56, blue: 0.64)
+        case .outdoor: Color(red: 0.30, green: 0.56, blue: 0.38)
+        case .garage: Color(red: 0.35, green: 0.40, blue: 0.46)
+        case .office: adventureBlue
+        case .general: Color(red: 0.52, green: 0.42, blue: 0.32)
         }
     }
 
@@ -50,31 +54,34 @@ enum Theme {
 
     static func difficultyColor(_ difficulty: Difficulty) -> Color {
         switch difficulty {
-        case .easy: Color(red: 0.40, green: 0.82, blue: 0.60)
-        case .medium: Color(red: 0.96, green: 0.76, blue: 0.30)
-        case .hard: Color(red: 0.96, green: 0.58, blue: 0.33)
-        case .epic: Color(red: 0.93, green: 0.36, blue: 0.36)
+        case .easy: leafGreen
+        case .medium: hearthGold
+        case .hard: coral
+        case .epic: plum
         }
     }
 
     // MARK: - Layout
 
+    static let chipCornerRadius: CGFloat = 12
+    static let controlHeight: CGFloat = 52
+
     #if os(macOS)
-    static let cardPadding: CGFloat = 16
+    static let cardPadding: CGFloat = 20
     static let sectionSpacing: CGFloat = 20
-    static let cornerRadius: CGFloat = 8
+    static let cornerRadius: CGFloat = 16
     static let macOSContentMaxWidth: CGFloat = 780
     static let rowSpacing: CGFloat = 8
     #else
-    static let cardPadding: CGFloat = 14
-    static let sectionSpacing: CGFloat = 16
-    static let cornerRadius: CGFloat = 8
-    static let rowSpacing: CGFloat = 6
+    static let cardPadding: CGFloat = 16
+    static let sectionSpacing: CGFloat = 20
+    static let cornerRadius: CGFloat = 16
+    static let rowSpacing: CGFloat = 8
     static let rootTabBottomClearance: CGFloat = 72
 
     static let rootNavigationSurface = Color(uiColor: UIColor { traits in
         if traits.userInterfaceStyle == .dark {
-            return UIColor(red: 0.10, green: 0.10, blue: 0.12, alpha: 1)
+            return UIColor(red: 0.08, green: 0.12, blue: 0.19, alpha: 1)
         }
         return UIColor(red: 1.00, green: 0.97, blue: 0.93, alpha: 1)
     })
@@ -103,11 +110,11 @@ extension View {
             .background {
                 RoundedRectangle(cornerRadius: Theme.cornerRadius)
                     .fill(.background)
-                    .shadow(color: .black.opacity(0.04), radius: 8, y: 2)
+                    .shadow(color: Theme.adventureBlue.opacity(0.08), radius: 12, y: 4)
             }
             .overlay {
                 RoundedRectangle(cornerRadius: Theme.cornerRadius)
-                    .strokeBorder(Color.secondary.opacity(0.10))
+                    .strokeBorder(Theme.adventureBlue.opacity(0.10))
             }
     }
 
@@ -117,12 +124,24 @@ extension View {
             .background {
                 RoundedRectangle(cornerRadius: Theme.cornerRadius)
                     .fill(.background)
-                    .shadow(color: .black.opacity(0.04), radius: 8, y: 2)
+                    .shadow(color: Theme.adventureBlue.opacity(0.08), radius: 12, y: 4)
             }
             .overlay {
                 RoundedRectangle(cornerRadius: Theme.cornerRadius)
-                    .strokeBorder(Color.secondary.opacity(0.10))
+                    .strokeBorder(Theme.adventureBlue.opacity(0.10))
             }
+    }
+
+    /// Shared primary action treatment for onboarding and prominent screen
+    /// actions. The label remains native SwiftUI content, so Dynamic Type and
+    /// accessibility labels continue to work normally.
+    func adventurePrimaryAction() -> some View {
+        self
+            .font(.headline)
+            .frame(maxWidth: .infinity, minHeight: Theme.controlHeight)
+            .padding(.horizontal, 16)
+            .background(Theme.adventureBlue, in: RoundedRectangle(cornerRadius: Theme.chipCornerRadius))
+            .foregroundStyle(.white)
     }
 
     /// Constrains ScrollView content to a readable max width on macOS; no-op on iOS.
@@ -164,11 +183,15 @@ struct ScreenBackground: View {
         #if os(iOS)
         ZStack {
             Color(uiColor: .systemGroupedBackground)
-            Theme.cream.opacity(colorScheme == .dark ? 0.03 : 0.72)
+            Theme.cream.opacity(colorScheme == .dark ? 0.03 : 0.82)
         }
         .ignoresSafeArea()
         #else
-        Color(nsColor: .windowBackgroundColor).ignoresSafeArea()
+        ZStack {
+            Color(nsColor: .windowBackgroundColor)
+            Theme.cream.opacity(colorScheme == .dark ? 0.03 : 0.62)
+        }
+        .ignoresSafeArea()
         #endif
     }
 }
@@ -183,13 +206,13 @@ struct LandingHeader: View {
     var body: some View {
         HStack(alignment: .top, spacing: 14) {
             ZStack {
-                RoundedRectangle(cornerRadius: 8)
+                RoundedRectangle(cornerRadius: Theme.chipCornerRadius)
                     .fill(color.opacity(0.14))
                 Image(systemName: icon)
                     .font(.title2.weight(.semibold))
                     .foregroundStyle(color)
             }
-            .frame(width: 52, height: 52)
+            .frame(width: 56, height: 56)
 
             VStack(alignment: .leading, spacing: 5) {
                 Text(eyebrow.uppercased())
@@ -233,6 +256,6 @@ struct MetricPill: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
-        .background(color.opacity(0.10), in: RoundedRectangle(cornerRadius: 8))
+        .background(color.opacity(0.10), in: RoundedRectangle(cornerRadius: Theme.chipCornerRadius))
     }
 }
