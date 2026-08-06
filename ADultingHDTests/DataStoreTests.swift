@@ -135,4 +135,61 @@ final class DataStoreTests: XCTestCase {
 
         XCTAssertNil(dataStore.tasks.first?.scheduledOverrideDate)
     }
+
+    // MARK: - completeTask / uncompleteTask (Dashboard's Completed Tasks undo, issue #16)
+
+    func testUncompleteTaskReversesXPCoinsAndCompletionCount() async {
+        let dataStore = DataStore()
+        let task = makeTask(frequency: .daily)
+        dataStore.tasks = [task]
+
+        await dataStore.completeTask(task)
+        let completion = try! XCTUnwrap(dataStore.completions.first)
+        let xpAfterComplete = dataStore.profile.totalXP
+        let coinsAfterComplete = dataStore.profile.coins
+        XCTAssertEqual(xpAfterComplete, completion.totalXP)
+        XCTAssertEqual(dataStore.profile.totalTasksCompleted, 1)
+
+        await dataStore.uncompleteTask(completion)
+
+        XCTAssertTrue(dataStore.completions.isEmpty)
+        XCTAssertEqual(dataStore.profile.totalXP, xpAfterComplete - completion.totalXP)
+        XCTAssertEqual(dataStore.profile.coins, coinsAfterComplete - completion.totalXP)
+        XCTAssertEqual(dataStore.profile.totalTasksCompleted, 0)
+        XCTAssertNil(dataStore.tasks.first?.lastCompleted)
+    }
+
+    func testUncompleteTaskUnwindsStreakWhenItWasTodaysOnlyCompletion() async {
+        let dataStore = DataStore()
+        let task = makeTask(frequency: .daily)
+        dataStore.tasks = [task]
+
+        await dataStore.completeTask(task)
+        XCTAssertEqual(dataStore.profile.currentStreak, 1)
+        let completion = try! XCTUnwrap(dataStore.completions.first)
+
+        await dataStore.uncompleteTask(completion)
+
+        XCTAssertEqual(dataStore.profile.currentStreak, 0)
+        XCTAssertNil(dataStore.profile.lastActiveDate)
+    }
+
+    func testUncompleteTaskLeavesStreakAloneWhenOtherCompletionsRemainToday() async {
+        let dataStore = DataStore()
+        let taskA = makeTask(frequency: .daily)
+        var taskB = makeTask(frequency: .daily)
+        taskB.name = "Task B"
+        dataStore.tasks = [taskA, taskB]
+
+        await dataStore.completeTask(taskA)
+        await dataStore.completeTask(taskB)
+        XCTAssertEqual(dataStore.profile.currentStreak, 1)
+
+        let completionA = try! XCTUnwrap(dataStore.completions.first { $0.taskId == taskA.id })
+        await dataStore.uncompleteTask(completionA)
+
+        // Task B is still completed today, so today still counts as active.
+        XCTAssertEqual(dataStore.profile.currentStreak, 1)
+        XCTAssertEqual(dataStore.completions.count, 1)
+    }
 }

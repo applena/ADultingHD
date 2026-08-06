@@ -440,6 +440,50 @@ final class DataStore {
         logger.info("Completed '\(task.name)' +\(xpEarned)XP +\(streakBonus) streak bonus")
     }
 
+    /// Reverses a same-day task completion — the paired action to
+    /// `completeTask` that lets the Dashboard's "Completed Tasks" section
+    /// undo an accidental checkmark tap. XP, coins, and the completion
+    /// count roll back exactly. Unlocked achievements are intentionally
+    /// left alone, matching how most gamified apps treat achievements as
+    /// permanent once earned. The streak only unwinds when this was the
+    /// day's *only* completion — if other tasks are still completed today,
+    /// today already counts as an active day and the streak stays put.
+    ///
+    /// This is a best-effort inverse of `updateStreak()`, not a perfect one:
+    /// it correctly restores the "first completion ever" and "consecutive
+    /// day" cases, but if this completion was the one that *restarted* a
+    /// previously-broken streak, the prior streak length was already
+    /// discarded by `updateStreak()` when it completed (that function only
+    /// stores the current count, not history) — so undo lands on 0 rather
+    /// than the true prior value in that narrow case. Fixing that properly
+    /// would mean deriving the streak from completion history on every read
+    /// instead of incrementally mutating a single stored integer, which is
+    /// a larger engine change than this same-day undo affordance calls for.
+    func uncompleteTask(_ completion: TaskCompletion) async {
+        guard let idx = completions.firstIndex(where: { $0.id == completion.id }) else { return }
+        completions.remove(at: idx)
+
+        profile.totalXP = max(0, profile.totalXP - completion.totalXP)
+        profile.coins = max(0, profile.coins - completion.totalXP)
+        profile.totalTasksCompleted = max(0, profile.totalTasksCompleted - 1)
+
+        if let taskIdx = tasks.firstIndex(where: { $0.id == completion.taskId }) {
+            let lastRemaining = completions.filter { $0.taskId == completion.taskId }.map(\.completedAt).max()
+            tasks[taskIdx].lastCompleted = lastRemaining
+            syncReminder(for: tasks[taskIdx])
+        }
+
+        if todayCompletions.isEmpty {
+            profile.currentStreak = max(0, profile.currentStreak - 1)
+            profile.lastActiveDate = profile.currentStreak == 0
+                ? nil
+                : Calendar.current.date(byAdding: .day, value: -1, to: currentDay)
+        }
+
+        await save()
+        logger.info("Uncompleted '\(completion.taskName)' -\(completion.totalXP)XP")
+    }
+
     // MARK: - Task Management
 
     /// Schedules or cancels `task`'s local reminder to match its current
