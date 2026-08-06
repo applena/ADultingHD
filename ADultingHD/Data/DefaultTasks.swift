@@ -58,7 +58,6 @@ let defaultHouseholdTasks: [HouseholdTask] = [
         frequency: .weekly,
         estimatedMinutes: 10,
         difficulty: .easy,
-        supplies: ["Bathroom cleaner", "Paper towels"],
-        isActive: false
+        supplies: ["Bathroom cleaner", "Paper towels"]
     ),
 ]
