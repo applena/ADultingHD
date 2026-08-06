@@ -54,6 +54,7 @@
 		58C58D45E74445C1C27CC48F /* TaskDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 317D978794EB297B3B1016C3 /* TaskDetailView.swift */; };
 		59B437DD42E6A3FED446FE4B /* SuppliesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4625924B07ADFBF1008BB9A7 /* SuppliesView.swift */; };
 		5B6D8E8798E0F52D5D76F8C7 /* NewFeatureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E47DD27D62AD23DAEE39C772 /* NewFeatureTests.swift */; };
+		5C00F0775031D4BE0BCC25F4 /* DataStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38A1A5F27480927A2C6D396E /* DataStoreTests.swift */; };
 		6337C10485FA4AB0AFC8D431 /* ModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12E42443B93064A0049A2DE8 /* ModelTests.swift */; };
 		63BACBDA0B80E661879BD3DE /* DemoData.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7FA39F5B9D5EB44665C21D60 /* DemoData.swift */; };
 		65B1424603726E76E01DCDE2 /* DefaultTasks.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04D1D6ED759D2E2C16961F3F /* DefaultTasks.swift */; };
@@ -78,6 +79,7 @@
 		8DE2F629284ED770D3B2D48B /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81CDE793214D211A1B6C4124 /* ContentView.swift */; };
 		903A1FCACE9EB8111F170CA6 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC7C1D393BEF1BD66D303071 /* AppDelegate.swift */; };
 		9C1DEBF4250D2976DB2BB016 /* AvatarShopView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4757FDAA2BA9BF7C4FCF13EF /* AvatarShopView.swift */; };
+		9D06D9FBF5BC9087CFDF740B /* DataStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38A1A5F27480927A2C6D396E /* DataStoreTests.swift */; };
 		9D361A1FB6B532CDC9A8FA64 /* SharedDefaults.swift in Sources */ = {isa = PBXBuildFile; fileRef = 120568C8B5D9789897289150 /* SharedDefaults.swift */; };
 		9F85CA4BB8D941A50064BBDD /* Household.swift in Sources */ = {isa = PBXBuildFile; fileRef = D11A106E8C2F206C19D308D2 /* Household.swift */; };
 		A749CF0FE2A205BA72AC5B7D /* AddTaskView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC09792564158736721A229E /* AddTaskView.swift */; };
@@ -153,6 +155,7 @@
 		317D978794EB297B3B1016C3 /* TaskDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskDetailView.swift; sourceTree = "<group>"; };
 		3657A503A8E12F538794820B /* ICloudMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ICloudMonitor.swift; sourceTree = "<group>"; };
 		3727978FB1D9851E994C4EA1 /* CreateHouseholdSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreateHouseholdSheet.swift; sourceTree = "<group>"; };
+		38A1A5F27480927A2C6D396E /* DataStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DataStoreTests.swift; sourceTree = "<group>"; };
 		3A3517C461E95902B75B83EC /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		3B51D6E54A733EEE1D5052CB /* ADultingHDWidget.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = ADultingHDWidget.entitlements; sourceTree = "<group>"; };
 		3CB849F023CE45C9B40F8E02 /* CloudKitIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitIntegrationTests.swift; sourceTree = "<group>"; };
@@ -269,6 +272,7 @@
 			children = (
 				3CB849F023CE45C9B40F8E02 /* CloudKitIntegrationTests.swift */,
 				84C447DACC7370EA8A6AF043 /* CloudKitRecordTests.swift */,
+				38A1A5F27480927A2C6D396E /* DataStoreTests.swift */,
 				12E42443B93064A0049A2DE8 /* ModelTests.swift */,
 				E47DD27D62AD23DAEE39C772 /* NewFeatureTests.swift */,
 				A6B16200DEE379710BDC731E /* RecurrenceTests.swift */,
@@ -669,6 +673,7 @@
 			files = (
 				CFC3DFE9DA24ABE806C2D870 /* CloudKitIntegrationTests.swift in Sources */,
 				A78B723C3B169F7807F6EDD6 /* CloudKitRecordTests.swift in Sources */,
+				5C00F0775031D4BE0BCC25F4 /* DataStoreTests.swift in Sources */,
 				6337C10485FA4AB0AFC8D431 /* ModelTests.swift in Sources */,
 				5B6D8E8798E0F52D5D76F8C7 /* NewFeatureTests.swift in Sources */,
 				2760A02D9D2F9136B7695DBA /* RecurrenceTests.swift in Sources */,
@@ -780,6 +785,7 @@
 			files = (
 				36E5C3EE2ECFEE0E9FE1BD12 /* CloudKitIntegrationTests.swift in Sources */,
 				03EB977A2C59485BBAE3B8BC /* CloudKitRecordTests.swift in Sources */,
+				9D06D9FBF5BC9087CFDF740B /* DataStoreTests.swift in Sources */,
 				0C4892190E1675E2621AC90E /* ModelTests.swift in Sources */,
 				6D3913B7404D76076FFBD3EC /* NewFeatureTests.swift in Sources */,
 				25C17D5FAF5A3204ACF04EEB /* RecurrenceTests.swift in Sources */,
