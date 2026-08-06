@@ -450,6 +450,8 @@ struct DueTaskRow: View {
                         .foregroundStyle(Theme.xpGold)
                 }
             }
+            .accessibilityElement(children: .combine)
+            .accessibilityAction { onSelect() }
 
             Spacer()
 
@@ -467,7 +469,14 @@ struct DueTaskRow: View {
         .padding(.vertical, 4)
         .contentShape(Rectangle())
         .onTapGesture(perform: onSelect)
-        .onDisappear { pendingCompletion?.cancel() }
+        .onDisappear {
+            // Reset (not just cancel) so a stale cancelled Task can't leave
+            // the checkmark showing "checked" the next time this row is
+            // shown — e.g. if navigating to another task's detail causes
+            // this row to disappear mid-undo-window.
+            pendingCompletion?.cancel()
+            pendingCompletion = nil
+        }
     }
 
     private func toggleCompletion() {
