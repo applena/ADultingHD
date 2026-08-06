@@ -33,4 +33,5 @@ enum PrefKey {
     static let householdsLayoutMigratedV2 = "householdsLayoutMigratedV2"
     static let defaultHouseholdId = "defaultHouseholdId"
     static let ckMigrationDone = "ckMigrationDone_v1"
+    static let showSeasonalSection = "showSeasonalSection"
 }

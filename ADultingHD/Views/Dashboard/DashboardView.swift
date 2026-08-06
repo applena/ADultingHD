@@ -22,15 +22,17 @@ private let gameTips: [String] = [
     "Longer tasks earn a time bonus — every 10 minutes adds +2 XP.",
     "Reach level 5 to unlock the Panda and the Crown in the shop!",
     "Completing a task early (before it's due) can unlock the Early Bird achievement.",
-    "Seasonal tasks appear on your dashboard — add them before the season ends!",
+    "Turn on Seasonal Tasks in Settings to get suggestions for the current season!",
 ]
 
 struct DashboardView: View {
     @Environment(DataStore.self) private var dataStore
     @Environment(StoreManager.self) private var storeManager
-    @AppStorage("showSeasonalSection") private var showSeasonalSection = true
+    @AppStorage(PrefKey.showSeasonalSection) private var showSeasonalSection = false
     @State private var showAddTask = false
     @State private var showProUpgrade = false
+
+    private var seasonalSectionVisible: Bool { storeManager.isPro && showSeasonalSection }
 
     private var greeting: String {
         let hour = Calendar.current.component(.hour, from: Date())
@@ -101,7 +103,7 @@ struct DashboardView: View {
             statsRow
             primaryTaskSection
             if !dataStore.todayCompletions.isEmpty { recentCompletionsSection }
-            if storeManager.isPro { seasonalSection }
+            if seasonalSectionVisible { seasonalSection }
         }
         .padding()
     }
@@ -109,7 +111,7 @@ struct DashboardView: View {
 
     #if os(macOS)
     private var hasRightColumnContent: Bool {
-        !dataStore.todayCompletions.isEmpty || (storeManager.isPro && !seasonalSuggestions.isEmpty)
+        !dataStore.todayCompletions.isEmpty || (seasonalSectionVisible && !seasonalSuggestions.isEmpty)
     }
 
     private var macOSLayout: some View {
@@ -132,7 +134,7 @@ struct DashboardView: View {
                 if hasRightColumnContent {
                     VStack(spacing: Theme.sectionSpacing) {
                         if !dataStore.todayCompletions.isEmpty { recentCompletionsSection }
-                        if storeManager.isPro { seasonalSection }
+                        if seasonalSectionVisible { seasonalSection }
                     }
                     .frame(maxWidth: 320)
                 }
@@ -331,42 +333,40 @@ struct DashboardView: View {
                             .font(.headline)
                         Spacer()
                         Button {
-                            withAnimation { showSeasonalSection.toggle() }
+                            withAnimation { showSeasonalSection = false }
                         } label: {
-                            Text(showSeasonalSection ? "Hide" : "Show")
+                            Text("Hide")
                                 .font(.caption)
                                 .foregroundStyle(Theme.accent)
                         }
                         .buttonStyle(.plain)
                     }
 
-                    if showSeasonalSection {
-                        ForEach(seasonalSuggestions) { suggestion in
-                            HStack(spacing: 10) {
-                                Image(systemName: suggestion.category.icon)
-                                    .foregroundStyle(Theme.categoryColor(suggestion.category))
-                                    .frame(width: 24)
+                    ForEach(seasonalSuggestions) { suggestion in
+                        HStack(spacing: 10) {
+                            Image(systemName: suggestion.category.icon)
+                                .foregroundStyle(Theme.categoryColor(suggestion.category))
+                                .frame(width: 24)
 
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(suggestion.name)
-                                        .font(.subheadline.weight(.medium))
-                                    Text("\(suggestion.estimatedMinutes)m · \(suggestion.difficulty.label)")
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                }
-
-                                Spacer()
-
-                                Button {
-                                    Task { await dataStore.addCustomTask(suggestion.toTask()) }
-                                } label: {
-                                    Image(systemName: "plus.circle.fill")
-                                        .foregroundStyle(Theme.accent)
-                                }
-                                .buttonStyle(.plain)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(suggestion.name)
+                                    .font(.subheadline.weight(.medium))
+                                Text("\(suggestion.estimatedMinutes)m · \(suggestion.difficulty.label)")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
                             }
-                            .padding(.vertical, 2)
+
+                            Spacer()
+
+                            Button {
+                                Task { await dataStore.addCustomTask(suggestion.toTask()) }
+                            } label: {
+                                Image(systemName: "plus.circle.fill")
+                                    .foregroundStyle(Theme.accent)
+                            }
+                            .buttonStyle(.plain)
                         }
+                        .padding(.vertical, 2)
                     }
                 }
                 .card()
@@ -405,7 +405,16 @@ struct DashboardView: View {
 struct DueTaskRow: View {
     @Environment(DataStore.self) private var dataStore
     let task: HouseholdTask
-    @State private var showComplete = false
+    @State private var pendingCompletion: Task<Void, Never>?
+
+    /// Tapping the checkmark marks the task done immediately in the UI, but
+    /// the completion isn't committed to the data store until this window
+    /// elapses — tapping again before then cancels it, so an accidental tap
+    /// can be undone right away instead of requiring a full "uncomplete"
+    /// that would have to unwind XP, streaks, and achievements.
+    private static let undoWindow: Duration = .seconds(2)
+
+    private var isChecked: Bool { pendingCompletion != nil }
 
     var body: some View {
         let status = task.dueStatus()
@@ -437,18 +446,34 @@ struct DueTaskRow: View {
             Spacer()
 
             Button {
-                showComplete = true
+                toggleCompletion()
             } label: {
-                Image(systemName: "checkmark.circle")
+                Image(systemName: isChecked ? "checkmark.circle.fill" : "checkmark.circle")
                     .font(.title3)
                     .foregroundStyle(Theme.successGreen)
             }
             .buttonStyle(.plain)
-            .sheet(isPresented: $showComplete) {
-                CompleteTaskSheet(task: task)
-            }
+            .animation(.easeInOut(duration: 0.15), value: isChecked)
+            .accessibilityLabel(isChecked ? "Undo complete" : "Mark complete")
         }
         .padding(.vertical, 4)
+        .onDisappear { pendingCompletion?.cancel() }
+    }
+
+    private func toggleCompletion() {
+        // Second tap before the undo window elapsed — cancel the pending
+        // completion instead of ever writing it.
+        if let pending = pendingCompletion {
+            pending.cancel()
+            pendingCompletion = nil
+            return
+        }
+
+        pendingCompletion = Task {
+            try? await Task.sleep(for: Self.undoWindow)
+            guard !Task.isCancelled else { return }
+            await dataStore.completeTask(task)
+        }
     }
 }
 

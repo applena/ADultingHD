@@ -160,10 +160,8 @@ struct WelcomeView: View {
                 share: payload.share,
                 container: payload.container,
                 householdName: payload.householdName,
-                onDismiss: {
-                    hasSentInvite = true
-                    shareSheetPayload = nil
-                }
+                onShareSaved: { hasSentInvite = true },
+                onDismiss: { shareSheetPayload = nil }
             )
         }
     }
