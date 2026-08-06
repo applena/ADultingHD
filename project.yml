@@ -11,7 +11,7 @@ settings:
   base:
     DEVELOPMENT_TEAM: TYQ32QCF6K
     MARKETING_VERSION: "1.2.0"
-    CURRENT_PROJECT_VERSION: 37
+    CURRENT_PROJECT_VERSION: 38
     SWIFT_VERSION: "6.0"
     DEAD_CODE_STRIPPING: YES
     ENABLE_USER_SCRIPT_SANDBOXING: YES
@@ -59,6 +59,7 @@ targets:
     platform: [iOS, macOS]
     sources:
       - ADultingHD
+      - path: Shared/SharedDefaults.swift
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: net.shadowpuppet.ADultingHD
@@ -114,7 +115,7 @@ targets:
       iOS: "17.0"
     sources:
       - ADultingHDWidget
-      - path: ADultingHD/Storage/SharedDefaults.swift
+      - path: Shared/SharedDefaults.swift
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: net.shadowpuppet.ADultingHD.widget
@@ -124,7 +125,7 @@ targets:
         SWIFT_EMIT_LOC_STRINGS: YES
         GENERATE_INFOPLIST_FILE: YES
         MARKETING_VERSION: "1.2.0"
-        CURRENT_PROJECT_VERSION: 37
+        CURRENT_PROJECT_VERSION: 38
     entitlements:
       path: ADultingHDWidget/ADultingHDWidget.entitlements
       properties:
