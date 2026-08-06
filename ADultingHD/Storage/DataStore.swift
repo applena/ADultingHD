@@ -484,13 +484,21 @@ final class DataStore {
     func updateTask(_ task: HouseholdTask) async {
         if let idx = tasks.firstIndex(where: { $0.id == task.id }) {
             var updated = task
-            // Editing the recurrence rule of a task that's never been
-            // completed gives it a fresh start instead of re-anchoring to a
-            // stale creation date — see `HouseholdTask.createdAt`. A
-            // completed task's occurrence depends only on `lastCompleted`,
-            // so this is a no-op for it either way.
-            if updated.lastCompleted == nil && tasks[idx].recurrenceRule != updated.recurrenceRule {
-                updated.createdAt = Date()
+            if tasks[idx].recurrenceRule != updated.recurrenceRule {
+                // Editing the recurrence rule of a task that's never been
+                // completed gives it a fresh start instead of re-anchoring to
+                // a stale creation date — see `HouseholdTask.createdAt`. A
+                // completed task's occurrence depends only on
+                // `lastCompleted`, so this is a no-op for it either way.
+                if updated.lastCompleted == nil {
+                    updated.createdAt = Date()
+                }
+                // A real schedule edit supersedes any pending manual
+                // reschedule — otherwise a stale `scheduledOverrideDate`
+                // would keep winning over the newly-edited schedule (see
+                // `Recurrence.nextOccurrence`) until the task next
+                // completes, making the edit silently appear to do nothing.
+                updated.scheduledOverrideDate = nil
             }
             tasks[idx] = updated
             syncReminder(for: updated)
