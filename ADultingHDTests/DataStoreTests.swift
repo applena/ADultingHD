@@ -83,7 +83,7 @@ final class DataStoreTests: XCTestCase {
         dataStore.tasks = [task]
 
         let wednesday = utcDate(2024, 3, 6)
-        await dataStore.rescheduleTask(task, to: wednesday, calendar: utc)
+        await dataStore.rescheduleTask(task, to: wednesday, on: monday, calendar: utc)
 
         XCTAssertEqual(dataStore.tasks.first?.scheduledOverrideDate, utc.startOfDay(for: wednesday))
         // The underlying recurring schedule is untouched.
@@ -98,7 +98,40 @@ final class DataStoreTests: XCTestCase {
 
         // Dropping the task back onto the day it's already occurring on
         // should not create an override at all.
-        await dataStore.rescheduleTask(task, to: monday, calendar: utc)
+        await dataStore.rescheduleTask(task, to: monday, on: monday, calendar: utc)
+
+        XCTAssertNil(dataStore.tasks.first?.scheduledOverrideDate)
+    }
+
+    func testRescheduleTaskOntoTodayIsNoOpForOverdueTaskShownViaCarryForward() async {
+        let dataStore = DataStore()
+        // Scheduled for Monday 3/4, never completed — that Monday is its
+        // fixed occurrence. Ten days later it's well overdue and shown on
+        // "today"'s card via carry-forward, not because today IS 3/4.
+        let occurrenceDay = utcDate(2024, 3, 4)
+        let today = utcDate(2024, 3, 14)
+        let task = makeTask(scheduledWeekdays: [Weekday.monday.rawValue], createdAt: occurrenceDay)
+        dataStore.tasks = [task]
+
+        // Dragging the task and dropping it back onto the "today" card it's
+        // already carried forward into should be a no-op, exactly like
+        // dropping it back onto its raw occurrence day.
+        await dataStore.rescheduleTask(task, to: today, on: today, calendar: utc)
+
+        XCTAssertNil(dataStore.tasks.first?.scheduledOverrideDate)
+    }
+
+    func testRescheduleTaskRejectsDateBeforeToday() async {
+        let dataStore = DataStore()
+        let occurrenceDay = utcDate(2024, 3, 4)
+        let today = utcDate(2024, 3, 14)
+        let task = makeTask(scheduledWeekdays: [Weekday.monday.rawValue], createdAt: occurrenceDay)
+        dataStore.tasks = [task]
+
+        // The week view lets you browse past weeks via the date picker, but
+        // rescheduling into the past isn't a supported drop target.
+        let pastDay = utcDate(2024, 3, 10)
+        await dataStore.rescheduleTask(task, to: pastDay, on: today, calendar: utc)
 
         XCTAssertNil(dataStore.tasks.first?.scheduledOverrideDate)
     }
