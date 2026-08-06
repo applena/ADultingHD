@@ -511,16 +511,28 @@ final class DataStore {
     /// Scoped to a single occurrence: the task's recurring
     /// `frequency`/`scheduledWeekdays`/`scheduledDayOfMonth` are untouched,
     /// and completing the task later clears the override (see
-    /// `completeTask`). Dropping a task back onto the day it's already
-    /// occurring on is a no-op. A thin wrapper around `updateTask` — it
-    /// shares that method's persistence (dual-write, reminder sync) rather
-    /// than a heavier one-off, and `RecurrenceRule` excludes
-    /// `scheduledOverrideDate` so this can't spuriously trigger the
+    /// `completeTask`). Rejects a `date` before today — the week view lets
+    /// you browse past weeks via the date picker, but rescheduling into the
+    /// past would just make the task instantly and confusingly "N days
+    /// overdue." Dropping a task back onto the day it's already shown on is
+    /// a no-op, including an overdue task dropped back onto "today" — it's
+    /// displayed there via carry-forward (see `Recurrence`'s doc comment),
+    /// not because today is its true occurrence, so the no-op check mirrors
+    /// `ScheduleView.tasksByDate`'s bucketing rule rather than comparing
+    /// `date` against the raw occurrence directly. A thin wrapper around
+    /// `updateTask` — it shares that method's persistence (dual-write,
+    /// reminder sync) rather than a heavier one-off, and `RecurrenceRule`
+    /// excludes `scheduledOverrideDate` so this can't spuriously trigger the
     /// never-completed-task `createdAt` reset meant for real schedule edits.
-    func rescheduleTask(_ task: HouseholdTask, to date: Date, calendar: Calendar = .current) async {
+    func rescheduleTask(_ task: HouseholdTask, to date: Date, on referenceDate: Date = Date(), calendar: Calendar = .current) async {
+        let today = calendar.startOfDay(for: referenceDate)
         let targetDay = calendar.startOfDay(for: date)
-        guard let currentOccurrence = task.nextOccurrence(calendar: calendar),
-              !calendar.isDate(currentOccurrence, inSameDayAs: targetDay) else { return }
+        guard targetDay >= today, let currentOccurrence = task.nextOccurrence(calendar: calendar) else { return }
+
+        let isAlreadyShownOnTargetDay = calendar.isDate(currentOccurrence, inSameDayAs: targetDay)
+            || (calendar.isDate(targetDay, inSameDayAs: today) && Recurrence.isDue(occurrence: currentOccurrence, on: today, calendar: calendar))
+        guard !isAlreadyShownOnTargetDay else { return }
+
         var updated = task
         updated.scheduledOverrideDate = targetDay
         await updateTask(updated)
