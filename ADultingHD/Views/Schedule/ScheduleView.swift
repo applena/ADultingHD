@@ -46,8 +46,9 @@ struct ScheduleView: View {
                 iOSLayout(dates: dates, tasksByDate: tasksByDate, todayTasks: todayTasks, todayByCategory: todayByCategory, dueCount: dueCount)
                 #endif
             }
+            .rootTabScrollClearance()
         }
-        .navigationTitle("")
+        .rootTabNavigation("Schedule")
         .sheet(isPresented: $showPowerHour) {
             PowerHourView(tasks: todayTasks)
         }
@@ -150,6 +151,7 @@ struct ScheduleView: View {
             icon: "calendar.badge.clock",
             color: dueCount == 0 ? Theme.successGreen : Theme.streakOrange
         )
+        .accessibilityIdentifier("schedule-root-header")
     }
 
     private func todayBatchesCard(

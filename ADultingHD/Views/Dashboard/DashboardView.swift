@@ -66,8 +66,9 @@ struct DashboardView: View {
                 iOSLayout
                 #endif
             }
+            .rootTabScrollClearance()
         }
-        .navigationTitle("")
+        .rootTabNavigation("")
         #if os(iOS)
         .toolbar {
             ToolbarItem(placement: .principal) {
@@ -152,6 +153,7 @@ struct DashboardView: View {
                 icon: dataStore.dueTasks.isEmpty ? "checkmark.seal.fill" : "clock.badge.exclamationmark.fill",
                 color: dataStore.dueTasks.isEmpty ? Theme.successGreen : Theme.streakOrange
             )
+            .accessibilityIdentifier("home-root-header")
 
             HStack(alignment: .top, spacing: 12) {
                 CompactAvatarView(avatarState: dataStore.profile.avatarState, size: 44)

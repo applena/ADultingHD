@@ -24,6 +24,10 @@ struct TaskListView: View {
         storeManager.canCreateCustomTask(existingCount: dataStore.customTaskCount)
     }
 
+    private var searchPrompt: String {
+        selectedTab == .myTasks ? "Search my tasks..." : "Search all tasks..."
+    }
+
     var body: some View {
         ZStack {
             ScreenBackground()
@@ -54,10 +58,29 @@ struct TaskListView: View {
                         catalogList
                     }
                 }
+                .rootTabScrollClearance()
             }
         }
-        .searchable(text: $searchText, prompt: selectedTab == .myTasks ? "Search my tasks..." : "Search all tasks...")
-        .navigationTitle("")
+        #if os(macOS)
+        .searchable(text: $searchText, prompt: searchPrompt)
+        #else
+        .toolbar {
+            ToolbarItem(placement: .principal) {
+                HStack(spacing: 8) {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundStyle(.secondary)
+                    TextField(searchPrompt, text: $searchText)
+                        .textFieldStyle(.plain)
+                        .accessibilityLabel(searchPrompt)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .frame(maxWidth: 280)
+                .background(Color.primary.opacity(0.06), in: Capsule())
+            }
+        }
+        #endif
+        .rootTabNavigation("Tasks")
         .navigationDestination(for: TaskNavDestination.self) { destination in
             switch destination {
             case .detail(let task):
@@ -83,6 +106,7 @@ struct TaskListView: View {
             icon: isCatalog ? "square.grid.2x2.fill" : "checklist",
             color: isCatalog ? Theme.levelPurple : Theme.accent
         )
+        .accessibilityIdentifier("tasks-root-header")
     }
 
     // MARK: - My Tasks

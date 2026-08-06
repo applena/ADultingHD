@@ -123,6 +123,7 @@ struct IOSContentView: View {
             NavigationStack { ProfileView() }
                 .tabItem { Label("Profile", systemImage: "person.crop.circle.fill") }
         }
+        .tint(Theme.coral)
     }
 }
 #endif

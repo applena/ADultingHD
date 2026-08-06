@@ -42,8 +42,9 @@ struct StatsView: View {
                 .padding()
                 #endif
             }
+            .rootTabScrollClearance()
         }
-        .navigationTitle("")
+        .rootTabNavigation("Stats")
     }
 
     #if os(macOS)
@@ -77,6 +78,7 @@ struct StatsView: View {
             icon: "chart.bar.xaxis",
             color: Theme.successGreen
         )
+        .accessibilityIdentifier("stats-root-header")
     }
 
     // MARK: - XP Per Day (last 14 days)
