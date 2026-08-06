@@ -363,6 +363,11 @@ final class DataStore {
             xpEarned: xpEarned,
             streakBonus: streakBonus,
             notes: notes,
+            // Attribution always follows whoever actually completed the task
+            // on this device, not `task.defaultAssigneeId` — a housemate
+            // finishing someone else's assigned chore is credited to
+            // themselves. This naturally equals `defaultAssigneeId` in the
+            // common case where the assignee is the one completing it.
             profileId: profile.id
         )
 

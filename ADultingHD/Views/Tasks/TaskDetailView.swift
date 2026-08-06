@@ -6,6 +6,7 @@ struct TaskDetailView: View {
     let task: HouseholdTask
     @State private var showComplete = false
     @State private var showFrequencyPicker = false
+    @State private var showAssigneePicker = false
     @State private var showEditSheet = false
     @State private var showDeleteConfirm = false
 
@@ -137,6 +138,11 @@ struct TaskDetailView: View {
         return task.frequency.rawValue
     }
 
+    private func assigneeDisplay(for task: HouseholdTask) -> String {
+        guard let id = task.defaultAssigneeId else { return "Anyone" }
+        return dataStore.householdProfiles.first { $0.id == id }?.name ?? "Anyone"
+    }
+
     private func detailsCard(_ task: HouseholdTask) -> some View {
         LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
             Button { showFrequencyPicker = true } label: {
@@ -156,10 +162,20 @@ struct TaskDetailView: View {
             } else {
                 DetailItem(label: "Last Done", value: "Never", icon: "calendar.badge.clock")
             }
+
+            if dataStore.householdProfiles.count > 1 {
+                Button { showAssigneePicker = true } label: {
+                    DetailItem(label: "Assignee", value: assigneeDisplay(for: task), icon: "person.crop.circle")
+                }
+                .buttonStyle(.plain)
+            }
         }
         .card()
         .sheet(isPresented: $showFrequencyPicker) {
             FrequencyPickerSheet(task: task)
+        }
+        .sheet(isPresented: $showAssigneePicker) {
+            AssigneePickerSheet(task: task)
         }
     }
 
@@ -355,6 +371,55 @@ struct FrequencyPickerSheet: View {
             updated.scheduledDayOfMonth = nil
             updated.scheduledMonth = nil
         }
+        Task { await dataStore.updateTask(updated) }
+        dismiss()
+    }
+}
+
+// MARK: - Assignee Picker
+
+struct AssigneePickerSheet: View {
+    @Environment(DataStore.self) private var dataStore
+    @Environment(\.dismiss) private var dismiss
+    let task: HouseholdTask
+    @State private var selected: UUID?
+
+    init(task: HouseholdTask) {
+        self.task = task
+        self._selected = State(initialValue: task.defaultAssigneeId)
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Picker("Assignee", selection: $selected) {
+                    Text("Anyone").tag(UUID?.none)
+                    ForEach(dataStore.householdProfiles) { member in
+                        Text(member.name).tag(UUID?.some(member.id))
+                    }
+                }
+                .pickerStyle(.inline)
+                .labelsHidden()
+            }
+            .navigationTitle("Assignee")
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") { saveAndDismiss() }
+                        .disabled(selected == task.defaultAssigneeId)
+                }
+            }
+        }
+    }
+
+    private func saveAndDismiss() {
+        var updated = task
+        updated.defaultAssigneeId = selected
         Task { await dataStore.updateTask(updated) }
         dismiss()
     }

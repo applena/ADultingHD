@@ -26,6 +26,7 @@ struct EditTaskView: View {
 // MARK: - Shared Task Form
 
 private struct TaskFormView: View {
+    @Environment(DataStore.self) private var dataStore
     @Environment(\.dismiss) private var dismiss
 
     let title: String
@@ -44,6 +45,7 @@ private struct TaskFormView: View {
     @State private var scheduledMonth: Int
     @State private var checklist: [ChecklistItem]
     @State private var expandedChecklistId: UUID?
+    @State private var assigneeId: UUID?
 
     private let existingTask: HouseholdTask?
 
@@ -65,6 +67,7 @@ private struct TaskFormView: View {
         _scheduledDayOfMonth = State(initialValue: existingTask?.scheduledDayOfMonth ?? 1)
         _scheduledMonth = State(initialValue: existingTask?.scheduledMonth ?? 1)
         _checklist = State(initialValue: existingTask?.checklist ?? [])
+        _assigneeId = State(initialValue: existingTask?.defaultAssigneeId)
     }
 
     var body: some View {
@@ -99,6 +102,15 @@ private struct TaskFormView: View {
                     }
 
                     Stepper("Estimated: \(estimatedMinutes) min", value: $estimatedMinutes, in: 1...480, step: 5)
+
+                    if dataStore.householdProfiles.count > 1 {
+                        Picker("Assignee", selection: $assigneeId) {
+                            Text("Anyone").tag(UUID?.none)
+                            ForEach(dataStore.householdProfiles) { member in
+                                Text(member.name).tag(UUID?.some(member.id))
+                            }
+                        }
+                    }
                 }
 
                 SchedulePickerSection(
@@ -216,6 +228,7 @@ private struct TaskFormView: View {
         task.estimatedMinutes = estimatedMinutes
         task.difficulty = difficulty
         task.supplies = supplies
+        task.defaultAssigneeId = assigneeId
         task.checklist = checklist.compactMap { item in
             let trimmed = item.text.trimmingCharacters(in: .whitespaces)
             guard !trimmed.isEmpty else { return nil }

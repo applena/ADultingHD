@@ -16,6 +16,7 @@ struct TaskListView: View {
     @Environment(StoreManager.self) private var storeManager
     @State private var selectedTab: TaskTab = .myTasks
     @State private var selectedCategory: TaskCategory?
+    @State private var assigneeFilter: AssigneeFilter = .all
     @State private var searchText = ""
     @State private var showAddCustom = false
     @State private var showProUpgrade = false
@@ -114,6 +115,7 @@ struct TaskListView: View {
     private var filteredTasks: [HouseholdTask] {
         var result = dataStore.tasks
         if let cat = selectedCategory { result = result.filter { $0.category == cat } }
+        result = result.filter { $0.matches(assigneeFilter, currentProfileId: dataStore.profile.id) }
         if !searchText.isEmpty {
             result = result.filter {
                 $0.name.localizedCaseInsensitiveContains(searchText) ||
@@ -131,6 +133,7 @@ struct TaskListView: View {
     private var myTasksList: some View {
         List {
             categoryFilter
+            assigneeFilterRow
 
             if groupedTasks.isEmpty {
                 ContentUnavailableView {
@@ -287,6 +290,27 @@ struct TaskListView: View {
         }
         .listRowInsets(EdgeInsets())
         .listRowBackground(Color.clear)
+    }
+
+    /// "Mine" / "Unassigned" / "All" chip row, shown only once a household
+    /// has more than one member — solo households have only one possible
+    /// assignee, so the filter would be a no-op.
+    @ViewBuilder
+    private var assigneeFilterRow: some View {
+        if dataStore.householdProfiles.count > 1 {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(AssigneeFilter.allCases) { filter in
+                        FilterChip(label: filter.rawValue, isSelected: assigneeFilter == filter) {
+                            assigneeFilter = filter
+                        }
+                    }
+                }
+                .padding(.vertical, 4)
+            }
+            .listRowInsets(EdgeInsets())
+            .listRowBackground(Color.clear)
+        }
     }
 }
 

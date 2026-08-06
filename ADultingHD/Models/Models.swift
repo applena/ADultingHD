@@ -370,6 +370,29 @@ struct HouseholdTask: Codable, Identifiable, Hashable {
     static func == (lhs: HouseholdTask, rhs: HouseholdTask) -> Bool {
         lhs.id == rhs.id
     }
+
+    /// Whether this task matches an `AssigneeFilter` chip selection, given the
+    /// current device user's profile id. `.all` always matches; `.mine`
+    /// matches only tasks explicitly assigned to `currentProfileId`;
+    /// `.unassigned` matches only tasks with no default assignee.
+    func matches(_ filter: AssigneeFilter, currentProfileId: UUID) -> Bool {
+        switch filter {
+        case .all: return true
+        case .mine: return defaultAssigneeId == currentProfileId
+        case .unassigned: return defaultAssigneeId == nil
+        }
+    }
+}
+
+/// "Mine" / "Unassigned" / "All" filter chip options for `TaskListView`,
+/// shown only in households with more than one member (see
+/// `DataStore.householdProfiles`).
+enum AssigneeFilter: String, CaseIterable, Identifiable {
+    case all = "All"
+    case mine = "Mine"
+    case unassigned = "Unassigned"
+
+    var id: String { rawValue }
 }
 
 // MARK: - Task Completion
