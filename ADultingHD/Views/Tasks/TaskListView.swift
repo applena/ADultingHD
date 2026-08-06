@@ -115,7 +115,14 @@ struct TaskListView: View {
     private var filteredTasks: [HouseholdTask] {
         var result = dataStore.tasks
         if let cat = selectedCategory { result = result.filter { $0.category == cat } }
-        result = result.filter { $0.matches(assigneeFilter, currentProfileId: dataStore.profile.id) }
+        // Only apply the assignee filter while its chip row is visible — if a
+        // household shrinks back to one member (a share is revoked or a
+        // member leaves) while "Mine"/"Unassigned" was selected, the row
+        // disappears along with any way to reset it; silently continuing to
+        // filter would leave the list looking incomplete with no visible cause.
+        if dataStore.hasMultipleAssignees {
+            result = result.filter { $0.matches(assigneeFilter, currentProfileId: dataStore.profile.id) }
+        }
         if !searchText.isEmpty {
             result = result.filter {
                 $0.name.localizedCaseInsensitiveContains(searchText) ||
