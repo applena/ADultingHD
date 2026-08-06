@@ -26,6 +26,9 @@ struct ADultingHDApp: App {
                         UserDefaults.standard.set(true, forKey: PrefKey.hasCompletedOnboarding)
                         storeManager.enableDemoMode()
                     }
+                    if ProcessInfo.processInfo.arguments.contains("-onboarding") {
+                        UserDefaults.standard.set(false, forKey: PrefKey.hasCompletedOnboarding)
+                    }
                     #endif
                     dataStore.configure(notificationManager: notificationManager)
                     await dataStore.load()

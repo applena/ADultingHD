@@ -147,6 +147,59 @@ final class ScreenshotTests: XCTestCase {
         XCTAssertTrue(statsHeader.waitForExistence(timeout: 3), "Profile should navigate to Detailed Stats")
     }
 
+    func testOnboardingFlowScreenshots() throws {
+        app.terminate()
+        app.launchArguments = ["-demo", "-onboarding"]
+        app.launch()
+
+        let pages = [
+            "welcome", "how-it-works", "categories", "name-household",
+            "pick-rooms", "pro-pitch",
+        ]
+
+        for (index, page) in pages.enumerated() {
+            let pageView = app.descendants(matching: .any)
+                .matching(identifier: "onboarding-page-\(page)")
+                .firstMatch
+            XCTAssertTrue(pageView.waitForExistence(timeout: 5), "Missing onboarding page \(page)")
+
+            if page == "name-household" {
+                let playerName = app.textFields["onboarding-player-name-field"]
+                XCTAssertTrue(playerName.waitForExistence(timeout: 3))
+                playerName.tap()
+                playerName.typeText("Taylor")
+                let returnKey = app.keyboards.buttons["return"]
+                if returnKey.exists { returnKey.tap() }
+            }
+            capture(String(format: "Onboarding_%02d_%@", index + 1, page))
+
+            if page == "pro-pitch" {
+                app.buttons["onboarding-secondary-action"].tap()
+            } else {
+                let primary = app.buttons["onboarding-primary-action"]
+                XCTAssertTrue(primary.waitForExistence(timeout: 3))
+                primary.tap()
+            }
+        }
+
+        let invitePage = app.descendants(matching: .any)
+            .matching(identifier: "onboarding-page-invite")
+            .firstMatch
+        if invitePage.waitForExistence(timeout: 2) {
+            capture("Onboarding_07_invite")
+            app.buttons["onboarding-secondary-action"].tap()
+        }
+
+        let homeHeader = app.descendants(matching: .any)
+            .matching(identifier: "home-root-header")
+            .firstMatch
+        XCTAssertTrue(
+            app.tabBars.firstMatch.waitForExistence(timeout: 3)
+                || homeHeader.waitForExistence(timeout: 3),
+            "Completing onboarding should reach the iPhone tabs or iPad home layout"
+        )
+    }
+
     /// Navigate to a tab - handles both iPhone (TabBar) and iPad (sidebar) layouts
     private func navigateTo(_ tab: String) {
         // iPhone: standard tab bar

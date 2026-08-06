@@ -142,6 +142,7 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: net.shadowpuppet.ADultingHD.tests
+        GENERATE_INFOPLIST_FILE: YES
 
   ADultingHDTests_macOS:
     type: bundle.unit-test
@@ -153,6 +154,7 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: net.shadowpuppet.ADultingHD.tests
+        GENERATE_INFOPLIST_FILE: YES
 
   ADultingHDUITests:
     type: bundle.ui-testing
@@ -164,3 +166,4 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: net.shadowpuppet.ADultingHD.uitests
+        GENERATE_INFOPLIST_FILE: YES
