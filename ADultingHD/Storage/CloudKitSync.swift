@@ -501,6 +501,7 @@ extension HouseholdTask {
         r["scheduledDayOfMonth"] = scheduledDayOfMonth as CKRecordValue?
         r["scheduledMonth"] = scheduledMonth as CKRecordValue?
         r["checklist"] = checklist.isEmpty ? nil : (try? sharedJSONEncoder.encode(checklist)) as CKRecordValue?
+        r["scheduledOverrideDate"] = scheduledOverrideDate as CKRecordValue?
         return r
     }
 
@@ -538,6 +539,7 @@ extension HouseholdTask {
         } else {
             self.checklist = []
         }
+        self.scheduledOverrideDate = record["scheduledOverrideDate"] as? Date
     }
 }
 
