@@ -21,6 +21,10 @@ struct TaskListView: View {
     @State private var showAddCustom = false
     @State private var showProUpgrade = false
 
+    init(initialCategory: TaskCategory? = nil) {
+        _selectedCategory = State(initialValue: initialCategory)
+    }
+
     private var canCreateCustomTask: Bool {
         storeManager.canCreateCustomTask(existingCount: dataStore.customTaskCount)
     }

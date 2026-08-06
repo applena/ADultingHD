@@ -294,4 +294,65 @@ final class RecurrenceTests: XCTestCase {
         let task = makeTask(frequency: .weekly, scheduledOverrideDate: overrideWithTime, createdAt: utcDate(2024, 3, 4))
         XCTAssertEqual(task.nextOccurrence(calendar: utc), utcDate(2024, 3, 6, hour: 0))
     }
+
+    // MARK: - Streak history
+
+    func testComputeStreakDeduplicatesDaysAndAllowsOneDayGrace() {
+        let march1 = utcDate(2024, 3, 1)
+        let march2 = utcDate(2024, 3, 2)
+        let march3 = utcDate(2024, 3, 3)
+        let completions = [march1, march2, march2, march3].map { date in
+            TaskCompletion(
+                id: UUID(), taskId: UUID(), taskName: "Test", completedAt: date,
+                xpEarned: 10, streakBonus: 0, notes: nil
+            )
+        }
+
+        let summary = Recurrence.computeStreak(
+            from: completions,
+            asOf: utcDate(2024, 3, 4),
+            calendar: utc
+        )
+
+        XCTAssertEqual(summary.currentStreak, 3)
+        XCTAssertEqual(summary.longestStreak, 3)
+        XCTAssertEqual(summary.lastActiveDate, utc.startOfDay(for: march3))
+    }
+
+    func testComputeStreakKeepsBestRunAfterAStreakRestart() {
+        let dates = [1, 2, 3, 6, 7].map { utcDate(2024, 3, $0) }
+        let completions = dates.map { date in
+            TaskCompletion(
+                id: UUID(), taskId: UUID(), taskName: "Test", completedAt: date,
+                xpEarned: 10, streakBonus: 0, notes: nil
+            )
+        }
+
+        let summary = Recurrence.computeStreak(
+            from: completions,
+            asOf: utcDate(2024, 3, 7),
+            calendar: utc
+        )
+
+        XCTAssertEqual(summary.currentStreak, 2)
+        XCTAssertEqual(summary.longestStreak, 3)
+    }
+
+    func testComputeStreakExpiresAfterTwoMissedDays() {
+        let completions = [1, 2, 3].map { day in
+            TaskCompletion(
+                id: UUID(), taskId: UUID(), taskName: "Test", completedAt: utcDate(2024, 3, day),
+                xpEarned: 10, streakBonus: 0, notes: nil
+            )
+        }
+
+        let summary = Recurrence.computeStreak(
+            from: completions,
+            asOf: utcDate(2024, 3, 5),
+            calendar: utc
+        )
+
+        XCTAssertEqual(summary.currentStreak, 0)
+        XCTAssertEqual(summary.longestStreak, 3)
+    }
 }

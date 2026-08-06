@@ -22,7 +22,7 @@ struct CatalogTask: Identifiable {
             difficulty: difficulty,
             supplies: supplies,
             isActive: true
-        )
+        ).withDefaultSchedule()
     }
 }
 

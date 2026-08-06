@@ -42,7 +42,7 @@ Use case: ui-mockup
 Asset type: high-fidelity iPhone core app screen concepts
 Primary request: design three portrait mobile screens for ADultingHD showing a cohesive evolved product system: Home, Tasks, and Profile
 Scene/backdrop: three iPhone screen canvases side by side on a neutral presentation background
-Subject: Home uses an illustrated household map or room-path with today’s three quests, visible XP and streak; Tasks uses a compact quest log grouped by room with overdue/due/completed states and fast completion controls; Profile uses a strong avatar hero, level journey, achievements, and household leaderboard
+Subject: Home uses a compact due-task dashboard with room/category filter chips, visible XP and streak, and three useful next actions; Tasks uses a compact quest log grouped by room with overdue/due/completed states and fast completion controls; Profile uses a strong avatar hero, level journey, achievements, and household leaderboard
 Style/medium: shippable native iOS product UI; editorial game-board influence translated into SwiftUI; tactile badge and stamp details; clean, mature, friendly
 Composition/framing: prioritize one main action per screen; dense enough to be useful but calm; consistent navigation and component language
 Color palette: ink navy #1F2A44, warm cream #FFF8ED, coral #F46F61, quest gold #E9A23B, sage #59A985, sky #70A7E8, plum #765BC6
@@ -52,6 +52,10 @@ Avoid: generic analytics dashboard, oversized empty hero cards, glassmorphism, t
 ```
 
 ## Welcome hero
+
+Historical exploration only. The current app-first direction does not render a
+literal full-house cutaway or use a glowing line as core navigation; keep this
+brief and its exports as provenance for the earlier visual exploration.
 
 ```text
 Use case: illustration-story

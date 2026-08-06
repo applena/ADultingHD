@@ -28,6 +28,23 @@ final class ModelTests: XCTestCase {
         XCTAssertEqual(epicMonthly.xpReward, 72)
     }
 
+    func testScheduledFrequenciesHaveConcreteDefaults() {
+        XCTAssertEqual(TaskFrequency.weekly.defaultWeekdays, [2])
+        XCTAssertEqual(TaskFrequency.biweekly.defaultWeekdays, [2])
+        XCTAssertEqual(TaskFrequency.twiceWeekly.defaultWeekdays, [2, 5])
+        XCTAssertTrue(TaskFrequency.daily.defaultWeekdays.isEmpty)
+    }
+
+    func testCatalogWeeklyTaskIsAnchoredToItsDefaultDay() {
+        let catalogTask = CatalogTask(
+            name: "Clean the oven", description: "", category: .kitchen,
+            suggestedFrequency: .weekly, estimatedMinutes: 20,
+            difficulty: .medium, supplies: []
+        )
+
+        XCTAssertEqual(catalogTask.toHouseholdTask().scheduledWeekdays, [2])
+    }
+
     func testIsDueWhenNeverCompleted() {
         let task = HouseholdTask(
             id: UUID(), name: "Test", description: "", category: .kitchen,

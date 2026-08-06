@@ -132,7 +132,7 @@ private struct MacInviteFallback: View {
                     .textSelection(.enabled)
                     .multilineTextAlignment(.center)
                     .padding()
-                    .background(Color.secondary.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
+                    .background(Color.secondary.opacity(0.1), in: RoundedRectangle(cornerRadius: Theme.chipCornerRadius))
                 Button {
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(url.absoluteString, forType: .string)

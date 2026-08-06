@@ -98,10 +98,11 @@ struct DashboardView: View {
     private var iOSLayout: some View {
         VStack(spacing: Theme.sectionSpacing) {
             heroSection
-            tipBanner
+            roomSummaryRow
             statsRow
             todaysTasksSection
             completedTasksSection
+            tipBanner
             if seasonalSectionVisible { seasonalSection }
         }
         .padding()
@@ -121,6 +122,8 @@ struct DashboardView: View {
                 }
                 .frame(maxWidth: 320)
             }
+
+            roomSummaryRow
 
             // Main body: today's tasks left, completed (+ seasonal) right
             HStack(alignment: .top, spacing: Theme.sectionSpacing) {
@@ -175,7 +178,7 @@ struct DashboardView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(12)
-        .background(Theme.xpGold.opacity(0.08), in: RoundedRectangle(cornerRadius: Theme.cornerRadius))
+        .background(Theme.xpGold.opacity(0.08), in: RoundedRectangle(cornerRadius: Theme.chipCornerRadius))
     }
 
     // MARK: - Stats Row
@@ -194,6 +197,59 @@ struct DashboardView: View {
                 icon: "star.fill",
                 color: Theme.xpGold
             )
+        }
+    }
+
+    @ViewBuilder
+    private var roomSummaryRow: some View {
+        let rooms = TaskCategory.allCases.filter { category in
+            dataStore.activeTasks.contains { $0.category == category }
+        }
+
+        if !rooms.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Text("Rooms in your rotation")
+                        .font(.subheadline.weight(.semibold))
+                    Spacer()
+                    NavigationLink("See all", destination: TaskListView())
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Theme.accent)
+                }
+
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(rooms) { category in
+                            let dueCount = dataStore.dueTasks.filter { $0.category == category }.count
+                            NavigationLink {
+                                TaskListView(initialCategory: category)
+                            } label: {
+                                HStack(spacing: 7) {
+                                    Image(systemName: category.icon)
+                                        .font(.caption.weight(.semibold))
+                                    Text(category.rawValue)
+                                        .font(.caption.weight(.semibold))
+                                    if dueCount > 0 {
+                                        Text("\(dueCount)")
+                                            .font(.caption2.weight(.bold))
+                                            .padding(.horizontal, 6)
+                                            .padding(.vertical, 3)
+                                            .background(Theme.coral.opacity(0.18), in: Capsule())
+                                    }
+                                }
+                                .foregroundStyle(Theme.categoryColor(category))
+                                .padding(.horizontal, 11)
+                                .padding(.vertical, 9)
+                                .background(.background, in: Capsule())
+                                .overlay {
+                                    Capsule().strokeBorder(Theme.categoryColor(category).opacity(0.24))
+                                }
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -259,11 +315,7 @@ struct DashboardView: View {
                 else { showProUpgrade = true }
             } label: {
                 Label("Add A Task", systemImage: "plus")
-                    .font(.subheadline.weight(.semibold))
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 10)
-                    .background(Theme.accent, in: RoundedRectangle(cornerRadius: Theme.cornerRadius))
-                    .foregroundStyle(.white)
+                    .adventurePrimaryAction()
             }
             .buttonStyle(.plain)
         }
@@ -392,6 +444,10 @@ struct DueTaskRow: View {
     var body: some View {
         let status = task.dueStatus()
         HStack(spacing: 10) {
+            Capsule()
+                .fill(status.isOverdue ? Theme.coral : Theme.hearthGold)
+                .frame(width: 4)
+
             // Tap target for opening the task's detail/edit view is scoped to
             // just this leading content, not the whole row — an ancestor
             // .onTapGesture spanning the trailing checkmark Button below is
@@ -440,6 +496,7 @@ struct DueTaskRow: View {
                 Image(systemName: "checkmark.circle")
                     .font(.title3)
                     .foregroundStyle(Theme.successGreen)
+                    .frame(width: 44, height: 44)
             }
             .buttonStyle(.plain)
             .disabled(isCompleting)
@@ -481,6 +538,7 @@ struct CompletedTaskRow: View {
                 Image(systemName: "checkmark.circle.fill")
                     .font(.title3)
                     .foregroundStyle(Theme.successGreen)
+                    .frame(width: 44, height: 44)
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Undo complete")
@@ -669,7 +727,7 @@ struct StatCard: View {
                     .font(.headline)
                     .foregroundStyle(color)
                     .frame(width: 28, height: 28)
-                    .background(color.opacity(0.12), in: RoundedRectangle(cornerRadius: 7))
+                    .background(color.opacity(0.12), in: RoundedRectangle(cornerRadius: Theme.chipCornerRadius))
                 Spacer()
             }
             VStack(alignment: .leading, spacing: 2) {

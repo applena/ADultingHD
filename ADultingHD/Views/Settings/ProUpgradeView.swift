@@ -118,7 +118,7 @@ struct ProUpgradeView: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 14)
                 .padding(.horizontal, 12)
-                .background(Theme.levelPurple, in: RoundedRectangle(cornerRadius: 14))
+                .background(Theme.levelPurple, in: RoundedRectangle(cornerRadius: Theme.chipCornerRadius))
                 .foregroundStyle(.white)
             }
             .buttonStyle(.plain)

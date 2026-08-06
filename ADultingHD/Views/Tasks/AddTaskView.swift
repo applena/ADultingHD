@@ -63,7 +63,8 @@ private struct TaskFormView: View {
         _estimatedMinutes = State(initialValue: existingTask?.estimatedMinutes ?? 15)
         _difficulty = State(initialValue: existingTask?.difficulty ?? .medium)
         _suppliesText = State(initialValue: existingTask?.supplies.joined(separator: "\n") ?? "")
-        _scheduledWeekdays = State(initialValue: Set(existingTask?.scheduledWeekdays ?? []))
+        let initialWeekdays = existingTask?.scheduledWeekdays ?? []
+        _scheduledWeekdays = State(initialValue: Set(initialWeekdays.isEmpty ? initialFrequency.defaultWeekdays : initialWeekdays))
         _scheduledDayOfMonth = State(initialValue: existingTask?.scheduledDayOfMonth ?? 1)
         _scheduledMonth = State(initialValue: existingTask?.scheduledMonth ?? 1)
         _checklist = State(initialValue: existingTask?.checklist ?? [])
@@ -198,7 +199,7 @@ private struct TaskFormView: View {
 
     private func applyScheduleDefaults(for freq: TaskFrequency) {
         if freq.weekdayCount > 0, scheduledWeekdays.count != freq.weekdayCount {
-            scheduledWeekdays = freq.weekdayCount == 2 ? [2, 5] : [2]
+            scheduledWeekdays = Set(freq.defaultWeekdays)
         }
         if freq.usesDayOfMonth, scheduledDayOfMonth < 1 || scheduledDayOfMonth > 28 {
             scheduledDayOfMonth = 1
@@ -235,7 +236,8 @@ private struct TaskFormView: View {
         }
 
         if frequency.weekdayCount > 0 {
-            task.scheduledWeekdays = scheduledWeekdays.sorted()
+            let selectedWeekdays = scheduledWeekdays.isEmpty ? Set(frequency.defaultWeekdays) : scheduledWeekdays
+            task.scheduledWeekdays = selectedWeekdays.sorted()
             task.scheduledDayOfMonth = nil
             task.scheduledMonth = nil
         } else if frequency.usesDayOfMonth {

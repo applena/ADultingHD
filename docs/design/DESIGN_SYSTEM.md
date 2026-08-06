@@ -5,8 +5,10 @@ Status: active v1 direction, intentionally open to iteration.
 ADultingHD should make ordinary maintenance feel like visible progress through a
 home, not like operating a generic analytics dashboard. The visual metaphor is
 a **cozy domestic adventure**: rooms become approachable quest zones, recurring
-tasks form a path, and XP, streaks, and achievements feel earned without turning
-the product into a children's game.
+tasks form a manageable weekly rhythm, and XP, streaks, and achievements feel
+earned without turning the product into a children's game. The product stays an
+app first: room language organizes work, but the UI never assumes a particular
+floor plan.
 
 ## Reference concepts
 
@@ -18,12 +20,15 @@ the product into a children's game.
 
 The screen mockups communicate hierarchy and mood. They are not pixel-accurate
 implementation instructions, and their navigation should be reconciled with the
-real feature set before coding.
+real feature set before coding. Earlier concepts include a connected-house
+motif; the current app-first direction below supersedes that as core navigation.
 
 ## Product principles
 
-1. **The home is the game board.** Lead with rooms, paths, and the next useful
-   action. Charts and totals support the loop rather than becoming the product.
+1. **The home is the game board.** Lead with due tasks, compact room filters, and
+   the next useful action. Rooms organize the work without becoming a literal
+   map, while charts and totals support the loop rather than becoming the
+   product.
 2. **Progress is tangible.** Use trails, stamps, badges, filled markers, and
    compact XP feedback so work visibly changes the experience.
 3. **Warm, not juvenile.** Editorial illustration, textured color, and confident
@@ -70,8 +75,9 @@ only signal.
 - Standard control height: at least 44 pt.
 - Default surface radius: 16 pt. Use smaller 10–12 pt radii for chips and
   task-state controls; avoid applying the same card treatment to every block.
-- Let one illustration or map become the visual anchor. Do not stack multiple
-  white cards inside a large empty background.
+- Let one illustration or compact app preview become the visual anchor. Do not
+  stack multiple white cards inside a large empty background, and do not use a
+  floor plan or glowing line as core navigation.
 
 ## Core components
 
@@ -110,9 +116,13 @@ than competing calls to action.
 
 ### Onboarding
 
-- Replace the current empty upper third and text-heavy card with full-bleed art.
+- Keep the welcome step grounded in a compact, code-native app preview rather
+  than a literal house illustration. Use artwork only when it clarifies a
+  product behavior.
 - Keep the flow to three conceptual beats: motivation, daily loop, tailored
   rooms. Collect names only when they are required for the household model.
+- Keep the daily-loop illustration supportive and onboarding-only; it should not
+  define how a person's real home is laid out.
 - Keep Pro disclosure honest and skippable; it should not interrupt the core
   first-run value demonstration.
 - Use the two generated illustrations as art-direction references. Crop variants
@@ -120,8 +130,9 @@ than competing calls to action.
 
 ### Home
 
-- Make the house or room path the primary overview, with today's quests attached
-  to locations.
+- Make today's due quests the primary overview, with compact room/category chips
+  for filtering and direct navigation to the task list. Never imply that those
+  categories describe a user's physical floor plan.
 - Keep XP and streak visible but compact.
 - Surface the next three useful actions before tips, historical metrics, or
   promotions.
@@ -143,9 +154,12 @@ than competing calls to action.
 
 - Medium: tactile 2D editorial illustration with ink outlines and subtle paper
   grain.
-- Recurring motif: one quest-gold path linking rooms, actions, and rewards.
+- Recurring motif: quest-gold highlights can connect actions and rewards in
+  onboarding, but a line must not act as core navigation between rooms.
 - Environment first: the home and the work are the subject; mascots are optional
   supporting characters, not the only personality.
+- Prefer focused chore moments or code-native product previews over full-house
+  cutaways that prescribe a particular home layout.
 - Keep UI text outside raster artwork. Generated art should contain no labels,
   numbers, buttons, or status indicators.
 - Prepare light/dark crops and verify meaningful content survives compact iPhone,
@@ -168,8 +182,9 @@ The untouched ImageGen masters and exact prompts live in `docs/design/`. App
 exports are versioned separately under
 `ADultingHD/App/Assets.xcassets/Onboarding/`:
 
-- `Onboarding/WelcomeHeroV1` selects compact iPhone, full iPad, and wide macOS
-  crops of the connected-house illustration.
+- `Onboarding/WelcomeHeroV1` is preserved as an additive design reference, but
+  the current welcome flow uses a code-native product preview so it does not
+  prescribe a connected-house layout.
 - `Onboarding/DailyLoopV1` selects compact iPhone, full iPad, and wide macOS
   crops of the task-to-reward illustration.
 

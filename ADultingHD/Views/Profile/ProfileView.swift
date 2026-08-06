@@ -157,7 +157,7 @@ struct ProfileView: View {
                     .font(.title2)
                     .foregroundStyle(Theme.successGreen)
                     .frame(width: 44, height: 44)
-                    .background(Theme.successGreen.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
+                    .background(Theme.successGreen.opacity(0.12), in: RoundedRectangle(cornerRadius: Theme.chipCornerRadius))
 
                 VStack(alignment: .leading, spacing: 3) {
                     Text("Detailed Stats")
@@ -306,7 +306,7 @@ struct AchievementCard: View {
             }
             .frame(maxWidth: .infinity)
             .padding(8)
-            .background(unlocked ? Theme.xpGold.opacity(0.1) : Color.gray.opacity(0.05), in: RoundedRectangle(cornerRadius: 8))
+            .background(unlocked ? Theme.xpGold.opacity(0.1) : Color.gray.opacity(0.05), in: RoundedRectangle(cornerRadius: Theme.chipCornerRadius))
             .opacity(unlocked ? 1.0 : 0.6)
         }
         .buttonStyle(.plain)

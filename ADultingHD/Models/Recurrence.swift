@@ -14,6 +14,72 @@ import Foundation
 /// "due" (and, once the day has passed, "overdue") on every subsequent day
 /// until the task is actually completed, which recomputes a new occurrence.
 enum Recurrence {
+    struct StreakSummary: Equatable {
+        let currentStreak: Int
+        let longestStreak: Int
+        let lastActiveDate: Date?
+    }
+
+    /// Derives streak state from the completion log instead of trusting a
+    /// running counter. Completion timestamps are reduced to unique calendar
+    /// days, so completing several tasks on one day advances the streak once.
+    /// A streak remains current through the day after the last completion —
+    /// matching the app's existing end-of-day grace period — and becomes zero
+    /// after a missed full day. This is intentionally pure so undo, CloudKit
+    /// merges, reloads, and widgets all get the same answer.
+    static func computeStreak(
+        from completions: [TaskCompletion],
+        asOf referenceDate: Date = Date(),
+        calendar: Calendar = .current
+    ) -> StreakSummary {
+        let referenceDay = calendar.startOfDay(for: referenceDate)
+        let activeDays = Set(
+            completions
+                .map { calendar.startOfDay(for: $0.completedAt) }
+                .filter { $0 <= referenceDay }
+        )
+        let sortedDays = activeDays.sorted()
+
+        guard let lastActiveDate = sortedDays.last else {
+            return StreakSummary(currentStreak: 0, longestStreak: 0, lastActiveDate: nil)
+        }
+
+        var longestStreak = 1
+        var runningStreak = 1
+        for (previousDay, day) in zip(sortedDays, sortedDays.dropFirst()) {
+            let gap = calendar.dateComponents([.day], from: previousDay, to: day).day
+            if gap == 1 {
+                runningStreak += 1
+            } else {
+                longestStreak = max(longestStreak, runningStreak)
+                runningStreak = 1
+            }
+        }
+        longestStreak = max(longestStreak, runningStreak)
+
+        let daysSinceLastActivity = calendar.dateComponents(
+            [.day], from: lastActiveDate, to: referenceDay
+        ).day ?? Int.max
+
+        var currentStreak = 0
+        if (0...1).contains(daysSinceLastActivity) {
+            currentStreak = 1
+            var cursor = lastActiveDate
+            for day in sortedDays.dropLast().reversed() {
+                guard let expectedPreviousDay = calendar.date(byAdding: .day, value: -1, to: cursor),
+                      day == expectedPreviousDay else { break }
+                currentStreak += 1
+                cursor = day
+            }
+        }
+
+        return StreakSummary(
+            currentStreak: currentStreak,
+            longestStreak: longestStreak,
+            lastActiveDate: lastActiveDate
+        )
+    }
+
     /// The fixed occurrence day for a task with the given schedule and
     /// completion history. Always calendar-day-normalized (midnight, in
     /// `calendar`'s time zone) so comparisons never depend on time-of-day.
