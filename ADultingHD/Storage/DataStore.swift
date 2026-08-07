@@ -931,12 +931,14 @@ final class DataStore {
     ///   `shareRecordName` is set, or the household is joined (a joined
     ///   household only exists because it was shared; the participant-leave
     ///   path re-derives the share directly from the zone, not this field).
-    /// - `ambiguous`: an owned household with no `shareRecordName` but where
-    ///   `isHouseholdSharingEnabled` shows sharing was used on this device at
-    ///   some point — resolved with a read-only CloudKit check rather than
-    ///   assumed either way, so a legacy share isn't silently left stranded.
-    /// A device that has never enabled sharing produces neither group for
-    /// any household, so purely local deletion never requires iCloud.
+    /// - `ambiguous`: every other owned household. Deliberately NOT narrowed
+    ///   by the `isHouseholdSharingEnabled` device flag — that flag lives in
+    ///   local `UserDefaults`, not the iCloud-synced `HouseholdIndex`, so a
+    ///   second device on the same account (or a reinstall) starts with it
+    ///   unset even for a household genuinely shared from another device,
+    ///   which would silently skip the check entirely. Resolved by
+    ///   `removeCloudKitDataBeforeLocalDeletion` with a best-effort,
+    ///   read-only CloudKit check rather than assumed either way.
     /// Internal (not `private`) so `DataStoreTests` can pin this decision
     /// logic directly — it's already been wrong twice (over-broad on the
     /// device flag, then blind to unbackfilled legacy shares) and doesn't
@@ -949,7 +951,7 @@ final class DataStore {
         for household in households {
             if household.shareRecordName != nil || !household.ownerIsCurrentUser {
                 confirmed.append(household)
-            } else if isHouseholdSharingEnabled {
+            } else {
                 ambiguous.append(household)
             }
         }
@@ -957,23 +959,32 @@ final class DataStore {
     }
 
     /// CloudKit cleanup is deliberately completed before local files are
-    /// removed. If the owner cannot revoke the share (or a participant cannot
-    /// leave it), retaining the local row is safer than stranding access on a
-    /// server-side household with no local handle.
+    /// removed. `confirmed` households are known to be shared, so a failure
+    /// to reach CloudKit for them blocks the deletion outright — retaining
+    /// the local row is safer than stranding access on a server-side
+    /// household with no local handle. `ambiguous` households are only
+    /// *possibly* shared (most owned households never are), so they get a
+    /// best-effort check: attempted when CloudKit is reachable, silently
+    /// skipped otherwise, so an ordinary offline local-only deletion is
+    /// never blocked by a household that almost certainly has nothing to
+    /// clean up.
     private func removeCloudKitDataBeforeLocalDeletion(from households: [Household]) async throws {
         let (confirmed, ambiguous) = householdCloudKitCleanupTargets(from: households)
         guard !confirmed.isEmpty || !ambiguous.isEmpty else { return }
 
         await ckSync.setup()
         guard ckSync.isAvailable else {
-            throw CloudKitSyncError.iCloudUnavailable(status: ckSync.syncError ?? "unknown")
+            guard confirmed.isEmpty else {
+                throw CloudKitSyncError.iCloudUnavailable(status: ckSync.syncError ?? "unknown")
+            }
+            return
         }
 
         for household in confirmed {
             try await ckSync.removeHouseholdCloudData(for: household)
         }
         for household in ambiguous {
-            guard try await ckSync.hasExistingShare(for: household) else { continue }
+            guard let hasShare = try? await ckSync.hasExistingShare(for: household), hasShare else { continue }
             try await ckSync.removeHouseholdCloudData(for: household)
         }
     }

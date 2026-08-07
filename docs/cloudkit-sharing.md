@@ -48,24 +48,34 @@ share, and every participant together. A participant deleting a joined row
 leaves the share by deleting its share record in the shared database.
 
 `DataStore.resetAll()` applies that cleanup to every known household before
-removing local files. If CloudKit is unavailable or cleanup fails, the reset
-is cancelled so an invited person cannot remain attached to server data that
-the owner can no longer manage locally. Accounts that reset on an older build
-are detected during onboarding invite preparation; their legacy zone is
-revoked before a new share is created.
+removing local files. If CloudKit is unavailable while a *confirmed* share
+needs revoking, the reset is cancelled so an invited person cannot remain
+attached to server data that the owner can no longer manage locally (see
+below for what counts as confirmed vs. best-effort). Accounts that reset on
+an older build are detected during onboarding invite preparation; their
+legacy zone is revoked before a new share is created.
 
 `Household.shareRecordName` wasn't persisted by builds before this cleanup
-existed, so `DataStore.householdCloudKitCleanupTargets(from:)` can't trust a
-`nil` value to mean "never shared." It splits households into `confirmed`
-(shareRecordName is set, or the household is joined — a joined household only
-exists because it was shared) and `ambiguous` (an owned household with no
-shareRecordName, but sharing was used on this device at some point). Only
-`confirmed` and `ambiguous` households ever require `ckSync.setup()`;
-`ambiguous` ones are resolved with a read-only `CloudKitSync.hasExistingShare`
-check rather than assumed either way, so a share created under an older build
-isn't silently left stranded. A device that has never enabled sharing produces
-neither group, so deleting or resetting on such a device never touches
-CloudKit.
+existed, and `isHouseholdSharingEnabled` is local `UserDefaults` — not synced
+via iCloud — so neither reliably proves an owned household was never shared:
+the field can be `nil` for a real legacy share, and the flag can be unset on
+a second device or after a reinstall even though the household is shared
+from elsewhere. `DataStore.householdCloudKitCleanupTargets(from:)` therefore
+splits households into two groups instead of guessing from either signal:
+- `confirmed` — `shareRecordName` is set, or the household is joined (a
+  joined household only exists because it was shared; the participant-leave
+  path re-derives the share directly from the zone, not this field). A
+  failure to reach CloudKit for a confirmed household blocks the deletion.
+- `ambiguous` — every other owned household. Resolved with a best-effort,
+  read-only `CloudKitSync.hasExistingShare` check: attempted whenever
+  CloudKit is reachable (so a legacy or cross-device share isn't silently
+  left stranded when it's possible to check), but skipped rather than
+  blocking when it isn't — most owned households were never shared at all,
+  so an ordinary offline local deletion must not be held hostage by one that
+  almost certainly has nothing to clean up.
+
+A confirmed share still guarantees revocation before local deletion, exactly
+as before; only the ambiguous, likely-never-shared case is best-effort.
 
 ## Invite flow (owner side)
 

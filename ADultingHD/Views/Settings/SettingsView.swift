@@ -98,7 +98,7 @@ struct SettingsView: View {
                 }
             }
         } message: {
-            Text("This permanently deletes local data and removes every household collaborator from CloudKit. If iCloud is unavailable, the reset will be cancelled.")
+            Text("This permanently deletes local data and removes every household collaborator from CloudKit. If iCloud is unavailable, the reset may be cancelled to avoid leaving a collaborator with access you can no longer revoke.")
         }
         .alert("Couldn't reset data", isPresented: Binding(
             get: { resetError != nil },
