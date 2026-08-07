@@ -259,4 +259,32 @@ final class DataStoreTests: XCTestCase {
         XCTAssertEqual(dataStore.profile.currentStreak, 1)
         XCTAssertEqual(dataStore.completions.count, 1)
     }
+
+    // MARK: - deleteHousehold / CloudKit cleanup gating
+
+    // `isHouseholdSharingEnabled` is a device-wide flag that, once set by
+    // sharing any household, stays set forever (deleteHousehold doesn't
+    // clear it). Gating CloudKit cleanup on that flag instead of the
+    // household's own `shareRecordName` would force every later delete of
+    // any OTHER, never-shared household to require live iCloud
+    // connectivity — throwing offline even though nothing was ever shared.
+    // ckSync.isAvailable is false throughout this process (`.setup()` is
+    // never called outside CloudKitIntegrationTests), so this only stays
+    // crash-safe on an unsigned test build because the fix keeps the
+    // never-shared path from touching CloudKitSync at all.
+    func testDeleteHouseholdSkipsCloudKitForNeverSharedHouseholdEvenWhenSharingEnabledElsewhere() async throws {
+        let dataStore = DataStore()
+        await dataStore.createHousehold(name: "First")
+        await dataStore.createHousehold(name: "Second")
+        XCTAssertEqual(dataStore.listHouseholds().count, 2)
+
+        let defaults = UserDefaults.standard
+        defaults.set(true, forKey: PrefKey.householdSharingEnabled)
+        defer { defaults.removeObject(forKey: PrefKey.householdSharingEnabled) }
+
+        let target = try XCTUnwrap(dataStore.listHouseholds().first { $0.shareRecordName == nil })
+        try await dataStore.deleteHousehold(target.id)
+
+        XCTAssertEqual(dataStore.listHouseholds().count, 1)
+    }
 }
