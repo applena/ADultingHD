@@ -71,6 +71,25 @@ Constraints: no text, no letters, no logos, no interface chrome, no device mocku
 Avoid: childish cartoon characters, photorealism, generic stock vector art, excessive gradients, floating icons, clutter
 ```
 
+## Welcome focus
+
+Current first-run welcome illustration. Keep the UI copy in SwiftUI so the art
+can be cropped, localized, and described separately for VoiceOver.
+
+```text
+Use case: illustration-story
+Asset type: reusable native iOS onboarding hero illustration, no UI and no text
+Primary request: create a focused, encouraging visual for an ADHD-friendly household task app. Show one small household action becoming visible progress: a warm kitchen sink with a few dishes, a tidy folded towel, and a simple golden path that leads from a small checklist card shape toward a bright completed sparkle and a sturdy gold star badge. The scene should feel calm and achievable, with one clear focal action rather than a busy house cutaway.
+Scene/backdrop: warm cream paper-like background with open negative space around the subject for flexible SwiftUI cropping
+Subject: a cozy kitchen corner and the small task-to-progress story; no readable interface content
+Style/medium: tactile 2D editorial illustration, confident ink outlines, subtle paper grain, mature playful Apple-platform product art, friendly but not childish
+Composition/framing: wide landscape composition, central subject cluster with generous safe margins on all sides; important details should survive compact horizontal crops
+Lighting/mood: soft morning light, optimistic, grounded, calm, reassuring
+Color palette: deep ink navy #143359, warm cream #FFF8ED, coral #FA7373, quest gold #F09329, leaf green #3D6E4A, sky blue #70A7E8, plum #765BC6
+Constraints: no text, no letters, no numbers, no logos, no buttons, no device frame, no faces, no watermark, no floating UI, no literal floor plan
+Avoid: clutter, photorealism, neon, candy gradients, childish mascots, generic stock vector art, excessive tiny details
+```
+
 ## Daily loop illustration
 
 ```text
