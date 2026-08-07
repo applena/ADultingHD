@@ -6,7 +6,7 @@ it works, how it was set up, and what to do when it breaks.
 ## What it does
 
 A household owner in ADultingHD taps **Settings → Households → Invite
-someone** (or the same step during onboarding). The app creates a
+someone**. The app creates a
 `CKShare` over a root record in the user's private CloudKit container,
 then presents Apple's native `UICloudSharingController` sheet. The
 owner picks one or more contacts by name/email/phone or sends via
@@ -34,7 +34,7 @@ sync cross-device via CloudKit zone subscriptions plus our
 | `ADultingHD/Models/Household.swift` | `Household` value type. `newLocal(...)` for owned, `newJoined(zoneName:ownerUserRecordName:...)` for joined. `HouseholdIndex.currentSchemaVersion = 3` |
 | `ADultingHD/Views/Household/CloudShareSheet.swift` | SwiftUI wrapper around `UICloudSharingController` (iOS) with a simple URL-and-copy fallback for macOS |
 | `ADultingHD/Views/Household/HouseholdListView.swift` | Settings path: "Invite someone" button → presents `CloudShareSheet` |
-| `ADultingHD/Views/Welcome/WelcomeView.swift` | Onboarding path: invite step → presents the same `CloudShareSheet` |
+| `ADultingHD/Views/Welcome/WelcomeView.swift` | First-run setup stays focused on names and task scope; sharing remains in the Household settings surface |
 | `ADultingHD/App/AppDelegate.swift` | Implements `userDidAcceptCloudKitShareWith` on iOS and macOS. Enqueues into `AcceptedShareInbox` so cold-launch invites aren't lost before SwiftUI's `.task` runs. Also defines `ShareAcceptance.activityType` for the warm-launch `onContinueUserActivity` path |
 | `ADultingHD/App/ADultingHDApp.swift` | Drains `AcceptedShareInbox` from `.task` and handles `onContinueUserActivity(ShareAcceptance.activityType)` for warm-launch deliveries |
 

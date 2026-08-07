@@ -116,8 +116,8 @@ than competing calls to action.
 
 ### Onboarding
 
-- Keep the welcome step grounded in a compact, code-native app preview rather
-  than a literal house illustration. Use artwork only when it clarifies a
+- Keep the welcome step focused on one small, achievable household action with
+  a large, text-free illustration. Use artwork only when it clarifies a
   product behavior.
 - Keep the flow to three conceptual beats: motivation, daily loop, tailored
   rooms. Collect names only when they are required for the household model.
@@ -182,9 +182,9 @@ The untouched ImageGen masters and exact prompts live in `docs/design/`. App
 exports are versioned separately under
 `ADultingHD/App/Assets.xcassets/Onboarding/`:
 
-- `Onboarding/WelcomeHeroV1` is preserved as an additive design reference, but
-  the current welcome flow uses a code-native product preview so it does not
-  prescribe a connected-house layout.
+- `Onboarding/WelcomeFocusV1` is the current welcome illustration: one small
+  task leading to visible progress. `Onboarding/WelcomeHeroV1` remains an
+  additive design reference and is not part of the first-run flow.
 - `Onboarding/DailyLoopV1` selects compact iPhone, full iPad, and wide macOS
   crops of the task-to-reward illustration.
 
