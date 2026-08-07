@@ -923,9 +923,13 @@ final class DataStore {
 
     // MARK: - CloudKit Migration & Sync
 
+    /// Scoped to *this* household's own share state, not the device-wide
+    /// `isHouseholdSharingEnabled` flag — that flag stays set once any
+    /// household has ever been shared, so gating on it would force every
+    /// later delete/reset of any other, never-shared household to require
+    /// iCloud connectivity for data that was never actually shared.
     private func householdNeedsCloudKitCleanup(_ household: Household) -> Bool {
-        Features.cloudKitSharing
-            && (isHouseholdSharingEnabled || household.shareRecordName != nil)
+        Features.cloudKitSharing && household.shareRecordName != nil
     }
 
     /// CloudKit cleanup is deliberately completed before local files are
