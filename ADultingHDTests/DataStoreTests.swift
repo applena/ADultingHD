@@ -260,31 +260,74 @@ final class DataStoreTests: XCTestCase {
         XCTAssertEqual(dataStore.completions.count, 1)
     }
 
-    // MARK: - deleteHousehold / CloudKit cleanup gating
+    // MARK: - CloudKit cleanup gating (householdCloudKitCleanupTargets)
+    //
+    // This decision — which households need CloudKit cleanup before local
+    // deletion — has been wrong twice: first gating on the device-wide
+    // `isHouseholdSharingEnabled` flag alone (blocks deleting any OTHER,
+    // never-shared household behind a flag that never clears), then gating
+    // on `household.shareRecordName != nil` alone (silently skips cleanup
+    // for households shared under a pre-this-feature build, which never
+    // persisted that field — stranding a real collaborator). Tested here
+    // directly against the pure function, not through `deleteHousehold`,
+    // because the ambiguous case legitimately calls `ckSync.setup()`, which
+    // traps on an unsigned test build — see `CloudKitIntegrationTests`.
 
-    // `isHouseholdSharingEnabled` is a device-wide flag that, once set by
-    // sharing any household, stays set forever (deleteHousehold doesn't
-    // clear it). Gating CloudKit cleanup on that flag instead of the
-    // household's own `shareRecordName` would force every later delete of
-    // any OTHER, never-shared household to require live iCloud
-    // connectivity — throwing offline even though nothing was ever shared.
-    // ckSync.isAvailable is false throughout this process (`.setup()` is
-    // never called outside CloudKitIntegrationTests), so this only stays
-    // crash-safe on an unsigned test build because the fix keeps the
-    // never-shared path from touching CloudKitSync at all.
-    func testDeleteHouseholdSkipsCloudKitForNeverSharedHouseholdEvenWhenSharingEnabledElsewhere() async throws {
+    func testCloudKitCleanupTargetsAreEmptyWhenSharingWasNeverEnabled() async {
         let dataStore = DataStore()
         await dataStore.createHousehold(name: "First")
         await dataStore.createHousehold(name: "Second")
-        XCTAssertEqual(dataStore.listHouseholds().count, 2)
+        let households = dataStore.listHouseholds()
+        XCTAssertEqual(households.count, 2)
+
+        // No isHouseholdSharingEnabled flag set anywhere: a device that has
+        // never used sharing must never need a network check to delete
+        // anything, regardless of how many households it has.
+        let targets = dataStore.householdCloudKitCleanupTargets(from: households)
+        XCTAssertTrue(targets.confirmed.isEmpty)
+        XCTAssertTrue(targets.ambiguous.isEmpty)
+    }
+
+    func testCloudKitCleanupTargetsFlagsUnbackfilledOwnedHouseholdAsAmbiguousNotSkipped() async throws {
+        let dataStore = DataStore()
+        await dataStore.createHousehold(name: "First")
+        let household = try XCTUnwrap(dataStore.listHouseholds().first)
+        XCTAssertNil(household.shareRecordName)
 
         let defaults = UserDefaults.standard
         defaults.set(true, forKey: PrefKey.householdSharingEnabled)
         defer { defaults.removeObject(forKey: PrefKey.householdSharingEnabled) }
 
-        let target = try XCTUnwrap(dataStore.listHouseholds().first { $0.shareRecordName == nil })
-        try await dataStore.deleteHousehold(target.id)
+        // Builds before this feature never persisted shareRecordName, so
+        // this could be a real legacy share — it must land in `ambiguous`
+        // (resolved with a live check) rather than being silently dropped.
+        let targets = dataStore.householdCloudKitCleanupTargets(from: [household])
+        XCTAssertTrue(targets.confirmed.isEmpty)
+        XCTAssertEqual(targets.ambiguous.map(\.id), [household.id])
+    }
 
-        XCTAssertEqual(dataStore.listHouseholds().count, 1)
+    func testCloudKitCleanupTargetsConfirmsHouseholdWithShareRecordNameWithoutAmbiguity() async throws {
+        let dataStore = DataStore()
+        await dataStore.createHousehold(name: "First")
+        var household = try XCTUnwrap(dataStore.listHouseholds().first)
+        household.shareRecordName = "cloudkit.share.record"
+
+        let targets = dataStore.householdCloudKitCleanupTargets(from: [household])
+        XCTAssertEqual(targets.confirmed.map(\.id), [household.id])
+        XCTAssertTrue(targets.ambiguous.isEmpty)
+    }
+
+    func testCloudKitCleanupTargetsConfirmsJoinedHouseholdWithoutAmbiguity() async {
+        let dataStore = DataStore()
+        // A joined household only exists because it was shared with this
+        // device — cleanup always applies, with no dependence on
+        // shareRecordName or the device-wide sharing flag.
+        let joined = Household.newJoined(
+            name: "Shared", members: [], zoneName: "Household-owner-zone", ownerUserRecordName: "owner"
+        )
+
+        let targets = dataStore.householdCloudKitCleanupTargets(from: [joined])
+        XCTAssertEqual(targets.confirmed.map(\.id), [joined.id])
+        XCTAssertTrue(targets.ambiguous.isEmpty)
     }
 }

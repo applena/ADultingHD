@@ -175,6 +175,24 @@ final class CloudKitSync: ObservableObject {
         }
     }
 
+    /// Read-only check for whether an owned household already has a live
+    /// CKShare, without creating one. `createOrFetchShare` can't be reused
+    /// for this — its first-time-setup path creates the zone/root/share on
+    /// demand, which would silently start sharing a household that was
+    /// never actually shared. Needed because builds before this feature
+    /// never persisted `Household.shareRecordName`, so an owned household
+    /// shared under an older build can still show it as `nil`.
+    func hasExistingShare(for household: Household) async throws -> Bool {
+        guard isAvailable else {
+            throw CloudKitSyncError.iCloudUnavailable(status: syncError ?? "unknown")
+        }
+        guard household.ownerIsCurrentUser else { return false }
+        let zones = try await privateDB.allRecordZones()
+        guard zones.contains(where: { $0.zoneID.zoneName == household.zoneName }) else { return false }
+        guard let root = try? await privateDB.record(for: rootRecordID(for: household)) else { return false }
+        return root.share != nil
+    }
+
     // MARK: - Push (local → CloudKit)
 
     func pushTasks(_ tasks: [HouseholdTask], household: Household) async {

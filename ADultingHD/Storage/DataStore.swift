@@ -923,13 +923,37 @@ final class DataStore {
 
     // MARK: - CloudKit Migration & Sync
 
-    /// Scoped to *this* household's own share state, not the device-wide
-    /// `isHouseholdSharingEnabled` flag — that flag stays set once any
-    /// household has ever been shared, so gating on it would force every
-    /// later delete/reset of any other, never-shared household to require
-    /// iCloud connectivity for data that was never actually shared.
-    private func householdNeedsCloudKitCleanup(_ household: Household) -> Bool {
-        Features.cloudKitSharing && household.shareRecordName != nil
+    /// Households needing CloudKit cleanup before local deletion, split into
+    /// two groups because `shareRecordName` alone isn't a reliable signal:
+    /// builds before this feature never persisted it, so an owned household
+    /// actually shared under an older build can still read `nil` here.
+    /// - `confirmed`: known to need cleanup without a network round-trip —
+    ///   `shareRecordName` is set, or the household is joined (a joined
+    ///   household only exists because it was shared; the participant-leave
+    ///   path re-derives the share directly from the zone, not this field).
+    /// - `ambiguous`: an owned household with no `shareRecordName` but where
+    ///   `isHouseholdSharingEnabled` shows sharing was used on this device at
+    ///   some point — resolved with a read-only CloudKit check rather than
+    ///   assumed either way, so a legacy share isn't silently left stranded.
+    /// A device that has never enabled sharing produces neither group for
+    /// any household, so purely local deletion never requires iCloud.
+    /// Internal (not `private`) so `DataStoreTests` can pin this decision
+    /// logic directly — it's already been wrong twice (over-broad on the
+    /// device flag, then blind to unbackfilled legacy shares) and doesn't
+    /// touch CloudKit itself, so it's worth testing without needing a live
+    /// `ckSync.setup()` call, which traps on an unsigned test build.
+    func householdCloudKitCleanupTargets(from households: [Household]) -> (confirmed: [Household], ambiguous: [Household]) {
+        guard Features.cloudKitSharing else { return ([], []) }
+        var confirmed: [Household] = []
+        var ambiguous: [Household] = []
+        for household in households {
+            if household.shareRecordName != nil || !household.ownerIsCurrentUser {
+                confirmed.append(household)
+            } else if isHouseholdSharingEnabled {
+                ambiguous.append(household)
+            }
+        }
+        return (confirmed, ambiguous)
     }
 
     /// CloudKit cleanup is deliberately completed before local files are
@@ -937,15 +961,19 @@ final class DataStore {
     /// leave it), retaining the local row is safer than stranding access on a
     /// server-side household with no local handle.
     private func removeCloudKitDataBeforeLocalDeletion(from households: [Household]) async throws {
-        let targets = households.filter(householdNeedsCloudKitCleanup)
-        guard !targets.isEmpty else { return }
+        let (confirmed, ambiguous) = householdCloudKitCleanupTargets(from: households)
+        guard !confirmed.isEmpty || !ambiguous.isEmpty else { return }
 
         await ckSync.setup()
         guard ckSync.isAvailable else {
             throw CloudKitSyncError.iCloudUnavailable(status: ckSync.syncError ?? "unknown")
         }
 
-        for household in targets {
+        for household in confirmed {
+            try await ckSync.removeHouseholdCloudData(for: household)
+        }
+        for household in ambiguous {
+            guard try await ckSync.hasExistingShare(for: household) else { continue }
             try await ckSync.removeHouseholdCloudData(for: household)
         }
     }
