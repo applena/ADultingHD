@@ -29,7 +29,7 @@ sync cross-device via CloudKit zone subscriptions plus our
 | File | Role |
 |---|---|
 | `ADultingHD/App/Features.swift` | `Features.cloudKitSharing` compile-time flag that gates every CloudKit code path. Never call `CKContainer(identifier:)` when this is off — the init traps if the container entitlement isn't in the signed profile |
-| `ADultingHD/Storage/CloudKitSync.swift` | `CloudKitSync` singleton: per-household zone+database routing, record push/pull, `createOrFetchShare(for:)` that saves the root + CKShare atomically, and `removeHouseholdCloudData(for:)` for owner revocation or participant leave. `acceptShare(from:)` returns `AcceptedShareInfo` including the share record name |
+| `ADultingHD/Storage/CloudKitSync.swift` | `CloudKitSync` singleton: per-household zone+database routing, record push/pull, `createOrFetchShare(for:)` that saves the root + CKShare atomically, and `removeHouseholdCloudData(for:)` for owner revocation or participant leave. `hasExistingShare(for:)` is a read-only check (no zone/root/share creation) for households whose `shareRecordName` predates this feature. `acceptShare(from:)` returns `AcceptedShareInfo` including the share record name |
 | `ADultingHD/Storage/DataStore.swift` | `prepareHouseholdShare()` — the entry point the invite UI calls. Runs `setup()`, creates the share, returns `(CKShare, CKContainer)` to the UI, and kicks off the one-shot data migration in a background Task. `registerJoinedHousehold(from:)` inserts a new `ownerIsCurrentUser=false` Household row and switches active to it |
 | `ADultingHD/Models/Household.swift` | `Household` value type. `newLocal(...)` for owned, `newJoined(zoneName:ownerUserRecordName:...)` for joined. `HouseholdIndex.currentSchemaVersion = 3` |
 | `ADultingHD/Views/Household/CloudShareSheet.swift` | SwiftUI wrapper around `UICloudSharingController` (iOS) with a simple URL-and-copy fallback for macOS |
@@ -53,6 +53,19 @@ is cancelled so an invited person cannot remain attached to server data that
 the owner can no longer manage locally. Accounts that reset on an older build
 are detected during onboarding invite preparation; their legacy zone is
 revoked before a new share is created.
+
+`Household.shareRecordName` wasn't persisted by builds before this cleanup
+existed, so `DataStore.householdCloudKitCleanupTargets(from:)` can't trust a
+`nil` value to mean "never shared." It splits households into `confirmed`
+(shareRecordName is set, or the household is joined — a joined household only
+exists because it was shared) and `ambiguous` (an owned household with no
+shareRecordName, but sharing was used on this device at some point). Only
+`confirmed` and `ambiguous` households ever require `ckSync.setup()`;
+`ambiguous` ones are resolved with a read-only `CloudKitSync.hasExistingShare`
+check rather than assumed either way, so a share created under an older build
+isn't silently left stranded. A device that has never enabled sharing produces
+neither group, so deleting or resetting on such a device never touches
+CloudKit.
 
 ## Invite flow (owner side)
 
