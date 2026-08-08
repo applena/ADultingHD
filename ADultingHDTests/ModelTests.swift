@@ -194,6 +194,29 @@ final class ModelTests: XCTestCase {
         }
     }
 
+    func testOnboardingRecommendationsAreFocusedAndScopedToSelectedRooms() {
+        let recommendations = onboardingRecommendedCatalogTasks(for: onboardingStarterCategories)
+
+        XCTAssertFalse(recommendations.isEmpty)
+        XCTAssertTrue(recommendations.allSatisfy { onboardingStarterCategories.contains($0.category) })
+        XCTAssertEqual(recommendations.count, Set(recommendations.map(\.name)).count)
+
+        for category in onboardingStarterCategories {
+            XCTAssertLessThanOrEqual(recommendations.filter { $0.category == category }.count, 3)
+        }
+
+        XCTAssertEqual(recommendations.first?.name, "Wash dishes")
+        XCTAssertTrue(recommendations.contains { $0.name == "Take out trash and recycling" })
+    }
+
+    func testStarterAvatarsAreFreeAndHaveImages() {
+        let starterIDs = ["raccoon", "turtle", "otter", "capybara"]
+        let starters = starterIDs.compactMap(avatarItem(byId:))
+
+        XCTAssertEqual(starters.count, starterIDs.count)
+        XCTAssertTrue(starters.allSatisfy { $0.cost == 0 && $0.imageName != nil })
+    }
+
     // MARK: - Difficulty
 
     func testDifficultyComparable() {

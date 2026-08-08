@@ -130,9 +130,14 @@ struct StatsView: View {
                 .foregroundStyle(isSuperstar ? Theme.xpGold : .secondary)
                 .frame(width: 20)
 
-            Image(systemName: entry.profile.avatar)
-                .font(.title3)
-                .foregroundStyle(entry.profile.id == dataStore.profile.id ? Theme.levelPurple : .secondary)
+            CompactAvatarView(avatarState: entry.profile.avatarState, size: 36)
+                .overlay {
+                    Circle()
+                        .stroke(
+                            entry.profile.id == dataStore.profile.id ? Theme.levelPurple : .clear,
+                            lineWidth: 2
+                        )
+                }
 
             HStack(spacing: 4) {
                 Text(entry.profile.name)

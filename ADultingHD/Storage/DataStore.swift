@@ -595,16 +595,12 @@ final class DataStore {
         await updateTask(updated)
     }
 
-    /// Seed the starter catalog for the categories the user picked during
-    /// onboarding's "Pick Your Rooms" step. Households otherwise start with
-    /// no tasks — onboarding is the only place the built-in catalog is
-    /// offered, so a user can see exactly how a task lands on their
-    /// homescreen. The user can always add more from the catalog later.
-    func seedOnboardingTasks(categories allowed: Set<TaskCategory>) async {
-        guard !allowed.isEmpty else { return }
-        tasks = defaultHouseholdTasks
-            .filter { allowed.contains($0.category) }
-            .map { $0.withDefaultSchedule() }
+    /// Seed the selected recommendations from onboarding. Households otherwise
+    /// start with no tasks — onboarding is the first place the built-in catalog
+    /// is offered, so a user can see exactly how a task lands on their home.
+    func seedOnboardingTasks(recommendedTasks: [CatalogTask]) async {
+        guard !recommendedTasks.isEmpty else { return }
+        tasks = recommendedTasks.map { $0.toHouseholdTask() }
         for task in tasks { syncReminder(for: task) }
         await store.saveTasks(tasks, for: activeHouseholdId)
     }
@@ -614,6 +610,13 @@ final class DataStore {
     func purchaseAvatarItem(_ item: AvatarItem) async {
         guard profile.coins >= item.cost else { return }
         profile.coins -= item.cost
+        profile.avatarState.purchase(item)
+        profile.avatarState.equip(item)
+        await store.saveProfile(profile)
+    }
+
+    func selectStarterAvatar(id: String) async {
+        guard let item = avatarItem(byId: id), item.cost == 0 else { return }
         profile.avatarState.purchase(item)
         profile.avatarState.equip(item)
         await store.saveProfile(profile)
@@ -1109,6 +1112,7 @@ final class DataStore {
             if member.level > prevLevel {
                 newActivities.append(HouseholdActivity(
                     profileId: member.id, profileName: member.name, avatar: member.avatar,
+                    avatarState: member.avatarState,
                     event: .leveledUp(level: member.level), timestamp: Date()
                 ))
             }
@@ -1119,6 +1123,7 @@ final class DataStore {
                 let name = allAchievements.first { $0.id == achievId }?.name ?? achievId
                 newActivities.append(HouseholdActivity(
                     profileId: member.id, profileName: member.name, avatar: member.avatar,
+                    avatarState: member.avatarState,
                     event: .achievementUnlocked(name: name), timestamp: Date()
                 ))
             }
@@ -1130,6 +1135,7 @@ final class DataStore {
             for c in memberCompletions.prefix(5) {
                 newActivities.append(HouseholdActivity(
                     profileId: member.id, profileName: member.name, avatar: member.avatar,
+                    avatarState: member.avatarState,
                     event: .completedTask(name: c.taskName, xp: c.xpEarned), timestamp: c.completedAt
                 ))
             }
@@ -1145,6 +1151,7 @@ final class DataStore {
             for passer in passers.prefix(1) {
                 newActivities.append(HouseholdActivity(
                     profileId: passer.id, profileName: passer.name, avatar: passer.avatar,
+                    avatarState: passer.avatarState,
                     event: .passedYou(newRank: post), timestamp: Date()
                 ))
             }

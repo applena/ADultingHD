@@ -119,8 +119,10 @@ than competing calls to action.
 - Keep the welcome step focused on one small, achievable household action with
   a large, text-free illustration. Use artwork only when it clarifies a
   product behavior.
-- Keep the flow to three conceptual beats: motivation, daily loop, tailored
-  rooms. Collect names only when they are required for the household model.
+- Keep the flow to three conceptual beats: motivation, daily loop, and a
+  tailored starter list. Supporting setup screens may collect the household
+  name, companion, room scope, and explicit quest choices, but every screen
+  should move the user toward a useful first list.
 - Keep the daily-loop illustration supportive and onboarding-only; it should not
   define how a person's real home is laid out.
 - Keep Pro disclosure honest and skippable; it should not interrupt the core
@@ -180,13 +182,16 @@ than competing calls to action.
 
 The untouched ImageGen masters and exact prompts live in `docs/design/`. App
 exports are versioned separately under
-`ADultingHD/App/Assets.xcassets/Onboarding/`:
+`ADultingHD/App/Assets.xcassets/`:
 
 - `Onboarding/WelcomeFocusV1` is the current welcome illustration: one small
   task leading to visible progress. `Onboarding/WelcomeHeroV1` remains an
   additive design reference and is not part of the first-run flow.
 - `Onboarding/DailyLoopV1` selects compact iPhone, full iPad, and wide macOS
   crops of the task-to-reward illustration.
+- `Avatars/raccoon`, `Avatars/turtle`, `Avatars/otter`, and `Avatars/capybara`
+  are free starter companions; the avatar name and selection state remain
+  SwiftUI copy and accessibility state rather than raster text.
 
 The artwork contains no UI copy. SwiftUI supplies localizable text, adaptive
 layout, semantic progress, and concise VoiceOver descriptions around it.

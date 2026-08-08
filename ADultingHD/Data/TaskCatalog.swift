@@ -26,6 +26,37 @@ struct CatalogTask: Identifiable {
     }
 }
 
+/// The small, approachable set of rooms used to shape a first-run task list.
+/// Users can expand this during onboarding or from the full catalog later.
+let onboardingStarterCategories: Set<TaskCategory> = [.kitchen, .bathroom, .general]
+
+private let onboardingRecommendationNames: [TaskCategory: [String]] = [
+    .kitchen: ["Wash dishes", "Wipe kitchen counters", "Scrub the kitchen sink"],
+    .bathroom: ["Wipe bathroom sink and mirror", "Scrub the toilet", "Swap out bathroom towels"],
+    .bedroom: ["Make the bed", "Change bed sheets", "Dust bedroom surfaces"],
+    .livingRoom: ["Tidy up living room", "Vacuum living room floor", "Dust shelves and surfaces"],
+    .laundry: ["Do a load of laundry", "Fold and put away clean laundry", "Wash towels and linens"],
+    .general: ["Take out trash and recycling", "Wipe light switches and door handles", "Clean entry area and front door"],
+]
+
+/// Returns a deterministic, intentionally small recommendation set for the
+/// onboarding picker. Empty catalog categories are omitted so a new user never
+/// selects a room and lands on an empty task list.
+func onboardingRecommendedCatalogTasks(for categories: Set<TaskCategory>) -> [CatalogTask] {
+    TaskCategory.allCases
+        .filter { categories.contains($0) }
+        .flatMap { category in
+            let preferredNames = onboardingRecommendationNames[category] ?? []
+            let preferred = preferredNames.compactMap { preferredName in
+                taskCatalog.first { $0.category == category && $0.name == preferredName }
+            }
+            let fallback = taskCatalog.filter {
+                $0.category == category && !preferredNames.contains($0.name)
+            }
+            return Array((preferred + fallback).prefix(3))
+        }
+}
+
 // ~50 cleaning and maintenance tasks for someone renting their first place.
 
 let taskCatalog: [CatalogTask] = [

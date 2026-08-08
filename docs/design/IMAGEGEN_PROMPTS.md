@@ -104,3 +104,25 @@ Color palette: ink navy #1F2A44, warm cream #FFF8ED, coral #F46F61, quest gold #
 Constraints: no text, no numbers, no letters, no logos, no interface chrome, no device mockup, no watermark
 Avoid: people’s faces, childish mascots, photorealism, generic stock icons, disconnected clip art, clutter
 ```
+
+## Starter avatars v1
+
+These four additive assets are used as free starter companions during onboarding
+and remain available in the avatar shop. They intentionally contain no UI copy;
+SwiftUI owns the names, selection state, and accessibility labels.
+
+Shared direction: square 1:1 character asset, cozy domestic-adventure iOS app,
+full-body friendly animal mascot, warm cream-white background, soft peach ground
+shadow, confident dark ink outline, tactile 2D editorial illustration, mature
+playful tone, warm coral and gold accents, simple flat shading, centered with
+generous safe margins, no text, no letters, no logo, no watermark, no UI.
+
+```text
+An adorable full-body raccoon companion for a cozy domestic-adventure iOS app, wearing a tiny coral utility apron and holding a folded cleaning cloth, bright curious expression, warm cream-white background, soft peach ground shadow, confident dark ink outline, tactile 2D editorial illustration, mature playful tone, warm coral and gold accents, simple flat shading, centered with generous safe margins, no text, no letters, no logo, no watermark, no UI.
+
+An adorable full-body turtle companion for a cozy domestic-adventure iOS app, carrying a tiny stack of neatly folded towels on its shell, calm proud expression, warm cream-white background, soft peach ground shadow, confident dark ink outline, tactile 2D editorial illustration, mature playful tone, warm sage and gold accents, simple flat shading, centered with generous safe margins, no text, no letters, no logo, no watermark, no UI.
+
+An adorable full-body otter companion for a cozy domestic-adventure iOS app, holding a small sparkling dish brush, cheerful helpful expression, warm cream-white background, soft peach ground shadow, confident dark ink outline, tactile 2D editorial illustration, mature playful tone, warm sky and coral accents, simple flat shading, centered with generous safe margins, no text, no letters, no logo, no watermark, no UI.
+
+An adorable full-body capybara companion for a cozy domestic-adventure iOS app, wearing a tiny soft-yellow bandana and holding a little houseplant, relaxed encouraging expression, warm cream-white background, soft peach ground shadow, confident dark ink outline, tactile 2D editorial illustration, mature playful tone, warm gold and leaf-green accents, simple flat shading, centered with generous safe margins, no text, no letters, no logo, no watermark, no UI.
+```

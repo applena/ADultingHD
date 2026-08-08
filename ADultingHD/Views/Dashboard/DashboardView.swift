@@ -305,17 +305,27 @@ struct DashboardView: View {
 
     private var emptyTasksContent: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Add your first task and it'll show up here whenever it's due.")
+            Text("Start with a few recommended quests, or make one that fits your home exactly.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+
+            NavigationLink {
+                TaskListView(initialTab: .allTasks)
+            } label: {
+                Label("Choose starter quests", systemImage: "sparkles")
+                    .adventurePrimaryAction()
+            }
+            .buttonStyle(.plain)
 
             Button {
                 if canCreateCustomTask { showAddTask = true }
                 else { showProUpgrade = true }
             } label: {
-                Label("Add A Task", systemImage: "plus")
-                    .adventurePrimaryAction()
+                Label("Create a custom task", systemImage: "plus")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Theme.accent)
+                    .frame(maxWidth: .infinity, minHeight: 44)
             }
             .buttonStyle(.plain)
         }
@@ -330,6 +340,14 @@ struct DashboardView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+            NavigationLink {
+                TaskListView(initialTab: .allTasks)
+            } label: {
+                Text("Explore more quests")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Theme.accent)
+                    .frame(minHeight: 44, alignment: .leading)
+            }
         }
     }
 

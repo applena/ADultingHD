@@ -5,7 +5,10 @@ struct AvatarShopView: View {
     @Environment(StoreManager.self) private var storeManager
     @State private var selectedFamily: String? = nil
 
-    private let families = ["cat", "dog", "bunny", "bear", "fox", "panda", "unicorn", "dragon"]
+    private let families = [
+        "person", "raccoon", "turtle", "otter", "capybara",
+        "cat", "dog", "bunny", "bear", "fox", "panda", "unicorn", "dragon",
+    ]
 
     private var coins: Int { dataStore.profile.coins }
     private var state: AvatarState { dataStore.profile.avatarState }
@@ -215,6 +218,10 @@ private struct ShopItemCard: View {
                     Text("Lvl \(item.unlockLevel)")
                         .font(.caption2)
                         .foregroundStyle(.orange)
+                } else if item.cost == 0 {
+                    Text("Free")
+                        .font(.caption2.bold())
+                        .foregroundStyle(Theme.successGreen)
                 } else {
                     HStack(spacing: 2) {
                         Image(systemName: "dollarsign.circle.fill")

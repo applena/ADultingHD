@@ -220,8 +220,14 @@ struct ProfileView: View {
 
                 ForEach(dataStore.leaderboard.prefix(3)) { member in
                     HStack {
-                        Image(systemName: member.avatar)
-                            .foregroundStyle(member.id == dataStore.profile.id ? Theme.levelPurple : .secondary)
+                        CompactAvatarView(avatarState: member.avatarState, size: 28)
+                            .overlay {
+                                Circle()
+                                    .stroke(
+                                        member.id == dataStore.profile.id ? Theme.levelPurple : .clear,
+                                        lineWidth: 1.5
+                                    )
+                            }
                         Text(member.name)
                             .font(.subheadline)
                         Spacer()

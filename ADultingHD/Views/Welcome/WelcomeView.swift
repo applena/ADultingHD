@@ -5,15 +5,20 @@ struct WelcomeView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
     @State private var currentPageIndex = 0
-    @State private var selectedCategories = Set(WelcomeView.onboardingCategories)
+    @State private var selectedCategories = onboardingStarterCategories
+    @State private var selectedTaskNames: Set<String> = []
+    @State private var recommendedTasks: [CatalogTask] = []
+    @State private var recommendedTaskGroups: [(category: TaskCategory, tasks: [CatalogTask])] = []
+    @State private var selectedAvatarID = "person"
     @State private var isSavingSetup = false
     @AppStorage(PrefKey.onboardingHouseholdName) private var householdName = "My Household"
     @AppStorage(PrefKey.onboardingPlayerName) private var playerName = ""
 
     /// Keep first-run choices focused; the full task catalog remains available
-    /// when people add tasks after onboarding.
+    /// when people add tasks after onboarding. Every room here has a curated
+    /// recommendation set, so picking one never lands on an empty quest list.
     private static let onboardingCategories: [TaskCategory] = [
-        .kitchen, .bathroom, .livingRoom, .laundry,
+        .kitchen, .bathroom, .livingRoom, .laundry, .general,
     ]
 
     let onComplete: () -> Void
@@ -41,7 +46,7 @@ struct WelcomeView: View {
             switch self {
             case .welcome: "One next task at a time."
             case .dailyLoop: "Choose one task. Finish it. Feel the win."
-            case .setup: "Add your name. Pick your rooms."
+            case .setup: "Add your name, pick a companion, keep a few starter quests."
             }
         }
 
@@ -210,25 +215,36 @@ struct WelcomeView: View {
     }
 
     private var setupContent: some View {
-        VStack(alignment: .leading, spacing: 20) {
+        VStack(alignment: .leading, spacing: 22) {
             VStack(spacing: 10) {
                 setupField("Your name", icon: "person.fill", text: $playerName)
                 setupField("Household name", icon: "house.fill", text: $householdName)
             }
 
-            HStack(alignment: .firstTextBaseline) {
-                Text("Rooms")
-                    .font(.headline)
-                Spacer(minLength: 8)
-                Text("\(selectedCategories.count) selected")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.secondary)
+            companionPicker
+
+            VStack(alignment: .leading, spacing: 12) {
+                sectionHeader("Rooms", detail: "\(selectedCategories.count) selected")
+                roomPicker
             }
 
-            roomPicker
+            starterQuestPicker
         }
         .padding(.bottom, Theme.controlHeight + 24)
-        .onAppear(perform: prepareDefaults)
+        .onChange(of: selectedCategories) { previous, _ in
+            refreshRecommendations(previousCategories: previous)
+        }
+    }
+
+    private func sectionHeader(_ title: String, detail: String) -> some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text(title)
+                .font(.headline)
+            Spacer(minLength: 8)
+            Text(detail)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.secondary)
+        }
     }
 
     private func setupField(_ label: String, icon: String, text: Binding<String>) -> some View {
@@ -260,6 +276,67 @@ struct WelcomeView: View {
                 .strokeBorder(Theme.adventureBlue.opacity(0.16))
         }
     }
+
+    // MARK: - Companion
+
+    private static let starterAvatarItems: [AvatarItem] = avatarShopItems.filter { $0.cost == 0 }
+
+    /// Each tile renders one item in isolation, so the throwaway states these
+    /// need are identical on every pass — build them once.
+    private static let starterAvatarPreviews: [String: AvatarState] = Dictionary(
+        uniqueKeysWithValues: WelcomeView.starterAvatarItems.map { item in
+            var state = AvatarState()
+            state.purchase(item)
+            state.equip(item)
+            return (item.id, state)
+        }
+    )
+
+    private var companionPicker: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            sectionHeader("Companion", detail: "Change anytime")
+
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 82), spacing: 8)], spacing: 8) {
+                ForEach(Self.starterAvatarItems) { item in
+                    let selected = selectedAvatarID == item.id
+                    Button {
+                        selectedAvatarID = item.id
+                    } label: {
+                        VStack(spacing: 5) {
+                            ZStack(alignment: .topTrailing) {
+                                AvatarView(avatarState: Self.starterAvatarPreviews[item.id] ?? AvatarState(), size: 58)
+                                if selected {
+                                    Image(systemName: "checkmark.circle.fill")
+                                        .font(.caption)
+                                        .foregroundStyle(Theme.successGreen)
+                                        .background(.background, in: Circle())
+                                }
+                            }
+                            Text(item.name)
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.primary)
+                        }
+                        .frame(maxWidth: .infinity, minHeight: 86)
+                        .padding(.vertical, 6)
+                        .background(
+                            selected ? Theme.successGreen.opacity(0.12) : Color.secondary.opacity(0.06),
+                            in: RoundedRectangle(cornerRadius: Theme.chipCornerRadius)
+                        )
+                        .overlay {
+                            RoundedRectangle(cornerRadius: Theme.chipCornerRadius)
+                                .strokeBorder(selected ? Theme.successGreen : .clear, lineWidth: 1.5)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(item.name)
+                    .accessibilityValue(selected ? "Selected" : "Not selected")
+                    .accessibilityAddTraits(selected ? .isSelected : [])
+                }
+            }
+        }
+    }
+
+    // MARK: - Rooms
 
     private var roomPicker: some View {
         LazyVGrid(columns: [GridItem(.adaptive(minimum: 104), spacing: 10)], spacing: 10) {
@@ -325,6 +402,128 @@ struct WelcomeView: View {
         }
     }
 
+    // MARK: - Starter quests
+
+    private var selectedRecommendedTasks: [CatalogTask] {
+        recommendedTasks.filter { selectedTaskNames.contains($0.name) }
+    }
+
+    private var selectedQuestMinutes: Int {
+        recommendedTasks.reduce(0) { selectedTaskNames.contains($1.name) ? $0 + $1.estimatedMinutes : $0 }
+    }
+
+    private var starterQuestPicker: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            sectionHeader(
+                "Starter quests",
+                detail: "\(selectedTaskNames.count) selected · \(selectedQuestMinutes) min"
+            )
+
+            if recommendedTasks.isEmpty {
+                Text("Pick at least one room to see suggested quests.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                HStack(spacing: 16) {
+                    Button("Select all") {
+                        selectedTaskNames = Set(recommendedTasks.map(\.name))
+                    }
+                    Button("Clear all") {
+                        selectedTaskNames.removeAll()
+                    }
+                    .foregroundStyle(.secondary)
+                    Spacer(minLength: 0)
+                }
+                .font(.caption.weight(.semibold))
+                .frame(minHeight: 44)
+
+                ForEach(recommendedTaskGroups, id: \.category) { group in
+                    VStack(alignment: .leading, spacing: 8) {
+                        Label(group.category.rawValue, systemImage: group.category.icon)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(Theme.categoryColor(group.category))
+
+                        ForEach(group.tasks) { task in
+                            questRow(task)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func questRow(_ task: CatalogTask) -> some View {
+        let selected = selectedTaskNames.contains(task.name)
+        return Button {
+            if selected {
+                selectedTaskNames.remove(task.name)
+            } else {
+                selectedTaskNames.insert(task.name)
+            }
+        } label: {
+            HStack(alignment: .top, spacing: 10) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(task.name)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.primary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text(task.description)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    TaskMetadataRow(
+                        frequency: task.suggestedFrequency,
+                        difficulty: task.difficulty,
+                        estimatedMinutes: task.estimatedMinutes
+                    )
+                }
+                Spacer(minLength: 4)
+                Image(systemName: selected ? "checkmark.circle.fill" : "circle")
+                    .font(.title3)
+                    .foregroundStyle(selected ? Theme.successGreen : .secondary)
+                    .accessibilityHidden(true)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(11)
+            .background(
+                selected ? Theme.successGreen.opacity(0.10) : Color.secondary.opacity(0.06),
+                in: RoundedRectangle(cornerRadius: Theme.chipCornerRadius)
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: Theme.chipCornerRadius)
+                    .strokeBorder(selected ? Theme.successGreen.opacity(0.55) : .clear, lineWidth: 1)
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(task.name). \(task.description)")
+        .accessibilityValue(selected ? "Selected" : "Not selected")
+        .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+
+    /// Recomputes the cached recommendations for the current rooms and keeps the
+    /// quest selection in step with them: rooms added since the last refresh
+    /// contribute their top two suggestions, and quests whose room was removed
+    /// drop out. Caching here rather than deriving in `body` keeps the catalog
+    /// scan off the per-keystroke render path of the name fields.
+    private func refreshRecommendations(previousCategories: Set<TaskCategory>) {
+        let tasks = onboardingRecommendedCatalogTasks(for: selectedCategories)
+        recommendedTasks = tasks
+        recommendedTaskGroups = Dictionary(grouping: tasks, by: \.category)
+            .sorted { $0.key.rawValue < $1.key.rawValue }
+            .map { (category: $0.key, tasks: $0.value) }
+
+        let addedCategories = selectedCategories.subtracting(previousCategories)
+        selectedTaskNames.formUnion(
+            Dictionary(grouping: tasks.filter { addedCategories.contains($0.category) }, by: \.category)
+                .values
+                .flatMap { $0.prefix(2).map(\.name) }
+        )
+        selectedTaskNames.formIntersection(Set(tasks.map(\.name)))
+    }
+
+    // MARK: - Actions
+
     private var onboardingActions: some View {
         Button(action: handlePrimaryAction) {
             Group {
@@ -365,13 +564,19 @@ struct WelcomeView: View {
             || playerName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             || householdName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             || selectedCategories.isEmpty
+            || selectedTaskNames.isEmpty
     }
 
+    /// Runs once when onboarding appears — not per page, so returning to the
+    /// setup page via Back does not discard choices made there.
     private func prepareDefaults() {
-        guard playerName.isEmpty else { return }
-        let suggested = UserProfile.defaultPlayerName()
-        let current = dataStore.profile.name
-        playerName = !current.isEmpty && current != "Player 1" ? current : suggested
+        if playerName.isEmpty {
+            let suggested = UserProfile.defaultPlayerName()
+            let current = dataStore.profile.name
+            playerName = !current.isEmpty && current != "Player 1" ? current : suggested
+        }
+        selectedAvatarID = dataStore.profile.avatarState.equipped(slot: .character) ?? "person"
+        refreshRecommendations(previousCategories: [])
     }
 
     private func handlePrimaryAction() {
@@ -388,12 +593,17 @@ struct WelcomeView: View {
 
         let enteredHousehold = householdName.trimmingCharacters(in: .whitespacesAndNewlines)
         let enteredPlayer = playerName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let starterTasks = selectedRecommendedTasks
+        let avatarID = selectedAvatarID
         isSavingSetup = true
 
         Task { @MainActor in
+            // Equip first: renameActiveProfile's save snapshots the profile into
+            // the household member list, which the leaderboards render.
+            await dataStore.selectStarterAvatar(id: avatarID)
             await dataStore.renameActiveProfile(to: enteredPlayer)
             await dataStore.renameHousehold(dataStore.activeHouseholdId, to: enteredHousehold)
-            await dataStore.seedOnboardingTasks(categories: selectedCategories)
+            await dataStore.seedOnboardingTasks(recommendedTasks: starterTasks)
             isSavingSetup = false
             onComplete()
         }

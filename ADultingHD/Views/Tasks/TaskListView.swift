@@ -21,7 +21,8 @@ struct TaskListView: View {
     @State private var showAddCustom = false
     @State private var showProUpgrade = false
 
-    init(initialCategory: TaskCategory? = nil) {
+    init(initialTab: TaskTab = .myTasks, initialCategory: TaskCategory? = nil) {
+        _selectedTab = State(initialValue: initialTab)
         _selectedCategory = State(initialValue: initialCategory)
     }
 
@@ -104,10 +105,10 @@ struct TaskListView: View {
         let isCatalog = selectedTab == .allTasks
         return LandingHeader(
             eyebrow: isCatalog ? "Task catalog" : dataStore.activeHousehold.name,
-            title: isCatalog ? "Add work that matches your home" : "Your active task list",
+            title: isCatalog ? "Add work that matches your home" : "Your quest log",
             subtitle: isCatalog
                 ? "\(taskCatalog.count) ready-made tasks plus custom chores when the catalog is not specific enough."
-                : "\(dataStore.activeTasks.count) active tasks, \(dataStore.dueTasks.count) due now, \(dataStore.customTaskCount) custom.",
+                : "\(dataStore.activeTasks.count) active · \(dataStore.tasks.count - dataStore.activeTasks.count) paused · \(dataStore.dueTasks.count) due now.",
             icon: isCatalog ? "square.grid.2x2.fill" : "checklist",
             color: isCatalog ? Theme.levelPurple : Theme.accent
         )
@@ -158,9 +159,7 @@ struct TaskListView: View {
                 let dueCount = tasks.filter { $0.isDue && $0.isActive }.count
                 Section {
                     ForEach(tasks) { task in
-                        NavigationLink(value: TaskNavDestination.detail(task)) {
-                            TaskRow(task: task)
-                        }
+                        TaskRow(task: task)
                     }
                 } header: {
                     HStack(spacing: 6) {
@@ -333,46 +332,63 @@ struct TaskRow: View {
 
     var body: some View {
         let status = task.dueStatus()
-        HStack(spacing: 12) {
-            Image(systemName: task.isActive ? "checkmark.circle.fill" : "circle")
-                .foregroundStyle(task.isActive ? Theme.successGreen : .gray)
-                .imageScale(.large)
-                .onTapGesture {
-                    Task { await dataStore.toggleTask(task) }
-                }
-
-            VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 6) {
-                    Text(task.name)
-                        .font(.body.weight(.medium))
-                        .strikethrough(!task.isActive, color: .secondary)
-                    if status.isDue && task.isActive {
-                        Circle()
-                            .fill(status.isOverdue ? Theme.overdueRed : Theme.streakOrange)
-                            .frame(width: 7, height: 7)
-                    }
-                }
-
-                HStack(spacing: 8) {
-                    Text(task.frequency.rawValue)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Text("\(task.estimatedMinutes)m")
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
-                    if task.isActive, status.isOverdue {
-                        Text("\(status.daysOverdue)d overdue")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(Theme.overdueRed)
-                    }
-                }
+        HStack(spacing: 8) {
+            Button {
+                Task { await dataStore.toggleTask(task) }
+            } label: {
+                Image(systemName: task.isActive ? "checkmark.circle.fill" : "pause.circle")
+                    .font(.title3)
+                    .foregroundStyle(task.isActive ? Theme.successGreen : .secondary)
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
+            .accessibilityLabel(task.isActive ? "Pause \(task.name)" : "Restore \(task.name)")
+            .accessibilityValue(task.isActive ? "Active" : "Paused")
 
-            Spacer()
+            NavigationLink(value: TaskNavDestination.detail(task)) {
+                HStack(spacing: 10) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        HStack(spacing: 6) {
+                            Text(task.name)
+                                .font(.body.weight(.medium))
+                                .foregroundStyle(task.isActive ? .primary : .secondary)
+                                .strikethrough(!task.isActive, color: .secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                            if status.isDue && task.isActive {
+                                Image(systemName: status.isOverdue ? "exclamationmark.circle.fill" : "clock.fill")
+                                    .font(.caption2)
+                                    .foregroundStyle(status.isOverdue ? Theme.overdueRed : Theme.streakOrange)
+                                    .accessibilityHidden(true)
+                            }
+                        }
 
-            Text("+\(task.xpReward) XP")
-                .font(.caption)
-                .foregroundStyle(Theme.xpGold.opacity(0.8))
+                        HStack(spacing: 8) {
+                            Text(task.isActive ? task.frequency.rawValue : "Paused")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Text("\(task.estimatedMinutes)m")
+                                .font(.caption)
+                                .foregroundStyle(.tertiary)
+                            if task.isActive, status.isOverdue {
+                                Text("\(status.daysOverdue)d overdue")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(Theme.overdueRed)
+                            }
+                        }
+                    }
+
+                    Spacer(minLength: 4)
+
+                    Text("+\(task.xpReward) XP")
+                        .font(.caption)
+                        .foregroundStyle(Theme.xpGold.opacity(0.8))
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Open \(task.name)")
+            .accessibilityHint("View or edit task details")
         }
         .padding(.vertical, 2)
     }
@@ -418,6 +434,8 @@ struct CatalogRow: View {
                         .imageScale(.large)
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("Add \(catalogTask.name)")
+                .accessibilityHint("Adds this task to your quest log")
             }
         }
         .padding(.vertical, 2)
@@ -464,7 +482,7 @@ struct FilterChip: View {
                 Text(label).font(.caption)
             }
             .padding(.horizontal, 10)
-            .padding(.vertical, 6)
+            .frame(minHeight: 44)
             .background(isSelected ? Theme.accent : Color.secondary.opacity(0.12), in: Capsule())
             .foregroundStyle(isSelected ? .white : .primary)
         }

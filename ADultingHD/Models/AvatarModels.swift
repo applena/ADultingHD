@@ -81,6 +81,12 @@ let avatarShopItems: [AvatarItem] = [
     // Default starter
     AvatarItem(id: "person",  name: "Person",  emoji: "🧑", cost: 0),
 
+    // Free onboarding companions
+    AvatarItem(id: "raccoon", name: "Raccoon", emoji: "🦝", cost: 0, imageName: "raccoon"),
+    AvatarItem(id: "turtle", name: "Turtle", emoji: "🐢", cost: 0, imageName: "turtle"),
+    AvatarItem(id: "otter", name: "Otter", emoji: "🦦", cost: 0, imageName: "otter"),
+    AvatarItem(id: "capybara", name: "Capybara", emoji: "🦫", cost: 0, imageName: "capybara"),
+
     // Base animals
     AvatarItem(id: "cat",     name: "Cat",     emoji: "🐱", cost: 200,  imageName: "cat"),
     AvatarItem(id: "dog",     name: "Dog",     emoji: "🐶", cost: 200,  imageName: "dog"),
