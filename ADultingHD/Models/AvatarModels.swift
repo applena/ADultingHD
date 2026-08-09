@@ -77,6 +77,12 @@ struct AvatarState: Codable {
 
 // MARK: - Shop Catalog
 
+/// Family display order, derived from `avatarShopItems` declaration order so a
+/// newly added avatar can't silently miss its filter chip or sort to the end.
+let avatarFamilies: [String] = avatarShopItems.reduce(into: [String]()) { families, item in
+    if !families.contains(item.family) { families.append(item.family) }
+}
+
 let avatarShopItems: [AvatarItem] = [
     // Default starter
     AvatarItem(id: "person",  name: "Person",  emoji: "🧑", cost: 0),

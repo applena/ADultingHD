@@ -57,7 +57,6 @@
 		5C00F0775031D4BE0BCC25F4 /* DataStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38A1A5F27480927A2C6D396E /* DataStoreTests.swift */; };
 		6337C10485FA4AB0AFC8D431 /* ModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12E42443B93064A0049A2DE8 /* ModelTests.swift */; };
 		63BACBDA0B80E661879BD3DE /* DemoData.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7FA39F5B9D5EB44665C21D60 /* DemoData.swift */; };
-		65B1424603726E76E01DCDE2 /* DefaultTasks.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04D1D6ED759D2E2C16961F3F /* DefaultTasks.swift */; };
 		68ECBCF85C1FBDB970904EA3 /* ICloudMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3657A503A8E12F538794820B /* ICloudMonitor.swift */; };
 		6D3913B7404D76076FFBD3EC /* NewFeatureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E47DD27D62AD23DAEE39C772 /* NewFeatureTests.swift */; };
 		6E9CFD6E05FDD6FB61E2EF5C /* AvatarModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E4E23E901E5476ADB2336D1 /* AvatarModels.swift */; };
@@ -89,7 +88,6 @@
 		A9FA92AC8B7A24A48B392F8C /* NameClashSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00F20E5C399652D2912DA0DE /* NameClashSheet.swift */; };
 		AB9CED694A786AED0A665721 /* Products.storekit in Resources */ = {isa = PBXBuildFile; fileRef = 94BE46FE41B7C1EA8E502F61 /* Products.storekit */; };
 		AD649BB11A09F94907291EA6 /* CloudKitSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC0D49B9607490BDBDF8E190 /* CloudKitSync.swift */; };
-		AE9A26A486ADF8D8C308066E /* DefaultTasks.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04D1D6ED759D2E2C16961F3F /* DefaultTasks.swift */; };
 		B0063F961C5D09824CD606F1 /* WeeklyLeaderboard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53F4786298402DBDC4632460 /* WeeklyLeaderboard.swift */; };
 		B2E33766E6A443E258D27C8E /* AvatarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1090F574CE8B557B631AA05C /* AvatarView.swift */; };
 		B719C8440B8AA15C2D29DE11 /* StorageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC655FB6ECD683EFB08D9D2A /* StorageTests.swift */; };
@@ -147,7 +145,6 @@
 /* Begin PBXFileReference section */
 		00F20E5C399652D2912DA0DE /* NameClashSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NameClashSheet.swift; sourceTree = "<group>"; };
 		0393A2B006DEC68B74588B38 /* HouseholdSwitcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HouseholdSwitcher.swift; sourceTree = "<group>"; };
-		04D1D6ED759D2E2C16961F3F /* DefaultTasks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DefaultTasks.swift; sourceTree = "<group>"; };
 		06D3081EF4BDDB578BF04645 /* Features.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features.swift; sourceTree = "<group>"; };
 		0948809977CA170CA42D9648 /* MailComposer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MailComposer.swift; sourceTree = "<group>"; };
 		1090F574CE8B557B631AA05C /* AvatarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AvatarView.swift; sourceTree = "<group>"; };
@@ -350,7 +347,6 @@
 		8E439030822775F35198C774 /* Data */ = {
 			isa = PBXGroup;
 			children = (
-				04D1D6ED759D2E2C16961F3F /* DefaultTasks.swift */,
 				7FA39F5B9D5EB44665C21D60 /* DemoData.swift */,
 				AB0B77A6011E1BFCF8CBD20D /* SeasonalTasks.swift */,
 				BBF9F9EF33AED52C9BCD464D /* TaskCatalog.swift */,
@@ -707,7 +703,6 @@
 				851ED2E5B6ED0A4222C4260C /* CreateHouseholdSheet.swift in Sources */,
 				29CCC391251B81468E3C4D89 /* DashboardView.swift in Sources */,
 				72C9E74018875C9858192642 /* DataStore.swift in Sources */,
-				65B1424603726E76E01DCDE2 /* DefaultTasks.swift in Sources */,
 				E613C7B7E0929774AD26EFA3 /* DemoData.swift in Sources */,
 				07448A1933AC0DB53D4862E6 /* Features.swift in Sources */,
 				E0A6C9DCEA16B498614C0660 /* FeedbackManager.swift in Sources */,
@@ -757,7 +752,6 @@
 				48878A87FE9D74C9795083DA /* CreateHouseholdSheet.swift in Sources */,
 				EF2F578B0B23F18F8F82CBB8 /* DashboardView.swift in Sources */,
 				8D0F4534D07BA76C6387C53A /* DataStore.swift in Sources */,
-				AE9A26A486ADF8D8C308066E /* DefaultTasks.swift in Sources */,
 				63BACBDA0B80E661879BD3DE /* DemoData.swift in Sources */,
 				02D0CB67B6BD9B47080F1EC6 /* Features.swift in Sources */,
 				192D8A1B3C12ABF4EB2B4D27 /* FeedbackManager.swift in Sources */,

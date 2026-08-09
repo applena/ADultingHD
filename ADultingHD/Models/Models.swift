@@ -486,27 +486,9 @@ struct HouseholdActivity: Identifiable {
     let id = UUID()
     let profileId: UUID
     let profileName: String
-    /// Legacy system-image avatar retained for notification/data compatibility.
-    let avatar: String
     let avatarState: AvatarState
     let event: HouseholdActivityEvent
     let timestamp: Date
-
-    init(
-        profileId: UUID,
-        profileName: String,
-        avatar: String,
-        avatarState: AvatarState = AvatarState(),
-        event: HouseholdActivityEvent,
-        timestamp: Date
-    ) {
-        self.profileId = profileId
-        self.profileName = profileName
-        self.avatar = avatar
-        self.avatarState = avatarState
-        self.event = event
-        self.timestamp = timestamp
-    }
 
     var displayTitle: String {
         switch event {

@@ -607,19 +607,24 @@ final class DataStore {
 
     // MARK: - Avatar
 
-    func purchaseAvatarItem(_ item: AvatarItem) async {
-        guard profile.coins >= item.cost else { return }
-        profile.coins -= item.cost
+    /// Owns and equips an item without debiting coins. The single place avatar
+    /// acquisition happens, so any future side effect applies to every path.
+    func grantAvatarItem(_ item: AvatarItem) async {
         profile.avatarState.purchase(item)
         profile.avatarState.equip(item)
         await store.saveProfile(profile)
     }
 
+    func purchaseAvatarItem(_ item: AvatarItem) async {
+        guard profile.coins >= item.cost else { return }
+        profile.coins -= item.cost
+        await grantAvatarItem(item)
+    }
+
+    /// Onboarding's companion picker only offers free items.
     func selectStarterAvatar(id: String) async {
         guard let item = avatarItem(byId: id), item.cost == 0 else { return }
-        profile.avatarState.purchase(item)
-        profile.avatarState.equip(item)
-        await store.saveProfile(profile)
+        await grantAvatarItem(item)
     }
 
     func equipAvatarItem(_ item: AvatarItem) async {
@@ -1111,7 +1116,7 @@ final class DataStore {
             let prevLevel = preLevels[member.id] ?? 0
             if member.level > prevLevel {
                 newActivities.append(HouseholdActivity(
-                    profileId: member.id, profileName: member.name, avatar: member.avatar,
+                    profileId: member.id, profileName: member.name,
                     avatarState: member.avatarState,
                     event: .leveledUp(level: member.level), timestamp: Date()
                 ))
@@ -1122,7 +1127,7 @@ final class DataStore {
             for achievId in Set(member.unlockedAchievements).subtracting(prevAch) {
                 let name = allAchievements.first { $0.id == achievId }?.name ?? achievId
                 newActivities.append(HouseholdActivity(
-                    profileId: member.id, profileName: member.name, avatar: member.avatar,
+                    profileId: member.id, profileName: member.name,
                     avatarState: member.avatarState,
                     event: .achievementUnlocked(name: name), timestamp: Date()
                 ))
@@ -1134,7 +1139,7 @@ final class DataStore {
             }
             for c in memberCompletions.prefix(5) {
                 newActivities.append(HouseholdActivity(
-                    profileId: member.id, profileName: member.name, avatar: member.avatar,
+                    profileId: member.id, profileName: member.name,
                     avatarState: member.avatarState,
                     event: .completedTask(name: c.taskName, xp: c.xpEarned), timestamp: c.completedAt
                 ))
@@ -1150,7 +1155,7 @@ final class DataStore {
             }
             for passer in passers.prefix(1) {
                 newActivities.append(HouseholdActivity(
-                    profileId: passer.id, profileName: passer.name, avatar: passer.avatar,
+                    profileId: passer.id, profileName: passer.name,
                     avatarState: passer.avatarState,
                     event: .passedYou(newRank: post), timestamp: Date()
                 ))

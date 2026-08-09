@@ -63,7 +63,7 @@ final class StorageTests: XCTestCase {
     func testBackupRoundTrip() async {
         let store = TaskStore()
         let householdId = UUID()
-        let tasks = Array(defaultHouseholdTasks.prefix(5))
+        let tasks = taskCatalog.prefix(5).map { $0.toHouseholdTask() }
         var profile = UserProfile()
         profile.totalXP = 250
         profile.totalTasksCompleted = 10

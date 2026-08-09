@@ -26,8 +26,15 @@ struct CatalogTask: Identifiable {
     }
 }
 
-/// The small, approachable set of rooms used to shape a first-run task list.
-/// Users can expand this during onboarding or from the full catalog later.
+/// The rooms onboarding offers, in display order. Derived from the curated
+/// recommendations below so an offered room always has quests to suggest —
+/// adding a room is a single edit to `onboardingRecommendationNames`.
+let onboardingRooms: [TaskCategory] = TaskCategory.allCases.filter {
+    onboardingRecommendationNames[$0]?.isEmpty == false
+}
+
+/// The subset of `onboardingRooms` preselected on first run. Kept small so the
+/// starting quest list stays approachable; users can add the rest inline.
 let onboardingStarterCategories: Set<TaskCategory> = [.kitchen, .bathroom, .general]
 
 private let onboardingRecommendationNames: [TaskCategory: [String]] = [

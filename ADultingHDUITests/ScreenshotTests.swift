@@ -166,6 +166,10 @@ final class ScreenshotTests: XCTestCase {
 
                 let room = app.buttons["Kitchen"]
                 XCTAssertTrue(room.waitForExistence(timeout: 3), "Room choices should be tappable")
+                // The setup page scrolls, and `isHittable` is true even when an
+                // element sits beneath the pinned action bar — where a center
+                // tap would land on the bar instead. Scroll it clear first.
+                scrollClearOfActionBar(room)
                 XCTAssertTrue(room.isHittable, "Room choices should be hittable")
                 room.tap()
                 XCTAssertEqual(room.value as? String, "Not selected")
@@ -211,6 +215,17 @@ final class ScreenshotTests: XCTestCase {
         let button = app.buttons[tab].firstMatch
         if button.exists {
             button.tap()
+        }
+    }
+
+    /// Scrolls until `element` sits fully above the pinned onboarding action
+    /// bar, so taps reach the element rather than the bar overlapping it.
+    private func scrollClearOfActionBar(_ element: XCUIElement, maxSwipes: Int = 6) {
+        let actionBar = app.buttons["onboarding-primary-action"]
+        for _ in 0..<maxSwipes {
+            guard element.exists, actionBar.exists else { return }
+            if element.frame.maxY < actionBar.frame.minY { return }
+            app.swipeUp()
         }
     }
 

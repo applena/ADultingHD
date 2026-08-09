@@ -1,15 +1,22 @@
 import SwiftUI
 
 struct AvatarView: View {
-    let avatarState: AvatarState
-    var size: CGFloat = 120
+    private let equippedCharacter: AvatarItem?
+    private let size: CGFloat
+
+    init(avatarState: AvatarState, size: CGFloat = 120) {
+        self.equippedCharacter = avatarState.equipped(slot: .character).flatMap(avatarItem(byId:))
+        self.size = size
+    }
+
+    /// Renders a single item directly, for pickers that show catalog entries
+    /// rather than what someone currently has equipped.
+    init(item: AvatarItem?, size: CGFloat = 120) {
+        self.equippedCharacter = item
+        self.size = size
+    }
 
     private var scale: CGFloat { size / 120 }
-
-    private var equippedCharacter: AvatarItem? {
-        guard let id = avatarState.equipped(slot: .character) else { return nil }
-        return avatarItem(byId: id)
-    }
 
     var body: some View {
         ZStack {
@@ -39,9 +46,15 @@ struct AvatarView: View {
 struct CompactAvatarView: View {
     let avatarState: AvatarState
     var size: CGFloat = 44
+    /// Draws the "this is you" ring used across the leaderboards.
+    var isCurrentUser: Bool = false
 
     var body: some View {
         AvatarView(avatarState: avatarState, size: size)
             .clipShape(Circle())
+            .overlay {
+                Circle()
+                    .stroke(isCurrentUser ? Theme.levelPurple : .clear, lineWidth: max(1.5, size / 20))
+            }
     }
 }

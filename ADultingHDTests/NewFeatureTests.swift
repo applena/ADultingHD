@@ -373,7 +373,7 @@ final class NewFeatureTests: XCTestCase {
 
     func testCanPopulateFullTestDataSet() {
         // Create a rich test data set with all features
-        var tasks = defaultHouseholdTasks
+        var tasks = taskCatalog.prefix(4).map { $0.toHouseholdTask() }
         XCTAssertGreaterThanOrEqual(tasks.count, 3)
 
         // Add seasonal tasks

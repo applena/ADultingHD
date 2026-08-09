@@ -14,13 +14,6 @@ struct WelcomeView: View {
     @AppStorage(PrefKey.onboardingHouseholdName) private var householdName = "My Household"
     @AppStorage(PrefKey.onboardingPlayerName) private var playerName = ""
 
-    /// Keep first-run choices focused; the full task catalog remains available
-    /// when people add tasks after onboarding. Every room here has a curated
-    /// recommendation set, so picking one never lands on an empty quest list.
-    private static let onboardingCategories: [TaskCategory] = [
-        .kitchen, .bathroom, .livingRoom, .laundry, .general,
-    ]
-
     let onComplete: () -> Void
 
     private enum Page: Equatable, CaseIterable {
@@ -281,17 +274,6 @@ struct WelcomeView: View {
 
     private static let starterAvatarItems: [AvatarItem] = avatarShopItems.filter { $0.cost == 0 }
 
-    /// Each tile renders one item in isolation, so the throwaway states these
-    /// need are identical on every pass — build them once.
-    private static let starterAvatarPreviews: [String: AvatarState] = Dictionary(
-        uniqueKeysWithValues: WelcomeView.starterAvatarItems.map { item in
-            var state = AvatarState()
-            state.purchase(item)
-            state.equip(item)
-            return (item.id, state)
-        }
-    )
-
     private var companionPicker: some View {
         VStack(alignment: .leading, spacing: 12) {
             sectionHeader("Companion", detail: "Change anytime")
@@ -304,7 +286,7 @@ struct WelcomeView: View {
                     } label: {
                         VStack(spacing: 5) {
                             ZStack(alignment: .topTrailing) {
-                                AvatarView(avatarState: Self.starterAvatarPreviews[item.id] ?? AvatarState(), size: 58)
+                                AvatarView(item: item, size: 58)
                                 if selected {
                                     Image(systemName: "checkmark.circle.fill")
                                         .font(.caption)
@@ -340,7 +322,7 @@ struct WelcomeView: View {
 
     private var roomPicker: some View {
         LazyVGrid(columns: [GridItem(.adaptive(minimum: 104), spacing: 10)], spacing: 10) {
-            ForEach(Self.onboardingCategories) { category in
+            ForEach(onboardingRooms) { category in
                 let selected = selectedCategories.contains(category)
                 Button {
                     if selected {

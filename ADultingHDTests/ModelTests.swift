@@ -170,27 +170,37 @@ final class ModelTests: XCTestCase {
         XCTAssertEqual(TaskFrequency.yearly.days, 365)
     }
 
-    // MARK: - Default Tasks
+    // MARK: - Task Catalog
 
-    func testDefaultTasksNotEmpty() {
-        XCTAssertGreaterThanOrEqual(defaultHouseholdTasks.count, 3)
+    func testCatalogTasksHaveUniqueNames() {
+        let names = taskCatalog.map(\.name)
+        XCTAssertEqual(names.count, Set(names).count, "Catalog tasks should have unique names")
     }
 
-    func testDefaultTasksHaveUniqueIDs() {
-        let ids = defaultHouseholdTasks.map(\.id)
-        XCTAssertEqual(ids.count, Set(ids).count, "Default tasks should have unique IDs")
+    func testCatalogTasksHaveValidXPRewards() {
+        for task in taskCatalog {
+            XCTAssertGreaterThan(task.toHouseholdTask().xpReward, 0, "\(task.name) should have positive XP")
+        }
     }
 
-    func testDefaultTasksHaveFocusedStarterSet() {
-        let dailyTasks = defaultHouseholdTasks.filter { $0.frequency == .daily && $0.isActive }
-        XCTAssertLessThanOrEqual(dailyTasks.count, 2)
-        XCTAssertTrue(defaultHouseholdTasks.contains { $0.name == "Do dishes" })
-        XCTAssertTrue(defaultHouseholdTasks.contains { $0.name == "Wipe the counters" })
+    /// Onboarding is the only path that seeds a new household, so an offered
+    /// room with no recommendations would strand a user on an empty list.
+    func testEveryOnboardingRoomHasRecommendations() {
+        XCTAssertFalse(onboardingRooms.isEmpty)
+        for room in onboardingRooms {
+            XCTAssertFalse(
+                onboardingRecommendedCatalogTasks(for: [room]).isEmpty,
+                "\(room.rawValue) is offered during onboarding but recommends nothing"
+            )
+        }
     }
 
-    func testDefaultTasksHaveValidXPRewards() {
-        for task in defaultHouseholdTasks {
-            XCTAssertGreaterThan(task.xpReward, 0, "\(task.name) should have positive XP")
+    func testStarterCategoriesAreOffered() {
+        for category in onboardingStarterCategories {
+            XCTAssertTrue(
+                onboardingRooms.contains(category),
+                "\(category.rawValue) is preselected but has no room tile to deselect"
+            )
         }
     }
 

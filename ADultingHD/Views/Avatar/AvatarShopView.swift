@@ -5,10 +5,7 @@ struct AvatarShopView: View {
     @Environment(StoreManager.self) private var storeManager
     @State private var selectedFamily: String? = nil
 
-    private let families = [
-        "person", "raccoon", "turtle", "otter", "capybara",
-        "cat", "dog", "bunny", "bear", "fox", "panda", "unicorn", "dragon",
-    ]
+    private let families = avatarFamilies
 
     private var coins: Int { dataStore.profile.coins }
     private var state: AvatarState { dataStore.profile.avatarState }

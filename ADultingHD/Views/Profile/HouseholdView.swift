@@ -14,14 +14,11 @@ struct HouseholdView: View {
                             .foregroundStyle(index == 0 ? Theme.xpGold : .secondary)
                             .frame(width: 24)
 
-                        CompactAvatarView(avatarState: member.avatarState, size: 40)
-                            .overlay {
-                                Circle()
-                                    .stroke(
-                                        member.id == dataStore.profile.id ? Theme.levelPurple : .clear,
-                                        lineWidth: 2
-                                    )
-                            }
+                        CompactAvatarView(
+                            avatarState: member.avatarState,
+                            size: 40,
+                            isCurrentUser: member.id == dataStore.profile.id
+                        )
 
                         VStack(alignment: .leading, spacing: 2) {
                             HStack {
@@ -61,7 +58,11 @@ struct HouseholdView: View {
                 Section("Recent Activity") {
                     ForEach(dataStore.householdActivityFeed.prefix(10)) { activity in
                         HStack(spacing: 10) {
-                            CompactAvatarView(avatarState: activity.avatarState, size: 28)
+                            CompactAvatarView(
+                                avatarState: activity.avatarState,
+                                size: 28,
+                                isCurrentUser: activity.profileId == dataStore.profile.id
+                            )
 
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(activity.displayTitle)
