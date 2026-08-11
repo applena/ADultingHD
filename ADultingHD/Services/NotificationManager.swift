@@ -7,7 +7,16 @@ private let logger = Logger(subsystem: "net.shadowpuppet.ADultingHD", category: 
 @MainActor
 @Observable
 final class NotificationManager {
-    var isAuthorized = false
+    /// Re-plans the streak warning whenever authorization actually flips —
+    /// covers both cold launch (`checkAuthorizationStatus()` resolves after
+    /// `DataStore.load()` already synced while this was stale-false) and
+    /// the user granting permission from Settings mid-session.
+    var isAuthorized = false {
+        didSet {
+            guard isAuthorized != oldValue else { return }
+            rescheduleStreakReminderFromSnapshot()
+        }
+    }
     var householdActivityEnabled: Bool = UserDefaults.standard.bool(forKey: "householdActivityEnabled") {
         didSet { UserDefaults.standard.set(householdActivityEnabled, forKey: "householdActivityEnabled") }
     }
@@ -33,6 +42,43 @@ final class NotificationManager {
             if dailyReminderEnabled { scheduleDailyReminder() }
         }
     }
+    /// Streak protection defaults ON (unlike the opt-in daily reminder):
+    /// anyone who authorized notifications for a streak game expects to be
+    /// warned before losing the streak. It only ever fires while a live
+    /// streak is one missed day from dying — see
+    /// `Recurrence.streakReminderFireDate`.
+    var streakReminderEnabled: Bool = UserDefaults.standard.object(forKey: PrefKey.streakReminderEnabled) as? Bool ?? true {
+        didSet {
+            UserDefaults.standard.set(streakReminderEnabled, forKey: PrefKey.streakReminderEnabled)
+            rescheduleStreakReminderFromSnapshot()
+        }
+    }
+    var streakReminderHour: Int = UserDefaults.standard.object(forKey: PrefKey.streakReminderHour) as? Int ?? 18 {
+        didSet {
+            guard streakReminderHour != oldValue else { return }
+            UserDefaults.standard.set(streakReminderHour, forKey: PrefKey.streakReminderHour)
+            rescheduleStreakReminderFromSnapshot()
+        }
+    }
+    var streakReminderMinute: Int = UserDefaults.standard.object(forKey: PrefKey.streakReminderMinute) as? Int ?? 0 {
+        didSet {
+            guard streakReminderMinute != oldValue else { return }
+            UserDefaults.standard.set(streakReminderMinute, forKey: PrefKey.streakReminderMinute)
+            rescheduleStreakReminderFromSnapshot()
+        }
+    }
+
+    /// Last streak state handed to `syncStreakReminder` — kept so the
+    /// Settings toggles/time picker and the `isAuthorized` flip can re-plan
+    /// the pending warning without a back-reference to `DataStore`.
+    private var streakSnapshot: (streak: Int, lastActiveDate: Date?) = (0, nil)
+
+    /// The (streak, fireDate) pair last applied to the notification center
+    /// (`fireDate == nil` means "nothing pending"). Re-syncs that compute
+    /// an identical plan — the dominant case: every iCloud-triggered
+    /// reload, every completion's pre-insert streak refresh — early-return
+    /// on this compare instead of paying notification-center round-trips.
+    private var appliedStreakPlan: (streak: Int, fireDate: Date?)?
 
     private let center = UNUserNotificationCenter.current()
 
@@ -51,33 +97,61 @@ final class NotificationManager {
     }
 
     func scheduleDailyReminder() {
-        cancelDailyReminder()
-
-        let content = UNMutableNotificationContent()
-        content.title = "Time to adult!"
-        content.body = "Check your tasks for today and keep your streak alive."
-        content.sound = .default
-
         var components = DateComponents()
         components.hour = reminderHour
         components.minute = reminderMinute
-
-        let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: true)
-        let request = UNNotificationRequest(identifier: "daily_reminder", content: content, trigger: trigger)
-
-        let hour = reminderHour
-        let minute = reminderMinute
-        center.add(request) { error in
-            if let error {
-                logger.error("Failed to schedule daily reminder: \(error.localizedDescription)")
-            } else {
-                logger.info("Daily reminder scheduled for \(hour):\(String(format: "%02d", minute))")
-            }
-        }
+        schedule(
+            identifier: "daily_reminder",
+            title: "Time to adult!",
+            body: "Check your tasks for today and keep your streak alive.",
+            trigger: UNCalendarNotificationTrigger(dateMatching: components, repeats: true)
+        )
+        logger.info("Daily reminder scheduled for \(self.reminderHour):\(String(format: "%02d", self.reminderMinute))")
     }
 
     func cancelDailyReminder() {
         center.removePendingNotificationRequests(withIdentifiers: ["daily_reminder"])
+    }
+
+    /// Replaces the pending streak-at-risk warning to match the given streak
+    /// state. Call whenever the streak may have changed — completion, undo,
+    /// (re)load, day rollover. Completing a task moves `lastActiveDate`
+    /// forward, which re-plans the warning for the following evening; a dead
+    /// or absent streak cancels it (`streakReminderFireDate` returns nil).
+    func syncStreakReminder(streak: Int, lastActiveDate: Date?) {
+        streakSnapshot = (streak, lastActiveDate)
+        rescheduleStreakReminderFromSnapshot()
+    }
+
+    private func rescheduleStreakReminderFromSnapshot() {
+        let fireDate: Date? = (isAuthorized && streakReminderEnabled)
+            ? Recurrence.streakReminderFireDate(
+                lastActiveDate: streakSnapshot.lastActiveDate,
+                currentStreak: streakSnapshot.streak,
+                asOf: Date(),
+                hour: streakReminderHour,
+                minute: streakReminderMinute
+            )
+            : nil
+        let plan = (streak: streakSnapshot.streak, fireDate: fireDate)
+        if let applied = appliedStreakPlan, applied == plan { return }
+        appliedStreakPlan = plan
+
+        guard let fireDate else {
+            center.removePendingNotificationRequests(withIdentifiers: ["streak_reminder"])
+            return
+        }
+
+        let streak = streakSnapshot.streak
+        schedule(
+            identifier: "streak_reminder",
+            title: "🔥 Your \(streak)-day streak is on the line!",
+            body: "One task before midnight keeps it going — and earns +\(UserProfile.streakBonusXP(for: streak)) bonus XP.",
+            trigger: UNCalendarNotificationTrigger(
+                dateMatching: Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: fireDate),
+                repeats: false
+            )
+        )
     }
 
     /// Schedules a one-shot reminder for `task`'s current occurrence
@@ -89,23 +163,15 @@ final class NotificationManager {
     /// cancel first.
     func scheduleTaskReminder(for task: HouseholdTask) {
         guard isAuthorized, let dueDate = task.dueDate else { return }
-
-        let content = UNMutableNotificationContent()
-        content.title = "\(task.name) is due!"
-        content.body = "\(task.category.rawValue) task — \(task.estimatedMinutes) min, +\(task.xpReward) XP"
-        content.sound = .default
-
         var components = Calendar.current.dateComponents([.year, .month, .day], from: dueDate)
         components.hour = reminderHour
         components.minute = reminderMinute
-        let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
-        let request = UNNotificationRequest(identifier: "task_\(task.id.uuidString)", content: content, trigger: trigger)
-
-        center.add(request) { error in
-            if let error {
-                logger.error("Failed to schedule task reminder: \(error.localizedDescription)")
-            }
-        }
+        schedule(
+            identifier: "task_\(task.id.uuidString)",
+            title: "\(task.name) is due!",
+            body: "\(task.category.rawValue) task — \(task.estimatedMinutes) min, +\(task.xpReward) XP",
+            trigger: UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
+        )
     }
 
     func cancelTaskReminder(for task: HouseholdTask) {
@@ -118,19 +184,27 @@ final class NotificationManager {
 
     func notifyHouseholdActivity(_ activity: HouseholdActivity) {
         guard isAuthorized, householdActivityEnabled else { return }
-
-        let content = UNMutableNotificationContent()
-        content.title = activity.notificationTitle
-        content.body = activity.notificationBody
-        content.sound = .default
-
-        let request = UNNotificationRequest(
+        schedule(
             identifier: "household_\(activity.id.uuidString)",
-            content: content,
+            title: activity.notificationTitle,
+            body: activity.notificationBody,
             trigger: nil
         )
+    }
+
+    /// Shared content→request→add path for every notification this manager
+    /// schedules. Adding with an identifier that's already pending replaces
+    /// it, so callers never need a paired cancel first.
+    private func schedule(identifier: String, title: String, body: String, trigger: UNNotificationTrigger?) {
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body = body
+        content.sound = .default
+        let request = UNNotificationRequest(identifier: identifier, content: content, trigger: trigger)
         center.add(request) { error in
-            if let error { logger.error("Household notification failed: \(error.localizedDescription)") }
+            if let error {
+                logger.error("Failed to schedule \(identifier): \(error.localizedDescription)")
+            }
         }
     }
 }

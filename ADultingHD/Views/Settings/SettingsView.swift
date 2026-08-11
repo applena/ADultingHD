@@ -48,18 +48,25 @@ struct SettingsView: View {
         Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "—"
     }
 
-    private var reminderTime: Binding<Date> {
+    /// A `DatePicker`-compatible binding over a stored hour/minute pair on
+    /// `NotificationManager` — shared by the daily-reminder and
+    /// streak-warning time rows.
+    private func timeBinding(
+        hour: ReferenceWritableKeyPath<NotificationManager, Int>,
+        minute: ReferenceWritableKeyPath<NotificationManager, Int>
+    ) -> Binding<Date> {
         Binding(
             get: {
-                var components = DateComponents()
-                components.hour = notificationManager.reminderHour
-                components.minute = notificationManager.reminderMinute
+                let components = DateComponents(
+                    hour: notificationManager[keyPath: hour],
+                    minute: notificationManager[keyPath: minute]
+                )
                 return Calendar.current.date(from: components) ?? Date()
             },
             set: { date in
                 let comps = Calendar.current.dateComponents([.hour, .minute], from: date)
-                notificationManager.reminderHour = comps.hour ?? 9
-                notificationManager.reminderMinute = comps.minute ?? 0
+                notificationManager[keyPath: hour] = comps.hour ?? 0
+                notificationManager[keyPath: minute] = comps.minute ?? 0
             }
         )
     }
@@ -147,8 +154,15 @@ struct SettingsView: View {
                     @Bindable var nm = notificationManager
                     Toggle("Daily Reminder", isOn: $nm.dailyReminderEnabled)
                     if notificationManager.dailyReminderEnabled {
-                        DatePicker("Reminder Time", selection: reminderTime, displayedComponents: .hourAndMinute)
+                        DatePicker("Reminder Time", selection: timeBinding(hour: \.reminderHour, minute: \.reminderMinute), displayedComponents: .hourAndMinute)
                     }
+                    Toggle("Streak Protection", isOn: $nm.streakReminderEnabled)
+                    if notificationManager.streakReminderEnabled {
+                        DatePicker("Warning Time", selection: timeBinding(hour: \.streakReminderHour, minute: \.streakReminderMinute), displayedComponents: .hourAndMinute)
+                    }
+                    Text("Get an evening heads-up when your streak is one missed day from breaking")
+                        .font(.caption).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                     Toggle("Household Activity", isOn: $nm.householdActivityEnabled)
                     Text("Get notified when household members complete tasks or move up the leaderboard")
                         .font(.caption).foregroundStyle(.secondary)

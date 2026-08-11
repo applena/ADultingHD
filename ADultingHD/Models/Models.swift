@@ -615,6 +615,14 @@ struct UserProfile: Codable, Identifiable {
         }
     }
 
+    /// Streak bonus XP awarded on top of a task's base XP when completing
+    /// with `streak` consecutive active days — +2 XP per day, capped at 50.
+    /// Shared by `DataStore.completeTask` (the award) and the streak-at-risk
+    /// notification copy (the incentive), so they can't drift apart.
+    static func streakBonusXP(for streak: Int) -> Int {
+        streak > 0 ? min(streak * 2, 50) : 0
+    }
+
     /// Best-effort name for a fresh profile. macOS exposes the logged-in
     /// user's full name; iOS does not surface the iCloud name to third-party
     /// apps, so we return an empty string and rely on the onboarding prompt
