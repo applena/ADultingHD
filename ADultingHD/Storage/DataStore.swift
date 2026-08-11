@@ -1458,6 +1458,10 @@ final class DataStore {
         // the user is not left with an inaccessible shared household.
         try await removeCloudKitDataBeforeLocalDeletion(from: householdIndex.households)
         await store.resetAllData()
+        // Pending local notifications reference the data being erased — a
+        // stale streak warning or per-task reminder firing after a reset
+        // would advertise state that no longer exists.
+        notificationManager?.cancelAll()
         // Clear one-shot migration flags so a fresh load seeds a new default
         // household; clear onboarding flags so ContentView falls back to the
         // welcome screen the same way a fresh install would.
