@@ -18,8 +18,8 @@ final class RecurrenceTests: XCTestCase {
         return cal
     }()
 
-    private func utcDate(_ year: Int, _ month: Int, _ day: Int, hour: Int = 12) -> Date {
-        utc.date(from: DateComponents(year: year, month: month, day: day, hour: hour))!
+    private func utcDate(_ year: Int, _ month: Int, _ day: Int, hour: Int = 12, minute: Int = 0) -> Date {
+        utc.date(from: DateComponents(year: year, month: month, day: day, hour: hour, minute: minute))!
     }
 
     private func makeTask(
@@ -354,5 +354,65 @@ final class RecurrenceTests: XCTestCase {
 
         XCTAssertEqual(summary.currentStreak, 0)
         XCTAssertEqual(summary.longestStreak, 3)
+    }
+
+    // MARK: - Streak-at-risk reminder planning
+
+    func testStreakReminderAfterCompletingTodayFiresTomorrowEvening() {
+        // Completed March 3: the streak survives March 4 (grace day) and
+        // dies March 5 at midnight — so the warning belongs on March 4 at
+        // the warning hour.
+        let fireDate = Recurrence.streakReminderFireDate(
+            lastActiveDate: utcDate(2024, 3, 3, hour: 20),
+            currentStreak: 3,
+            asOf: utcDate(2024, 3, 3, hour: 21),
+            hour: 18, minute: 0,
+            calendar: utc
+        )
+        XCTAssertEqual(fireDate, utcDate(2024, 3, 4, hour: 18))
+    }
+
+    func testStreakReminderOnGraceDayBeforeWarningHourFiresToday() {
+        // Last completion yesterday, now mid-morning of the grace day: the
+        // warning still fires this evening.
+        let fireDate = Recurrence.streakReminderFireDate(
+            lastActiveDate: utcDate(2024, 3, 3),
+            currentStreak: 1,
+            asOf: utcDate(2024, 3, 4, hour: 9),
+            hour: 18, minute: 30,
+            calendar: utc
+        )
+        XCTAssertEqual(fireDate, utcDate(2024, 3, 4, hour: 18, minute: 30))
+    }
+
+    func testStreakReminderIsNilOncePastTheWarningMoment() {
+        // 19:00 on the grace day with an 18:00 warning hour: scheduling now
+        // would fire immediately — return nil instead.
+        XCTAssertNil(Recurrence.streakReminderFireDate(
+            lastActiveDate: utcDate(2024, 3, 3),
+            currentStreak: 2,
+            asOf: utcDate(2024, 3, 4, hour: 19),
+            hour: 18, minute: 0,
+            calendar: utc
+        ))
+    }
+
+    func testStreakReminderIsNilForDeadOrAbsentStreak() {
+        // Streak already reported dead — nothing left to protect.
+        XCTAssertNil(Recurrence.streakReminderFireDate(
+            lastActiveDate: utcDate(2024, 3, 1),
+            currentStreak: 0,
+            asOf: utcDate(2024, 3, 4),
+            hour: 18, minute: 0,
+            calendar: utc
+        ))
+        // Never completed anything.
+        XCTAssertNil(Recurrence.streakReminderFireDate(
+            lastActiveDate: nil,
+            currentStreak: 1,
+            asOf: utcDate(2024, 3, 4),
+            hour: 18, minute: 0,
+            calendar: utc
+        ))
     }
 }

@@ -108,7 +108,7 @@ enum DemoData {
                 let completedAt = calendar.date(from: components) ?? day
 
                 let xpEarned = task.xpReward
-                let streakBonus = dayOffset < 14 ? min(dayOffset * 2, 50) : 0
+                let streakBonus = dayOffset < 14 ? UserProfile.streakBonusXP(for: dayOffset) : 0
 
                 completions.append(TaskCompletion(
                     id: UUID(), taskId: task.id, taskName: task.name,

@@ -52,6 +52,11 @@ struct ADultingHDApp: App {
                 .onChange(of: scenePhase) { _, newPhase in
                     if newPhase == .active {
                         dataStore.refreshForCurrentDay()
+                        // Notification permission may have been granted or
+                        // revoked in system Settings while backgrounded;
+                        // an actual flip re-plans reminders via the
+                        // isAuthorized didSet.
+                        Task { await notificationManager.checkAuthorizationStatus() }
                     }
                 }
         }

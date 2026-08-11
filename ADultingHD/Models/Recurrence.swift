@@ -14,6 +14,13 @@ import Foundation
 /// "due" (and, once the day has passed, "overdue") on every subsequent day
 /// until the task is actually completed, which recomputes a new occurrence.
 enum Recurrence {
+    /// Days a streak survives past its last active day before dying: a
+    /// completion on day D keeps the streak alive through D+1 (the grace
+    /// day) and it dies at the following midnight. Shared by
+    /// `computeStreak` (survival check) and `streakReminderFireDate`
+    /// (which day the at-risk warning belongs on) so the two can't drift.
+    private static let streakGraceDays = 1
+
     struct StreakSummary: Equatable {
         let currentStreak: Int
         let longestStreak: Int
@@ -62,7 +69,7 @@ enum Recurrence {
         ).day ?? Int.max
 
         var currentStreak = 0
-        if (0...1).contains(daysSinceLastActivity) {
+        if (0...streakGraceDays).contains(daysSinceLastActivity) {
             currentStreak = 1
             var cursor = lastActiveDate
             for day in sortedDays.dropLast().reversed() {
@@ -78,6 +85,32 @@ enum Recurrence {
             longestStreak: longestStreak,
             lastActiveDate: lastActiveDate
         )
+    }
+
+    /// The moment an evening "streak at risk" warning should fire, or `nil`
+    /// when there's nothing to warn about. The streak survives through the
+    /// day after `lastActiveDate` (see `computeStreak`'s grace period) and
+    /// dies at the following midnight — so the one moment a warning has
+    /// value is the evening of that grace day, while a single completion
+    /// can still save it. Returns `lastActiveDate + 1 day` at
+    /// `hour`:`minute`, or `nil` when the streak is already dead (`streak
+    /// == 0`), never started (`lastActiveDate == nil`), or the warning
+    /// moment has already passed — a trigger date in the past would fire
+    /// immediately, pinging the user while they're likely in the app.
+    static func streakReminderFireDate(
+        lastActiveDate: Date?,
+        currentStreak: Int,
+        asOf referenceDate: Date,
+        hour: Int,
+        minute: Int,
+        calendar: Calendar = .current
+    ) -> Date? {
+        guard currentStreak > 0, let lastActiveDate else { return nil }
+        let lastActiveDay = calendar.startOfDay(for: lastActiveDate)
+        guard let riskDay = calendar.date(byAdding: .day, value: streakGraceDays, to: lastActiveDay),
+              let fireDate = calendar.date(bySettingHour: hour, minute: minute, second: 0, of: riskDay)
+        else { return nil }
+        return fireDate > referenceDate ? fireDate : nil
     }
 
     /// The fixed occurrence day for a task with the given schedule and

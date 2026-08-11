@@ -34,4 +34,7 @@ enum PrefKey {
     static let defaultHouseholdId = "defaultHouseholdId"
     static let ckMigrationDone = "ckMigrationDone_v1"
     static let showSeasonalSection = "showSeasonalSection"
+    static let streakReminderEnabled = "streakReminderEnabled"
+    static let streakReminderHour = "streakReminderHour"
+    static let streakReminderMinute = "streakReminderMinute"
 }

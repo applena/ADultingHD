@@ -148,6 +148,14 @@ final class ModelTests: XCTestCase {
         XCTAssertEqual(profile.xpProgress, 0.5, accuracy: 0.01)
     }
 
+    func testStreakBonusXPScalesWithStreakAndCaps() {
+        XCTAssertEqual(UserProfile.streakBonusXP(for: 0), 0)
+        XCTAssertEqual(UserProfile.streakBonusXP(for: 1), 2)
+        XCTAssertEqual(UserProfile.streakBonusXP(for: 7), 14)
+        XCTAssertEqual(UserProfile.streakBonusXP(for: 25), 50)
+        XCTAssertEqual(UserProfile.streakBonusXP(for: 100), 50)
+    }
+
     func testLevelTitles() {
         var profile = UserProfile()
         XCTAssertEqual(profile.levelTitle, "Rookie Roommate")

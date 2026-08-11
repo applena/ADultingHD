@@ -43,14 +43,14 @@ The app delivers a full gamification cycle: discover tasks, complete them with q
 - **Passive engagement** — Widgets and notifications keep the game present without requiring the app to be open
 - **Supply awareness** — Task-linked inventory tracking bridges the gap between "what needs doing" and "what do I need to buy"
 
-### v2.0 — Smarter Scheduling *(shipped, with one gap)*
+### v2.0 — Smarter Scheduling *(shipped)*
 
 The app moves beyond tracking what's due to actively helping users plan their time. `ScheduleView` estimates daily effort, batches tasks by room/category, and `PowerHourView` guides users through a focused, timed, sequential completion flow. The experience is proactive ("here's your optimal block") rather than purely reactive.
 
 - **Time intelligence** — Shipped. The schedule header and category batch rows show per-task and per-day minute totals so users can see effort before committing.
 - **Spatial batching** — Shipped. Today's tasks group into collapsible category sections (`todayBatchesCard`) so a cleaning run can move room-to-room instead of task-to-task.
 - **Guided sessions** — Shipped. "Start Power Hour" launches a coached, timed, one-task-at-a-time flow with pacing and completion tracking.
-- **Flexible rescheduling** — Not yet built. Tasks are due on dates computed purely from frequency (`HouseholdTask.isDue(on:)`); there's no way to drag a task to a different day and have that stick. Tracked separately (see PLAN.md / issue tracker) rather than blocking this milestone.
+- **Flexible rescheduling** — Shipped (issue #25). Dragging a task to a different day in `ScheduleView`'s week view sets a one-off `scheduledOverrideDate` that moves that occurrence without touching the recurring schedule; completing the task resumes the normal cadence.
 
 ---
 

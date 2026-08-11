@@ -376,7 +376,7 @@ final class DataStore {
 
     func completeTask(_ task: HouseholdTask, notes: String? = nil) async {
         refreshStreakState()
-        let streakBonus = profile.currentStreak > 0 ? min(profile.currentStreak * 2, 50) : 0
+        let streakBonus = UserProfile.streakBonusXP(for: profile.currentStreak)
         let xpEarned = task.xpReward
 
         let completion = TaskCompletion(
@@ -663,6 +663,10 @@ final class DataStore {
 
     // MARK: - Streak
 
+    /// Recomputes streak state from the completion log — and, as a side
+    /// effect, re-plans the streak-at-risk notification to match (see
+    /// `NotificationManager.syncStreakReminder`; a no-op when the plan is
+    /// unchanged).
     private func refreshStreakState(asOf date: Date = Date()) {
         let summary = Recurrence.computeStreak(
             from: completions,
@@ -672,6 +676,7 @@ final class DataStore {
         profile.currentStreak = summary.currentStreak
         profile.longestStreak = summary.longestStreak
         profile.lastActiveDate = summary.lastActiveDate
+        notificationManager?.syncStreakReminder(streak: profile.currentStreak, lastActiveDate: profile.lastActiveDate)
     }
 
     // MARK: - Achievements
@@ -1312,6 +1317,10 @@ final class DataStore {
         let today = Calendar.current.startOfDay(for: Date())
         guard today != currentDay else { return }
         currentDay = today
+        // A streak can die at this midnight boundary — recompute it (and
+        // re-plan the streak-at-risk warning) rather than showing
+        // yesterday's flame count until the next full load().
+        refreshStreakState()
         updateWidgetData()
         for task in activeTasks {
             notificationManager?.scheduleTaskReminder(for: task)
@@ -1449,6 +1458,10 @@ final class DataStore {
         // the user is not left with an inaccessible shared household.
         try await removeCloudKitDataBeforeLocalDeletion(from: householdIndex.households)
         await store.resetAllData()
+        // Pending local notifications reference the data being erased — a
+        // stale streak warning or per-task reminder firing after a reset
+        // would advertise state that no longer exists.
+        notificationManager?.cancelAll()
         // Clear one-shot migration flags so a fresh load seeds a new default
         // household; clear onboarding flags so ContentView falls back to the
         // welcome screen the same way a fresh install would.
