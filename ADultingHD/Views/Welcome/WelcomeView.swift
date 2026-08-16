@@ -5,6 +5,7 @@ struct WelcomeView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
     @State private var currentPageIndex = 0
+    @State private var isShowingSetup = false
     @State private var selectedCategories: Set<TaskCategory> = []
     @State private var selectedTaskNames: Set<String> = []
     @State private var selectedCustomTasks: [HouseholdTask] = []
@@ -20,37 +21,36 @@ struct WelcomeView: View {
     let onComplete: () -> Void
 
     private enum Page: Equatable, CaseIterable {
-        case welcome, dailyLoop, setup
+        case suggestions, sharing, rewards
 
         var accessibilityID: String {
             switch self {
-            case .welcome: "welcome"
-            case .dailyLoop: "daily-loop"
-            case .setup: "setup"
+            case .suggestions: "suggestions"
+            case .sharing: "sharing"
+            case .rewards: "rewards"
             }
         }
 
         var title: String {
             switch self {
-            case .welcome: "Start small. Feel lighter."
-            case .dailyLoop: "Pick. Do. Done."
-            case .setup: "Make it yours."
+            case .suggestions: "Never wonder what to do next."
+            case .sharing: "Everyone pitches in."
+            case .rewards: "Turn chores into XP."
             }
         }
 
         var subtitle: String {
             switch self {
-            case .welcome: "One next task at a time."
-            case .dailyLoop: "Choose one task. Finish it. Feel the win."
-            case .setup: "Choose the chores that fit your home — nothing is added without your say-so."
+            case .suggestions: "AdultingHD suggests a few doable tasks so you can just pick one and start."
+            case .sharing: "Share chores with your household and let AdultingHD help divide up what needs doing."
+            case .rewards: "Finish tasks, build streaks, level up, and make keeping up with home feel a little more like a game."
             }
         }
 
         var primaryButtonTitle: String {
             switch self {
-            case .welcome: "Get started"
-            case .dailyLoop: "Next"
-            case .setup: "Start my list"
+            case .suggestions, .sharing: "Next"
+            case .rewards: "Set up my household"
             }
         }
     }
@@ -63,28 +63,60 @@ struct WelcomeView: View {
             ZStack {
                 ScreenBackground()
 
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 24) {
-                        onboardingHeader
-                        pageArtwork(width: geometry.size.width)
-                        pageHeading
-                        pageContent
-                    }
-                    .frame(width: contentWidth(for: geometry.size.width))
-                    .padding(.horizontal, compactLayout(for: geometry.size.width) ? 16 : 28)
-                    .padding(.top, 16)
-                    .padding(.bottom, 24)
-                    .frame(minHeight: max(0, geometry.size.height - 168), alignment: .center)
-                    .frame(maxWidth: .infinity)
-                }
-                .accessibilityIdentifier("onboarding-page-\(currentPage.accessibilityID)")
-                .scrollBounceBehavior(.basedOnSize)
-                .safeAreaInset(edge: .bottom, spacing: 0) {
-                    onboardingActions
+                if isShowingSetup {
+                    setupScreen(width: geometry.size.width, height: geometry.size.height)
+                } else {
+                    onboardingScreen(width: geometry.size.width, height: geometry.size.height)
                 }
             }
         }
         .onAppear(perform: prepareDefaults)
+    }
+
+    private func onboardingScreen(width: CGFloat, height: CGFloat) -> some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 24) {
+                onboardingHeader
+                pageArtwork(width: width)
+                    .id(currentPage)
+                    .transition(.opacity)
+                pageHeading
+                pageContent
+            }
+            .frame(width: contentWidth(for: width))
+            .padding(.horizontal, compactLayout(for: width) ? 16 : 28)
+            .padding(.top, 16)
+            .padding(.bottom, 24)
+            .frame(minHeight: max(0, height - 168), alignment: .center)
+            .frame(maxWidth: .infinity)
+        }
+        .accessibilityIdentifier("onboarding-page-\(currentPage.accessibilityID)")
+        .scrollBounceBehavior(.basedOnSize)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            onboardingActions
+        }
+    }
+
+    private func setupScreen(width: CGFloat, height: CGFloat) -> some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 24) {
+                setupHeader
+                setupArtwork
+                setupHeading
+                setupContent
+            }
+            .frame(width: contentWidth(for: width))
+            .padding(.horizontal, compactLayout(for: width) ? 16 : 28)
+            .padding(.top, 16)
+            .padding(.bottom, 24)
+            .frame(minHeight: max(0, height - 168), alignment: .top)
+            .frame(maxWidth: .infinity)
+        }
+        .accessibilityIdentifier("onboarding-page-setup")
+        .scrollBounceBehavior(.basedOnSize)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            setupActions
+        }
     }
 
     private func compactLayout(for width: CGFloat) -> Bool { width < 600 }
@@ -120,28 +152,49 @@ struct WelcomeView: View {
 
             ProgressView(value: Double(currentPageIndex + 1), total: Double(pages.count))
                 .tint(Theme.adventureBlue)
-                .accessibilityLabel("Setup progress")
+                .accessibilityLabel("Onboarding progress")
                 .accessibilityValue("\(currentPageIndex + 1) of \(pages.count)")
+        }
+    }
+
+    private var setupHeader: some View {
+        HStack(spacing: 10) {
+            Button(action: leaveSetup) {
+                Label("Back", systemImage: "chevron.left")
+                    .font(.subheadline.weight(.semibold))
+            }
+            .buttonStyle(.borderless)
+            .accessibilityIdentifier("onboarding-setup-back-action")
+
+            Spacer(minLength: 0)
+
+            Text("Optional setup")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
         }
     }
 
     @ViewBuilder
     private func pageArtwork(width: CGFloat) -> some View {
         switch currentPage {
-        case .welcome:
+        case .suggestions:
             onboardingImage(
-                "Onboarding/WelcomeFocusV1",
-                label: "A small kitchen task leading to a gold progress star",
-                height: compactLayout(for: width) ? 228 : 340
+                "Onboarding/ManageableSuggestionsV1",
+                label: "A cozy kitchen with a few doable suggestions: put dishes away, start laundry, or clear the counter. The laundry suggestion is highlighted and leads to a gold star.",
+                height: compactLayout(for: width) ? 220 : 300
             )
-        case .dailyLoop:
+        case .sharing:
             onboardingImage(
-                "Onboarding/DailyLoopV1",
-                label: "Choosing a household task, doing the chore, and earning a reward",
-                height: compactLayout(for: width) ? 206 : 300
+                "Onboarding/SharedHouseholdV1",
+                label: "Three household members share dishes, laundry, and recycling from one cozy home.",
+                height: compactLayout(for: width) ? 220 : 300
             )
-        case .setup:
-            setupArtwork
+        case .rewards:
+            onboardingImage(
+                "Onboarding/XPStreaksV1",
+                label: "A completed chore creates a gold star reward, fills progress, and keeps a streak going.",
+                height: compactLayout(for: width) ? 220 : 300
+            )
         }
     }
 
@@ -200,14 +253,51 @@ struct WelcomeView: View {
         }
     }
 
+    private var setupHeading: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Set up your household")
+                .font(.system(.largeTitle, design: .rounded).weight(.bold))
+                .foregroundStyle(.primary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Text("Choose what feels useful now. You can skip anything and change it later.")
+                .font(.title3)
+                .foregroundStyle(colorSchemeContrast == .increased ? .primary : .secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
     @ViewBuilder
     private var pageContent: some View {
         switch currentPage {
-        case .welcome, .dailyLoop:
+        case .suggestions, .sharing:
             EmptyView()
-        case .setup:
-            setupContent
+        case .rewards:
+            rewardPreview
         }
+    }
+
+    private var rewardPreview: some View {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 92), spacing: 8)], spacing: 8) {
+            rewardBadge("+25 XP", icon: "sparkles", color: Theme.hearthGold)
+            rewardBadge("Level 6", icon: "chart.bar.fill", color: Theme.adventureBlue)
+            rewardBadge("7 day streak", icon: "flame.fill", color: Theme.coral)
+        }
+        .accessibilityElement(children: .contain)
+    }
+
+    private func rewardBadge(_ title: String, icon: String, color: Color) -> some View {
+        Label(title, systemImage: icon)
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(color)
+            .frame(maxWidth: .infinity, minHeight: 42)
+            .padding(.horizontal, 10)
+            .background(color.opacity(0.10), in: RoundedRectangle(cornerRadius: Theme.chipCornerRadius))
+            .overlay {
+                RoundedRectangle(cornerRadius: Theme.chipCornerRadius)
+                    .strokeBorder(color.opacity(0.20))
+            }
+            .accessibilityLabel(title)
     }
 
     private var setupContent: some View {
@@ -216,6 +306,11 @@ struct WelcomeView: View {
                 setupField("Your name", icon: "person.fill", text: $playerName)
                 setupField("Household name", icon: "house.fill", text: $householdName)
             }
+
+            Text("Invite household members later from Household settings when you are ready to share the load.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
 
             companionPicker
 
@@ -740,15 +835,38 @@ struct WelcomeView: View {
     // MARK: - Actions
 
     private var onboardingActions: some View {
-        Button(action: handlePrimaryAction) {
+        actionBar(
+            title: currentPage.primaryButtonTitle,
+            action: handlePrimaryAction,
+            isDisabled: isSavingSetup,
+            showsProgress: false
+        )
+    }
+
+    private var setupActions: some View {
+        actionBar(
+            title: "Start using ADultingHD",
+            action: saveSetup,
+            isDisabled: isSavingSetup,
+            showsProgress: isSavingSetup
+        )
+    }
+
+    private func actionBar(
+        title: String,
+        action: @escaping () -> Void,
+        isDisabled: Bool,
+        showsProgress: Bool
+    ) -> some View {
+        Button(action: action) {
             Group {
-                if isSavingSetup {
+                if showsProgress {
                     ProgressView()
                         .tint(.white)
                         .accessibilityLabel("Saving setup")
                 } else {
                     HStack(spacing: 8) {
-                        Text(currentPage.primaryButtonTitle)
+                        Text(title)
                         Image(systemName: "arrow.right")
                             .accessibilityHidden(true)
                     }
@@ -763,22 +881,14 @@ struct WelcomeView: View {
             .contentShape(RoundedRectangle(cornerRadius: Theme.chipCornerRadius))
         }
         .buttonStyle(.plain)
-        .disabled(primaryButtonDisabled)
-        .opacity(primaryButtonDisabled ? 0.58 : 1)
+        .disabled(isDisabled)
+        .opacity(isDisabled ? 0.58 : 1)
         .accessibilityIdentifier("onboarding-primary-action")
-        .accessibilityLabel(currentPage.primaryButtonTitle)
+        .accessibilityLabel(title)
         .padding(.horizontal, 16)
         .padding(.top, 12)
         .padding(.bottom, 12)
         .background(.ultraThinMaterial)
-    }
-
-    private var primaryButtonDisabled: Bool {
-        guard currentPage == .setup else { return isSavingSetup }
-        return isSavingSetup
-            || playerName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            || householdName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            || selectedTaskCount == 0
     }
 
     /// Runs once when onboarding appears — not per page, so returning to the
@@ -795,18 +905,20 @@ struct WelcomeView: View {
 
     private func handlePrimaryAction() {
         switch currentPage {
-        case .welcome, .dailyLoop:
+        case .suggestions, .sharing:
             updatePageIndex(to: currentPageIndex + 1)
-        case .setup:
-            saveSetup()
+        case .rewards:
+            showSetup()
         }
     }
 
     private func saveSetup() {
-        guard !primaryButtonDisabled else { return }
+        guard !isSavingSetup else { return }
 
         let enteredHousehold = householdName.trimmingCharacters(in: .whitespacesAndNewlines)
         let enteredPlayer = playerName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let finalHousehold = enteredHousehold.isEmpty ? "My Household" : enteredHousehold
+        let finalPlayer = enteredPlayer.isEmpty ? UserProfile.defaultPlayerName() : enteredPlayer
         let starterTasks = selectedCatalogTasks
         let customTasks = selectedCustomTasks
         let avatarID = selectedAvatarID
@@ -816,11 +928,32 @@ struct WelcomeView: View {
             // Equip first: renameActiveProfile's save snapshots the profile into
             // the household member list, which the leaderboards render.
             await dataStore.selectStarterAvatar(id: avatarID)
-            await dataStore.renameActiveProfile(to: enteredPlayer)
-            await dataStore.renameHousehold(dataStore.activeHouseholdId, to: enteredHousehold)
+            await dataStore.renameActiveProfile(to: finalPlayer)
+            await dataStore.renameHousehold(dataStore.activeHouseholdId, to: finalHousehold)
             await dataStore.seedOnboardingTasks(recommendedTasks: starterTasks, customTasks: customTasks)
             isSavingSetup = false
             onComplete()
+        }
+    }
+
+    private func showSetup() {
+        if reduceMotion {
+            isShowingSetup = true
+        } else {
+            withAnimation(.easeInOut(duration: 0.6)) {
+                isShowingSetup = true
+            }
+        }
+    }
+
+    private func leaveSetup() {
+        guard !isSavingSetup else { return }
+        if reduceMotion {
+            isShowingSetup = false
+        } else {
+            withAnimation(.easeInOut(duration: 0.5)) {
+                isShowingSetup = false
+            }
         }
     }
 
