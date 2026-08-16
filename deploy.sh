@@ -60,6 +60,30 @@ verify_deploy_checkout() {
 
 verify_deploy_checkout
 
+verify_delivery_processing() {
+    local platform="$1"
+    local delivery_id="$2"
+    local status_log="$BUILD_DIR/${platform}_processing_status.json"
+
+    echo "⏳ Waiting for Apple to finish processing $platform delivery $delivery_id..."
+    if ! xcrun altool --build-status \
+        --delivery-id "$delivery_id" \
+        --apiKey "$APPSTORE_API_KEY_ID" \
+        --apiIssuer "$APPSTORE_ISSUER_ID" \
+        --output-format json 2>&1 | tee "$status_log"; then
+        echo "❌ Apple build processing check failed"
+        exit 1
+    fi
+
+    if ! grep -Eq '"build-status"[[:space:]]*:[[:space:]]*"VALID"' "$status_log" \
+        || ! grep -Eq '"is-on-app-store-connect"[[:space:]]*:[[:space:]]*true' "$status_log"; then
+        echo "❌ Apple did not report a valid App Store Connect build"
+        exit 1
+    fi
+
+    echo "✅ Apple processed $platform delivery $delivery_id successfully"
+}
+
 if [ -f .env ]; then
     set -a
     source .env
@@ -384,6 +408,13 @@ EOF
     fi
     echo "✅ iOS upload complete!"
 
+    IOS_DELIVERY_ID=$(sed -nE 's/.*Delivery UUID:[[:space:]]*([[:alnum:]-]+).*/\1/p' "$IOS_UPLOAD_LOG" | tail -1)
+    if [ -z "$IOS_DELIVERY_ID" ]; then
+        echo "❌ iOS upload succeeded but no delivery UUID was returned"
+        exit 1
+    fi
+    verify_delivery_processing "iOS" "$IOS_DELIVERY_ID"
+
     if $BUILD_MACOS; then
         echo "⏳ Waiting 60s before macOS upload to avoid Apple CDN contention..."
         sleep 60
@@ -458,6 +489,13 @@ EOF
         exit 1
     fi
     echo "✅ macOS upload complete!"
+
+    MACOS_DELIVERY_ID=$(sed -nE 's/.*Delivery UUID:[[:space:]]*([[:alnum:]-]+).*/\1/p' "$MACOS_UPLOAD_LOG" | tail -1)
+    if [ -z "$MACOS_DELIVERY_ID" ]; then
+        echo "❌ macOS upload succeeded but no delivery UUID was returned"
+        exit 1
+    fi
+    verify_delivery_processing "macOS" "$MACOS_DELIVERY_ID"
 fi
 
 echo "✅ Build $NEW_BUILD submitted to TestFlight."
@@ -465,6 +503,10 @@ echo "✅ Build $NEW_BUILD submitted to TestFlight."
 git add project.yml "$PROJECT/project.pbxproj"
 git commit -m "build: bump to build $NEW_BUILD" -m "TestFlight source: $SOURCE_SHA"
 echo "📝 Committed build number bump"
+
+echo "⬆️  Pushing build record to $DEPLOY_REMOTE/$DEPLOY_BRANCH..."
+git push "$DEPLOY_REMOTE" "$DEPLOY_BRANCH"
+echo "✅ Build record pushed"
 
 rm -rf "$BUILD_DIR"
 echo "🧹 Cleaned build artifacts"
