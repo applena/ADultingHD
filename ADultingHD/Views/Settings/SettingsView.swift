@@ -338,14 +338,6 @@ struct SettingsView: View {
                 }
             }
 
-            Section("Tour") {
-                Button { showWelcomeTour = true } label: {
-                    Label("Show Welcome Tour", systemImage: "sparkles")
-                }
-                Text("Replay the introduction to see how ADultingHD works.")
-                    .font(.caption).foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
         }
         .formStyle(.grouped)
     }
@@ -435,6 +427,15 @@ struct SettingsView: View {
                     }
                 }
                 #endif
+            }
+
+            Section("Tour") {
+                Button { showWelcomeTour = true } label: {
+                    Label("Show Welcome Tour", systemImage: "sparkles")
+                }
+                Text("Replay the introduction to see how ADultingHD works.")
+                    .font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             Section("Legal") {
