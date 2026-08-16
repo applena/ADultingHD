@@ -26,6 +26,64 @@ struct CatalogTask: Identifiable {
     }
 }
 
+private func normalizedOnboardingSearchText(_ value: String) -> String {
+    value
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+        .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+}
+
+/// Returns catalog records that match an onboarding search, with exact and
+/// name-prefix matches ahead of broader description matches.
+func onboardingCatalogMatches(for query: String, limit: Int = 8) -> [CatalogTask] {
+    let normalizedQuery = normalizedOnboardingSearchText(query)
+    guard !normalizedQuery.isEmpty, limit > 0 else { return [] }
+
+    let matches = taskCatalog.filter { task in
+        let name = normalizedOnboardingSearchText(task.name)
+        let description = normalizedOnboardingSearchText(task.description)
+        return name.contains(normalizedQuery) || description.contains(normalizedQuery)
+    }
+
+    return Array(matches.sorted { lhs, rhs in
+        let lhsName = normalizedOnboardingSearchText(lhs.name)
+        let rhsName = normalizedOnboardingSearchText(rhs.name)
+        let lhsRank = lhsName == normalizedQuery ? 0 : (lhsName.hasPrefix(normalizedQuery) ? 1 : 2)
+        let rhsRank = rhsName == normalizedQuery ? 0 : (rhsName.hasPrefix(normalizedQuery) ? 1 : 2)
+        if lhsRank != rhsRank { return lhsRank < rhsRank }
+        return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
+    }.prefix(limit))
+}
+
+/// Finds the catalog record that exactly matches a user's search text.
+func onboardingCatalogTask(named name: String) -> CatalogTask? {
+    let normalizedName = normalizedOnboardingSearchText(name)
+    guard !normalizedName.isEmpty else { return nil }
+    return taskCatalog.first { normalizedOnboardingSearchText($0.name) == normalizedName }
+}
+
+/// Creates a lightweight custom task from the onboarding search composer.
+/// Users can refine its schedule and details from the task editor later.
+func makeOnboardingCustomTask(
+    named name: String,
+    category: TaskCategory = .general,
+    frequency: TaskFrequency = .weekly
+) -> HouseholdTask? {
+    let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmedName.isEmpty else { return nil }
+
+    return HouseholdTask(
+        id: UUID(),
+        name: trimmedName,
+        description: "",
+        category: category,
+        frequency: frequency,
+        estimatedMinutes: 15,
+        difficulty: .medium,
+        supplies: [],
+        isActive: true
+    ).withDefaultSchedule()
+}
+
 /// The rooms onboarding offers, in display order. Derived from the curated
 /// recommendations below so an offered room always has quests to suggest —
 /// adding a room is a single edit to `onboardingRecommendationNames`.

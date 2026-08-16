@@ -5,10 +5,13 @@ struct WelcomeView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
     @State private var currentPageIndex = 0
-    @State private var selectedCategories = onboardingStarterCategories
+    @State private var selectedCategories: Set<TaskCategory> = []
     @State private var selectedTaskNames: Set<String> = []
-    @State private var recommendedTasks: [CatalogTask] = []
+    @State private var selectedCustomTasks: [HouseholdTask] = []
     @State private var recommendedTaskGroups: [(category: TaskCategory, tasks: [CatalogTask])] = []
+    @State private var taskSearchText = ""
+    @State private var customTaskCategory: TaskCategory = .general
+    @State private var customTaskFrequency: TaskFrequency = .weekly
     @State private var selectedAvatarID = "person"
     @State private var isSavingSetup = false
     @AppStorage(PrefKey.onboardingHouseholdName) private var householdName = "My Household"
@@ -39,7 +42,7 @@ struct WelcomeView: View {
             switch self {
             case .welcome: "One next task at a time."
             case .dailyLoop: "Choose one task. Finish it. Feel the win."
-            case .setup: "Add your name, pick a companion, keep a few starter quests."
+            case .setup: "Choose the chores that fit your home — nothing is added without your say-so."
             }
         }
 
@@ -224,8 +227,8 @@ struct WelcomeView: View {
             starterQuestPicker
         }
         .padding(.bottom, Theme.controlHeight + 24)
-        .onChange(of: selectedCategories) { previous, _ in
-            refreshRecommendations(previousCategories: previous)
+        .onChange(of: selectedCategories) { _, _ in
+            refreshRecommendations()
         }
     }
 
@@ -384,54 +387,258 @@ struct WelcomeView: View {
         }
     }
 
-    // MARK: - Starter quests
+    // MARK: - Chore list
 
-    private var selectedRecommendedTasks: [CatalogTask] {
-        recommendedTasks.filter { selectedTaskNames.contains($0.name) }
+    private var selectedCatalogTasks: [CatalogTask] {
+        taskCatalog.filter { selectedTaskNames.contains($0.name) }
     }
 
     private var selectedQuestMinutes: Int {
-        recommendedTasks.reduce(0) { selectedTaskNames.contains($1.name) ? $0 + $1.estimatedMinutes : $0 }
+        selectedCatalogTasks.reduce(0) { $0 + $1.estimatedMinutes }
+            + selectedCustomTasks.reduce(0) { $0 + $1.estimatedMinutes }
+    }
+
+    private var selectedTaskCount: Int {
+        selectedCatalogTasks.count + selectedCustomTasks.count
+    }
+
+    private var taskSearchMatches: [CatalogTask] {
+        onboardingCatalogMatches(for: taskSearchText)
+    }
+
+    private var availableTaskSearchMatches: [CatalogTask] {
+        taskSearchMatches.filter { !selectedTaskNames.contains($0.name) }
+    }
+
+    private var exactTaskSearchMatch: CatalogTask? {
+        onboardingCatalogTask(named: taskSearchText)
+    }
+
+    private var customTaskNameAlreadyUsed: Bool {
+        let normalized = taskSearchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !normalized.isEmpty else { return false }
+        return selectedCatalogTasks.contains { $0.name.lowercased() == normalized }
+            || selectedCustomTasks.contains { $0.name.lowercased() == normalized }
     }
 
     private var starterQuestPicker: some View {
         VStack(alignment: .leading, spacing: 12) {
             sectionHeader(
-                "Starter quests",
-                detail: "\(selectedTaskNames.count) selected · \(selectedQuestMinutes) min"
+                "Build your chore list",
+                detail: "\(selectedTaskCount) selected · \(selectedQuestMinutes) min"
             )
 
-            if recommendedTasks.isEmpty {
-                Text("Pick at least one room to see suggested quests.")
+            Text("Search the catalog to find a ready-made chore, or add your own when there is no match.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            taskSearchField
+
+            if taskSearchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                roomSuggestions
+            } else {
+                autocompleteResults
+            }
+
+            selectedTasksSection
+        }
+    }
+
+    private var taskSearchField: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(Theme.adventureBlue)
+                .accessibilityHidden(true)
+
+            TextField("Search chores or type a custom one", text: $taskSearchText)
+                .textFieldStyle(.plain)
+                .accessibilityLabel("Search chores")
+                .accessibilityIdentifier("onboarding-task-search-field")
+                .onSubmit(commitTaskSearch)
+                #if os(iOS)
+                .autocorrectionDisabled(true)
+                #endif
+
+            if !taskSearchText.isEmpty {
+                Button {
+                    taskSearchText = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Clear chore search")
+            }
+        }
+        .padding(.horizontal, 14)
+        .frame(minHeight: Theme.controlHeight)
+        .background(.background, in: RoundedRectangle(cornerRadius: Theme.chipCornerRadius))
+        .overlay {
+            RoundedRectangle(cornerRadius: Theme.chipCornerRadius)
+                .strokeBorder(Theme.adventureBlue.opacity(0.22))
+        }
+    }
+
+    private var autocompleteResults: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if !availableTaskSearchMatches.isEmpty {
+                Label("Catalog matches", systemImage: "checklist")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Theme.adventureBlue)
+
+                ForEach(availableTaskSearchMatches) { task in
+                    questRow(task)
+                }
+            } else if exactTaskSearchMatch != nil {
+                Text("That catalog chore is already on your list.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
             } else {
-                HStack(spacing: 16) {
-                    Button("Select all") {
-                        selectedTaskNames = Set(recommendedTasks.map(\.name))
-                    }
-                    Button("Clear all") {
-                        selectedTaskNames.removeAll()
-                    }
+                Text("No catalog chore matches that search yet.")
+                    .font(.subheadline)
                     .foregroundStyle(.secondary)
-                    Spacer(minLength: 0)
-                }
-                .font(.caption.weight(.semibold))
-                .frame(minHeight: 44)
+            }
 
+            if exactTaskSearchMatch == nil {
+                customTaskComposer
+            }
+        }
+    }
+
+    private var customTaskComposer: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline) {
+                Label("Add a custom chore", systemImage: "plus.circle.fill")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Theme.successGreen)
+                Spacer(minLength: 8)
+                if customTaskNameAlreadyUsed {
+                    Text("Already added")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Text("\"\(taskSearchText.trimmingCharacters(in: .whitespacesAndNewlines))\" will be saved as a custom task.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            HStack(spacing: 10) {
+                Picker("Room", selection: $customTaskCategory) {
+                    ForEach(TaskCategory.allCases) { category in
+                        Text(category.rawValue).tag(category)
+                    }
+                }
+                .labelsHidden()
+                .accessibilityLabel("Custom chore room")
+
+                Picker("Frequency", selection: $customTaskFrequency) {
+                    ForEach(TaskFrequency.allCases) { frequency in
+                        Text(frequency.rawValue).tag(frequency)
+                    }
+                }
+                .labelsHidden()
+                .accessibilityLabel("Custom chore frequency")
+            }
+
+            Button(action: addCustomTaskFromSearch) {
+                Label("Add custom chore", systemImage: "plus")
+                    .font(.subheadline.weight(.semibold))
+                    .frame(maxWidth: .infinity, minHeight: 44)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(Theme.successGreen)
+            .disabled(customTaskNameAlreadyUsed)
+            .accessibilityIdentifier("onboarding-add-custom-task")
+        }
+        .padding(12)
+        .background(Theme.successGreen.opacity(0.08), in: RoundedRectangle(cornerRadius: Theme.chipCornerRadius))
+        .overlay {
+            RoundedRectangle(cornerRadius: Theme.chipCornerRadius)
+                .strokeBorder(Theme.successGreen.opacity(0.25))
+        }
+    }
+
+    private var roomSuggestions: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Browse suggestions by room")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(Theme.adventureBlue)
+
+            if recommendedTaskGroups.isEmpty {
+                Text("Choose a room above to see matching catalog chores.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            } else {
                 ForEach(recommendedTaskGroups, id: \.category) { group in
                     VStack(alignment: .leading, spacing: 8) {
                         Label(group.category.rawValue, systemImage: group.category.icon)
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(Theme.categoryColor(group.category))
 
-                        ForEach(group.tasks) { task in
+                        ForEach(group.tasks.filter { !selectedTaskNames.contains($0.name) }) { task in
                             questRow(task)
                         }
                     }
                 }
             }
+        }
+    }
+
+    private var selectedTasksSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Your list")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(Theme.adventureBlue)
+
+            if selectedTaskCount == 0 {
+                Text("Nothing selected yet. Pick a catalog match or add a custom chore.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(selectedCatalogTasks) { task in
+                    questRow(task)
+                }
+                ForEach(selectedCustomTasks) { task in
+                    customTaskRow(task)
+                }
+            }
+        }
+    }
+
+    private func customTaskRow(_ task: HouseholdTask) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: task.category.icon)
+                .foregroundStyle(Theme.categoryColor(task.category))
+                .frame(width: 24)
+                .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(task.name)
+                    .font(.subheadline.weight(.semibold))
+                Text("Custom · \(task.frequency.rawValue) · \(task.estimatedMinutes) min")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer(minLength: 4)
+
+            Button {
+                selectedCustomTasks.removeAll { $0.id == task.id }
+            } label: {
+                Image(systemName: "minus.circle.fill")
+                    .foregroundStyle(Theme.coral)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Remove \(task.name)")
+        }
+        .padding(11)
+        .background(Theme.successGreen.opacity(0.10), in: RoundedRectangle(cornerRadius: Theme.chipCornerRadius))
+        .overlay {
+            RoundedRectangle(cornerRadius: Theme.chipCornerRadius)
+                .strokeBorder(Theme.successGreen.opacity(0.55), lineWidth: 1)
         }
     }
 
@@ -478,30 +685,56 @@ struct WelcomeView: View {
             }
         }
         .buttonStyle(.plain)
+        .accessibilityIdentifier("onboarding-catalog-task-\(task.name)")
         .accessibilityLabel("\(task.name). \(task.description)")
         .accessibilityValue(selected ? "Selected" : "Not selected")
         .accessibilityAddTraits(selected ? .isSelected : [])
     }
 
-    /// Recomputes the cached recommendations for the current rooms and keeps the
-    /// quest selection in step with them: rooms added since the last refresh
-    /// contribute their top two suggestions, and quests whose room was removed
-    /// drop out. Caching here rather than deriving in `body` keeps the catalog
-    /// scan off the per-keystroke render path of the name fields.
-    private func refreshRecommendations(previousCategories: Set<TaskCategory>) {
+    /// Recomputes room suggestions without selecting anything. Catalog chores
+    /// are only added after the user taps a match, so choosing a room never
+    /// silently changes a new user's list.
+    private func refreshRecommendations() {
         let tasks = onboardingRecommendedCatalogTasks(for: selectedCategories)
-        recommendedTasks = tasks
         recommendedTaskGroups = Dictionary(grouping: tasks, by: \.category)
             .sorted { $0.key.rawValue < $1.key.rawValue }
             .map { (category: $0.key, tasks: $0.value) }
+    }
 
-        let addedCategories = selectedCategories.subtracting(previousCategories)
-        selectedTaskNames.formUnion(
-            Dictionary(grouping: tasks.filter { addedCategories.contains($0.category) }, by: \.category)
-                .values
-                .flatMap { $0.prefix(2).map(\.name) }
-        )
-        selectedTaskNames.formIntersection(Set(tasks.map(\.name)))
+    private func commitTaskSearch() {
+        if let exactMatch = exactTaskSearchMatch {
+            toggleCatalogTask(exactMatch)
+        } else {
+            addCustomTaskFromSearch()
+        }
+    }
+
+    private func toggleCatalogTask(_ task: CatalogTask) {
+        if selectedTaskNames.contains(task.name) {
+            selectedTaskNames.remove(task.name)
+        } else {
+            selectedTaskNames.insert(task.name)
+        }
+        // Choosing an autocomplete result closes the result list so the same
+        // catalog row is not rendered twice above and below the search field.
+        if !taskSearchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            taskSearchText = ""
+        }
+    }
+
+    private func addCustomTaskFromSearch() {
+        guard exactTaskSearchMatch == nil,
+              !customTaskNameAlreadyUsed,
+              let task = makeOnboardingCustomTask(
+                  named: taskSearchText,
+                  category: customTaskCategory,
+                  frequency: customTaskFrequency
+              ) else { return }
+
+        selectedCustomTasks.append(task)
+        taskSearchText = ""
+        customTaskCategory = .general
+        customTaskFrequency = .weekly
     }
 
     // MARK: - Actions
@@ -545,8 +778,7 @@ struct WelcomeView: View {
         return isSavingSetup
             || playerName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             || householdName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            || selectedCategories.isEmpty
-            || selectedTaskNames.isEmpty
+            || selectedTaskCount == 0
     }
 
     /// Runs once when onboarding appears — not per page, so returning to the
@@ -558,7 +790,7 @@ struct WelcomeView: View {
             playerName = !current.isEmpty && current != "Player 1" ? current : suggested
         }
         selectedAvatarID = dataStore.profile.avatarState.equipped(slot: .character) ?? "person"
-        refreshRecommendations(previousCategories: [])
+        refreshRecommendations()
     }
 
     private func handlePrimaryAction() {
@@ -575,7 +807,8 @@ struct WelcomeView: View {
 
         let enteredHousehold = householdName.trimmingCharacters(in: .whitespacesAndNewlines)
         let enteredPlayer = playerName.trimmingCharacters(in: .whitespacesAndNewlines)
-        let starterTasks = selectedRecommendedTasks
+        let starterTasks = selectedCatalogTasks
+        let customTasks = selectedCustomTasks
         let avatarID = selectedAvatarID
         isSavingSetup = true
 
@@ -585,7 +818,7 @@ struct WelcomeView: View {
             await dataStore.selectStarterAvatar(id: avatarID)
             await dataStore.renameActiveProfile(to: enteredPlayer)
             await dataStore.renameHousehold(dataStore.activeHouseholdId, to: enteredHousehold)
-            await dataStore.seedOnboardingTasks(recommendedTasks: starterTasks)
+            await dataStore.seedOnboardingTasks(recommendedTasks: starterTasks, customTasks: customTasks)
             isSavingSetup = false
             onComplete()
         }

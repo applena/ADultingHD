@@ -227,6 +227,35 @@ final class ModelTests: XCTestCase {
         XCTAssertTrue(recommendations.contains { $0.name == "Take out trash and recycling" })
     }
 
+    func testOnboardingCatalogSearchRanksNameMatchesAndLimitsResults() {
+        let matches = onboardingCatalogMatches(for: "  DISH  ", limit: 2)
+
+        XCTAssertLessThanOrEqual(matches.count, 2)
+        XCTAssertFalse(matches.isEmpty)
+        XCTAssertEqual(matches.first?.name, "Wash dishes")
+        XCTAssertTrue(matches.allSatisfy {
+            $0.name.localizedCaseInsensitiveContains("dish")
+                || $0.description.localizedCaseInsensitiveContains("dish")
+        })
+    }
+
+    func testOnboardingCatalogSearchFindsExactRecord() {
+        XCTAssertEqual(onboardingCatalogTask(named: "  wash dishes ")?.name, "Wash dishes")
+        XCTAssertNil(onboardingCatalogTask(named: "polish the moon"))
+    }
+
+    func testOnboardingCustomTaskUsesExplicitNameAndScheduleDefaults() throws {
+        let task = try XCTUnwrap(
+            makeOnboardingCustomTask(named: "  Polish the moon  ", category: .outdoor, frequency: .weekly)
+        )
+
+        XCTAssertEqual(task.name, "Polish the moon")
+        XCTAssertEqual(task.category, .outdoor)
+        XCTAssertEqual(task.frequency, .weekly)
+        XCTAssertEqual(task.scheduledWeekdays, TaskFrequency.weekly.defaultWeekdays)
+        XCTAssertNil(makeOnboardingCustomTask(named: "   "))
+    }
+
     func testStarterAvatarsAreFreeAndHaveImages() {
         let starterIDs = ["raccoon", "turtle", "otter", "capybara"]
         let starters = starterIDs.compactMap(avatarItem(byId:))
