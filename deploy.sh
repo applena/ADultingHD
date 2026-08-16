@@ -34,6 +34,7 @@ fi
 
 PROJECT="ADultingHD.xcodeproj"
 BUILD_DIR="$SCRIPT_DIR/build"
+TEST_DERIVED_DATA="$BUILD_DIR/test"
 
 # Parse flags
 SKIP_TESTS=false
@@ -62,7 +63,7 @@ echo "⚙️  Regenerating Xcode project..."
 xcodegen generate
 
 if ! $SKIP_TESTS; then
-    echo "🧪 Running tests..."
+    echo "🧪 Running unit tests..."
     DESTINATION=$(
         if xcrun simctl list devices available | grep -q "iPhone 17 Pro"; then
             echo "platform=iOS Simulator,name=iPhone 17 Pro"
@@ -74,11 +75,18 @@ if ! $SKIP_TESTS; then
             echo "platform=iOS Simulator,name=iPhone 15"
         fi
     )
+    # Keep the deploy gate focused on deterministic unit coverage. UI tests
+    # remain available through the scheme, but Xcode 26 emits a repeated
+    # IDELaunchParametersSnapshot/LLDB diagnostic for every UI app launch even
+    # when the tests pass. Use a checkout-local derived-data path so deploys do
+    # not contend with another xcodebuild invocation's test database.
     xcodebuild test \
         -project "$PROJECT" \
         -scheme ADultingHD_iOS \
         -destination "$DESTINATION" \
         -configuration Debug \
+        -derivedDataPath "$TEST_DERIVED_DATA" \
+        -only-testing:ADultingHDTests_iOS \
         CODE_SIGNING_ALLOWED=NO \
         -quiet
     echo "✅ Tests passed"
