@@ -172,9 +172,31 @@ final class ScreenshotTests: XCTestCase {
                 scrollClearOfActionBar(room)
                 XCTAssertTrue(room.isHittable, "Room choices should be hittable")
                 room.tap()
-                XCTAssertEqual(room.value as? String, "Not selected")
-                room.tap()
                 XCTAssertEqual(room.value as? String, "Selected")
+                room.tap()
+                XCTAssertEqual(room.value as? String, "Not selected")
+
+                let taskSearch = app.textFields["onboarding-task-search-field"]
+                XCTAssertTrue(taskSearch.waitForExistence(timeout: 3), "Onboarding should offer catalog search")
+                scrollClearOfActionBar(taskSearch)
+                taskSearch.tap()
+                taskSearch.typeText("Polish the moon")
+
+                let customTaskButton = app.buttons["onboarding-add-custom-task"]
+                XCTAssertTrue(customTaskButton.waitForExistence(timeout: 3), "Onboarding should offer a custom-task action")
+                scrollClearOfActionBar(customTaskButton)
+                XCTAssertTrue(customTaskButton.isHittable)
+                customTaskButton.tap()
+
+                taskSearch.tap()
+                taskSearch.typeText("dishes")
+
+                let catalogMatch = app.buttons["onboarding-catalog-task-Wash dishes"]
+                XCTAssertTrue(catalogMatch.waitForExistence(timeout: 3), "Catalog search should show matching chores")
+                scrollClearOfActionBar(catalogMatch)
+                XCTAssertTrue(catalogMatch.isHittable)
+                catalogMatch.tap()
+                XCTAssertEqual(catalogMatch.value as? String, "Selected")
             }
             capture(String(format: "Onboarding_%02d_%@", index + 1, page))
 

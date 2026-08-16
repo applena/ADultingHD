@@ -595,12 +595,25 @@ final class DataStore {
         await updateTask(updated)
     }
 
-    /// Seed the selected recommendations from onboarding. Households otherwise
-    /// start with no tasks — onboarding is the first place the built-in catalog
-    /// is offered, so a user can see exactly how a task lands on their home.
-    func seedOnboardingTasks(recommendedTasks: [CatalogTask]) async {
-        guard !recommendedTasks.isEmpty else { return }
-        tasks = recommendedTasks.map { $0.toHouseholdTask() }
+    /// Save exactly the catalog and custom tasks the user selected during
+    /// onboarding. Fresh households start empty; nothing is assigned merely
+    /// because a room was selected.
+    func seedOnboardingTasks(recommendedTasks: [CatalogTask], customTasks: [HouseholdTask] = []) async {
+        var names = Set<String>()
+        let catalogTasks = recommendedTasks.compactMap { catalogTask -> HouseholdTask? in
+            let key = catalogTask.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            guard !key.isEmpty, names.insert(key).inserted else { return nil }
+            return catalogTask.toHouseholdTask()
+        }
+        let additionalTasks = customTasks.compactMap { customTask -> HouseholdTask? in
+            let key = customTask.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            guard !key.isEmpty, names.insert(key).inserted else { return nil }
+            return customTask.withDefaultSchedule()
+        }
+        let selectedTasks = catalogTasks + additionalTasks
+        guard !selectedTasks.isEmpty else { return }
+
+        tasks = selectedTasks
         for task in tasks { syncReminder(for: task) }
         await store.saveTasks(tasks, for: activeHouseholdId)
     }

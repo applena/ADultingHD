@@ -164,6 +164,22 @@ final class DataStoreTests: XCTestCase {
         XCTAssertNil(dataStore.tasks.first?.scheduledOverrideDate)
     }
 
+    func testSeedOnboardingTasksKeepsSelectedCatalogAndCustomTasks() async throws {
+        let dataStore = DataStore()
+        let customTask = try XCTUnwrap(
+            makeOnboardingCustomTask(named: "Polish the moon", category: .outdoor, frequency: .weekly)
+        )
+
+        await dataStore.seedOnboardingTasks(
+            recommendedTasks: [taskCatalog[0]],
+            customTasks: [customTask]
+        )
+
+        XCTAssertEqual(dataStore.tasks.map(\.name), [taskCatalog[0].name, "Polish the moon"])
+        XCTAssertEqual(dataStore.tasks.last?.category, .outdoor)
+        XCTAssertEqual(dataStore.tasks.last?.scheduledWeekdays, TaskFrequency.weekly.defaultWeekdays)
+    }
+
     // MARK: - completeTask / uncompleteTask (Dashboard's Completed Tasks undo, issue #16)
 
     func testUncompleteTaskReversesXPCoinsAndCompletionCount() async {
