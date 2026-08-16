@@ -56,8 +56,10 @@ xcodebuild build -project ADultingHD.xcodeproj -scheme ADultingHD_macOS \
 ./deploy.sh --skip-tests # skip unit tests before archive
 ```
 
-`deploy.sh` auto-increments the build number in `project.yml`, archives,
-re-signs with a hardcoded iOS distribution entitlements dict (necessary
+`deploy.sh` auto-increments the build number in `project.yml`, runs the iOS
+unit-test target, and archives. UI tests remain available through the
+`ADultingHD_iOS` scheme for explicit UI validation. The script then re-signs
+with a hardcoded iOS distribution entitlements dict (necessary
 because the API key is Upload-scope only — see
 [`docs/cloudkit-sharing.md`](docs/cloudkit-sharing.md)), uploads via
 altool, and commits the build bump.
