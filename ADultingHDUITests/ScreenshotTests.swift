@@ -152,7 +152,7 @@ final class ScreenshotTests: XCTestCase {
         app.launchArguments = ["-demo", "-onboarding"]
         app.launch()
 
-        let pages = ["welcome", "daily-loop", "setup"]
+        let pages = ["suggestions", "sharing", "rewards"]
 
         for (index, page) in pages.enumerated() {
             let pageView = app.descendants(matching: .any)
@@ -160,44 +160,6 @@ final class ScreenshotTests: XCTestCase {
                 .firstMatch
             XCTAssertTrue(pageView.waitForExistence(timeout: 5), "Missing onboarding page \(page)")
 
-            if page == "setup" {
-                let playerName = app.textFields["onboarding-player-name-field"]
-                XCTAssertTrue(playerName.waitForExistence(timeout: 3))
-
-                let room = app.buttons["Kitchen"]
-                XCTAssertTrue(room.waitForExistence(timeout: 3), "Room choices should be tappable")
-                // The setup page scrolls, and `isHittable` is true even when an
-                // element sits beneath the pinned action bar — where a center
-                // tap would land on the bar instead. Scroll it clear first.
-                scrollClearOfActionBar(room)
-                XCTAssertTrue(room.isHittable, "Room choices should be hittable")
-                room.tap()
-                XCTAssertEqual(room.value as? String, "Selected")
-                room.tap()
-                XCTAssertEqual(room.value as? String, "Not selected")
-
-                let taskSearch = app.textFields["onboarding-task-search-field"]
-                XCTAssertTrue(taskSearch.waitForExistence(timeout: 3), "Onboarding should offer catalog search")
-                scrollClearOfActionBar(taskSearch)
-                taskSearch.tap()
-                taskSearch.typeText("Polish the moon")
-
-                let customTaskButton = app.buttons["onboarding-add-custom-task"]
-                XCTAssertTrue(customTaskButton.waitForExistence(timeout: 3), "Onboarding should offer a custom-task action")
-                scrollClearOfActionBar(customTaskButton)
-                XCTAssertTrue(customTaskButton.isHittable)
-                customTaskButton.tap()
-
-                taskSearch.tap()
-                taskSearch.typeText("dishes")
-
-                let catalogMatch = app.buttons["onboarding-catalog-task-Wash dishes"]
-                XCTAssertTrue(catalogMatch.waitForExistence(timeout: 3), "Catalog search should show matching chores")
-                scrollClearOfActionBar(catalogMatch)
-                XCTAssertTrue(catalogMatch.isHittable)
-                catalogMatch.tap()
-                XCTAssertEqual(catalogMatch.value as? String, "Selected")
-            }
             capture(String(format: "Onboarding_%02d_%@", index + 1, page))
 
             let primary = app.buttons["onboarding-primary-action"]
@@ -205,6 +167,55 @@ final class ScreenshotTests: XCTestCase {
             XCTAssertTrue(primary.isHittable, "Primary onboarding action should be hittable")
             primary.tap()
         }
+
+        let setupPage = app.descendants(matching: .any)
+            .matching(identifier: "onboarding-page-setup")
+            .firstMatch
+        XCTAssertTrue(setupPage.waitForExistence(timeout: 5), "Setup should follow the three benefit screens")
+
+        let playerName = app.textFields["onboarding-player-name-field"]
+        XCTAssertTrue(playerName.waitForExistence(timeout: 3))
+
+        let room = app.buttons["Kitchen"]
+        XCTAssertTrue(room.waitForExistence(timeout: 3), "Room choices should be tappable")
+        // The setup page scrolls, and `isHittable` is true even when an
+        // element sits beneath the pinned action bar — where a center tap
+        // would land on the bar instead. Scroll it clear first.
+        scrollClearOfActionBar(room)
+        XCTAssertTrue(room.isHittable, "Room choices should be hittable")
+        room.tap()
+        XCTAssertEqual(room.value as? String, "Selected")
+        room.tap()
+        XCTAssertEqual(room.value as? String, "Not selected")
+
+        let taskSearch = app.textFields["onboarding-task-search-field"]
+        XCTAssertTrue(taskSearch.waitForExistence(timeout: 3), "Setup should offer catalog search")
+        scrollClearOfActionBar(taskSearch)
+        taskSearch.tap()
+        taskSearch.typeText("Polish the moon")
+
+        let customTaskButton = app.buttons["onboarding-add-custom-task"]
+        XCTAssertTrue(customTaskButton.waitForExistence(timeout: 3), "Setup should offer a custom-task action")
+        scrollClearOfActionBar(customTaskButton)
+        XCTAssertTrue(customTaskButton.isHittable)
+        customTaskButton.tap()
+
+        taskSearch.tap()
+        taskSearch.typeText("dishes")
+
+        let catalogMatch = app.buttons["onboarding-catalog-task-Wash dishes"]
+        XCTAssertTrue(catalogMatch.waitForExistence(timeout: 3), "Catalog search should show matching chores")
+        scrollClearOfActionBar(catalogMatch)
+        XCTAssertTrue(catalogMatch.isHittable)
+        catalogMatch.tap()
+        XCTAssertEqual(catalogMatch.value as? String, "Selected")
+
+        capture("Onboarding_04_setup")
+
+        let finish = app.buttons["onboarding-primary-action"]
+        XCTAssertTrue(finish.waitForExistence(timeout: 3))
+        XCTAssertTrue(finish.isHittable, "Setup action should be hittable")
+        finish.tap()
 
         let homeHeader = app.descendants(matching: .any)
             .matching(identifier: "home-root-header")
