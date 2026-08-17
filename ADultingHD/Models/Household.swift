@@ -5,24 +5,64 @@ import Foundation
 /// XP/level/streak are global across all households (only the task list
 /// and supply stock are scoped).
 struct Household: Identifiable, Codable {
+    enum Ownership: Codable, Equatable {
+        case owned
+        case joined(ownerUserRecordName: String, inviterName: String?)
+    }
+
     let id: UUID
     var name: String
     let createdAt: Date
     var members: [UserProfile]
     /// CKShare root record name; `nil` until the household is shared.
     var shareRecordName: String?
-    /// `false` when the household was joined via someone else's invite —
-    /// records then live in `sharedCloudDatabase` rather than `privateCloudDatabase`.
-    var ownerIsCurrentUser: Bool
+    /// CloudKit ownership and inviter identity are one value so a joined
+    /// household can never exist without the owner record name needed to
+    /// address its shared zone.
+    private(set) var ownership: Ownership
     /// CloudKit custom zone name. The default migrated household reuses
     /// `ZoneName.household` so existing TestFlight users don't lose records
     /// (CloudKit can't rename zones).
     var zoneName: String
-    /// CloudKit user record name of the zone owner. Always nil for
-    /// `ownerIsCurrentUser == true`; set to the inviter's user record name
-    /// when this household represents an accepted CKShare. Required to
-    /// construct a `CKRecordZone.ID` against `sharedCloudDatabase`.
-    var ownerUserRecordName: String?
+
+    var ownerIsCurrentUser: Bool {
+        if case .owned = ownership { return true }
+        return false
+    }
+
+    var ownerUserRecordName: String? {
+        guard case .joined(let ownerUserRecordName, _) = ownership else { return nil }
+        return ownerUserRecordName
+    }
+
+    var inviterName: String? {
+        get {
+            guard case .joined(_, let inviterName) = ownership else { return nil }
+            return inviterName
+        }
+        set {
+            guard case .joined(let ownerUserRecordName, _) = ownership else { return }
+            ownership = .joined(ownerUserRecordName: ownerUserRecordName, inviterName: newValue)
+        }
+    }
+
+    private init(
+        id: UUID,
+        name: String,
+        createdAt: Date = Date(),
+        members: [UserProfile],
+        shareRecordName: String? = nil,
+        ownership: Ownership,
+        zoneName: String
+    ) {
+        self.id = id
+        self.name = name
+        self.createdAt = createdAt
+        self.members = members
+        self.shareRecordName = shareRecordName
+        self.ownership = ownership
+        self.zoneName = zoneName
+    }
 
     /// Convenience constructor for a locally-owned household. New households
     /// get a unique CloudKit zone; the legacy zone is opt-in for migration.
@@ -36,12 +76,9 @@ struct Household: Identifiable, Codable {
         return Household(
             id: householdID,
             name: name,
-            createdAt: Date(),
             members: members,
-            shareRecordName: nil,
-            ownerIsCurrentUser: true,
-            zoneName: zoneName ?? ZoneName.uniqueHousehold(for: householdID),
-            ownerUserRecordName: nil
+            ownership: .owned,
+            zoneName: zoneName ?? ZoneName.uniqueHousehold(for: householdID)
         )
     }
 
@@ -55,18 +92,71 @@ struct Household: Identifiable, Codable {
         name: String,
         members: [UserProfile],
         zoneName: String,
-        ownerUserRecordName: String
+        ownerUserRecordName: String,
+        inviterName: String? = nil
     ) -> Household {
         Household(
             id: id,
             name: name,
-            createdAt: Date(),
             members: members,
-            shareRecordName: nil,
-            ownerIsCurrentUser: false,
-            zoneName: zoneName,
-            ownerUserRecordName: ownerUserRecordName
+            ownership: .joined(
+                ownerUserRecordName: ownerUserRecordName,
+                inviterName: inviterName
+            ),
+            zoneName: zoneName
         )
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, name, createdAt, members, shareRecordName, ownership, zoneName
+        // Schema-v3 compatibility. `ownership` is authoritative; these
+        // shadow fields are dual-written so older synced clients still load.
+        case ownerIsCurrentUser, ownerUserRecordName, inviterName
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        createdAt = try container.decode(Date.self, forKey: .createdAt)
+        members = try container.decode([UserProfile].self, forKey: .members)
+        shareRecordName = try container.decodeIfPresent(String.self, forKey: .shareRecordName)
+        zoneName = try container.decode(String.self, forKey: .zoneName)
+
+        let legacyOwnerIsCurrentUser = try container.decodeIfPresent(Bool.self, forKey: .ownerIsCurrentUser) ?? true
+        let legacyOwnerUserRecordName = try container.decodeIfPresent(String.self, forKey: .ownerUserRecordName)
+
+        if let decodedOwnership = try container.decodeIfPresent(Ownership.self, forKey: .ownership) {
+            ownership = decodedOwnership
+        } else if !legacyOwnerIsCurrentUser, let legacyOwnerUserRecordName {
+            ownership = .joined(
+                ownerUserRecordName: legacyOwnerUserRecordName,
+                inviterName: try container.decodeIfPresent(String.self, forKey: .inviterName)
+            )
+        } else {
+            ownership = .owned
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(name, forKey: .name)
+        try container.encode(createdAt, forKey: .createdAt)
+        try container.encode(members, forKey: .members)
+        try container.encodeIfPresent(shareRecordName, forKey: .shareRecordName)
+        try container.encode(ownership, forKey: .ownership)
+        try container.encode(zoneName, forKey: .zoneName)
+        // Dual-write schema-v3 ownership keys while household indexes sync
+        // through iCloud to devices that may still run an older app build.
+        switch ownership {
+        case .owned:
+            try container.encode(true, forKey: .ownerIsCurrentUser)
+        case .joined(let ownerUserRecordName, let inviterName):
+            try container.encode(false, forKey: .ownerIsCurrentUser)
+            try container.encode(ownerUserRecordName, forKey: .ownerUserRecordName)
+            try container.encodeIfPresent(inviterName, forKey: .inviterName)
+        }
     }
 }
 
@@ -76,7 +166,7 @@ struct HouseholdIndex: Codable {
     var activeHouseholdId: UUID
     var schemaVersion: Int
 
-    static let currentSchemaVersion = 3
+    static let currentSchemaVersion = 4
 
     var activeHousehold: Household? {
         households.first { $0.id == activeHouseholdId }

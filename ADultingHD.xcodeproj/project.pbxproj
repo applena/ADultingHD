@@ -19,11 +19,14 @@
 		0F1FC297E0712FDE97CEA38B /* ScreenshotTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC4F1A84FF71C986EBEC3197 /* ScreenshotTests.swift */; };
 		109FEC9D5330FE391EEE11C7 /* ADultingHDWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADEF2B5DEB9BCCF7E7E71E62 /* ADultingHDWidget.swift */; };
 		1128FE1BD6788B6DC4414AAC /* ProUpgradeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 549CB63F51BACCA54F498F61 /* ProUpgradeView.swift */; };
+		1379EEC1EC27C492E0B3BC8B /* WelcomeIntroductionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF98B5DB14DD0DA949A05F56 /* WelcomeIntroductionView.swift */; };
+		1808CD64BE4AD9A38167576F /* StarterHouseholdSetupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8286C54BF6322820BC8C8F7 /* StarterHouseholdSetupView.swift */; };
 		192D8A1B3C12ABF4EB2B4D27 /* FeedbackManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 854942DD593A8ECA221E1EBA /* FeedbackManager.swift */; };
 		1A414DB4EF6A72C1C2BB593C /* TaskStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = E301F5BC8F6566FA177AF157 /* TaskStore.swift */; };
 		1B89BFD27BDC7BF01730F544 /* HouseholdView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 695F786CFF2DBB9CFFC3FB57 /* HouseholdView.swift */; };
 		2136E85F041B701A3FC3A6F8 /* HouseholdSwitcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0393A2B006DEC68B74588B38 /* HouseholdSwitcher.swift */; };
 		217DCA6798A2B5FEBC6F3F36 /* CelebrationOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = C83482BE393F043CC98D85D5 /* CelebrationOverlay.swift */; };
+		254150F357B3C00D33E26FDE /* HouseholdWorkspaceStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C780BE00E1AEC497667BE4AC /* HouseholdWorkspaceStore.swift */; };
 		25C17D5FAF5A3204ACF04EEB /* RecurrenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6B16200DEE379710BDC731E /* RecurrenceTests.swift */; };
 		2760A02D9D2F9136B7695DBA /* RecurrenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6B16200DEE379710BDC731E /* RecurrenceTests.swift */; };
 		27FFD28F0F6424E3309F598A /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 3A3517C461E95902B75B83EC /* Assets.xcassets */; };
@@ -41,6 +44,7 @@
 		3DC91DE434871AB06678003F /* StorageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC655FB6ECD683EFB08D9D2A /* StorageTests.swift */; };
 		3E40B0431B7B7A5679FEC254 /* Recurrence.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF1CF56CB3F7513581C10151 /* Recurrence.swift */; };
 		40EB5B76C13D61C37F3B012B /* CloudShareSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50B7A549DD9609592F8E379E /* CloudShareSheet.swift */; };
+		45BE22DEDFB5D6FF2D9EC8D5 /* WelcomeIntroductionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF98B5DB14DD0DA949A05F56 /* WelcomeIntroductionView.swift */; };
 		464FA6A8B7D4398D40560971 /* HouseholdListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D2415835B6B9246CBCB2B51 /* HouseholdListView.swift */; };
 		4686ADD3BCC33DFE1FAEE9F5 /* StoreManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82F1A54B24D8CEE886570DD5 /* StoreManager.swift */; };
 		48878A87FE9D74C9795083DA /* CreateHouseholdSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3727978FB1D9851E994C4EA1 /* CreateHouseholdSheet.swift */; };
@@ -84,6 +88,7 @@
 		9D361A1FB6B532CDC9A8FA64 /* SharedDefaults.swift in Sources */ = {isa = PBXBuildFile; fileRef = 120568C8B5D9789897289150 /* SharedDefaults.swift */; };
 		9F85CA4BB8D941A50064BBDD /* Household.swift in Sources */ = {isa = PBXBuildFile; fileRef = D11A106E8C2F206C19D308D2 /* Household.swift */; };
 		A749CF0FE2A205BA72AC5B7D /* AddTaskView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC09792564158736721A229E /* AddTaskView.swift */; };
+		A75462A9581CB3FF7A71AF25 /* HouseholdWorkspaceStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C780BE00E1AEC497667BE4AC /* HouseholdWorkspaceStore.swift */; };
 		A78B723C3B169F7807F6EDD6 /* CloudKitRecordTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84C447DACC7370EA8A6AF043 /* CloudKitRecordTests.swift */; };
 		A9FA92AC8B7A24A48B392F8C /* NameClashSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00F20E5C399652D2912DA0DE /* NameClashSheet.swift */; };
 		AB9CED694A786AED0A665721 /* Products.storekit in Resources */ = {isa = PBXBuildFile; fileRef = 94BE46FE41B7C1EA8E502F61 /* Products.storekit */; };
@@ -91,11 +96,13 @@
 		B0063F961C5D09824CD606F1 /* WeeklyLeaderboard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53F4786298402DBDC4632460 /* WeeklyLeaderboard.swift */; };
 		B2E33766E6A443E258D27C8E /* AvatarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1090F574CE8B557B631AA05C /* AvatarView.swift */; };
 		B719C8440B8AA15C2D29DE11 /* StorageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC655FB6ECD683EFB08D9D2A /* StorageTests.swift */; };
+		B8252B18EC63EC300F1C71B5 /* StarterHouseholdSetupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8286C54BF6322820BC8C8F7 /* StarterHouseholdSetupView.swift */; };
 		BB5FC43B97E81E7B705F1E50 /* HouseholdListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D2415835B6B9246CBCB2B51 /* HouseholdListView.swift */; };
 		BD86A3F692787569AB6672D5 /* NameClashSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00F20E5C399652D2912DA0DE /* NameClashSheet.swift */; };
 		C0BA3A041B6A36D4DB2AA8C5 /* SeasonalTasks.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0B77A6011E1BFCF8CBD20D /* SeasonalTasks.swift */; };
 		C19DB4BB11AB785EE04F0097 /* SuppliesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4625924B07ADFBF1008BB9A7 /* SuppliesView.swift */; };
 		C580DDA7F993E8F55A55996C /* TaskCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBF9F9EF33AED52C9BCD464D /* TaskCatalog.swift */; };
+		C719D3AD7924B0094411FE64 /* WelcomeOnboardingFlowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2445B7B5BDA2AD1C8AF51176 /* WelcomeOnboardingFlowTests.swift */; };
 		CE5D9208158614C478A57CF1 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC7C1D393BEF1BD66D303071 /* AppDelegate.swift */; };
 		CFC3DFE9DA24ABE806C2D870 /* CloudKitIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3CB849F023CE45C9B40F8E02 /* CloudKitIntegrationTests.swift */; };
 		D01170ED32D390FC87CD5772 /* ICloudMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3657A503A8E12F538794820B /* ICloudMonitor.swift */; };
@@ -104,6 +111,7 @@
 		D438598B63318FAF91F633A6 /* Recurrence.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF1CF56CB3F7513581C10151 /* Recurrence.swift */; };
 		D5ED0D8A6525358B05C0F0B6 /* WelcomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 124C98670AF61F31F83E9446 /* WelcomeView.swift */; };
 		D897D7C3E7496EC9CF18BE21 /* CloudShareSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50B7A549DD9609592F8E379E /* CloudShareSheet.swift */; };
+		DC136BC5D68E644E3D81FA77 /* WelcomeOnboardingFlowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2445B7B5BDA2AD1C8AF51176 /* WelcomeOnboardingFlowTests.swift */; };
 		DCBFC7323C498C4BCACA07F2 /* WelcomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 124C98670AF61F31F83E9446 /* WelcomeView.swift */; };
 		E0A6C9DCEA16B498614C0660 /* FeedbackManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 854942DD593A8ECA221E1EBA /* FeedbackManager.swift */; };
 		E3DF2EB293C94F7A4C2CDD8F /* AvatarModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E4E23E901E5476ADB2336D1 /* AvatarModels.swift */; };
@@ -152,6 +160,7 @@
 		124C98670AF61F31F83E9446 /* WelcomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WelcomeView.swift; sourceTree = "<group>"; };
 		12E42443B93064A0049A2DE8 /* ModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelTests.swift; sourceTree = "<group>"; };
 		1404A4A0405FEE3627DCF6ED /* ScheduleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScheduleView.swift; sourceTree = "<group>"; };
+		2445B7B5BDA2AD1C8AF51176 /* WelcomeOnboardingFlowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WelcomeOnboardingFlowTests.swift; sourceTree = "<group>"; };
 		2F5B0036B4BFEAB2320CF8F3 /* ADultingHD.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ADultingHD.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		317D978794EB297B3B1016C3 /* TaskDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskDetailView.swift; sourceTree = "<group>"; };
 		3657A503A8E12F538794820B /* ICloudMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ICloudMonitor.swift; sourceTree = "<group>"; };
@@ -186,6 +195,7 @@
 		9842B7EFD24606C323FF2B0A /* TaskListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskListView.swift; sourceTree = "<group>"; };
 		A6B16200DEE379710BDC731E /* RecurrenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecurrenceTests.swift; sourceTree = "<group>"; };
 		A7A30BDBD828F7148288710C /* DataStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DataStore.swift; sourceTree = "<group>"; };
+		A8286C54BF6322820BC8C8F7 /* StarterHouseholdSetupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StarterHouseholdSetupView.swift; sourceTree = "<group>"; };
 		AB0B77A6011E1BFCF8CBD20D /* SeasonalTasks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SeasonalTasks.swift; sourceTree = "<group>"; };
 		AC0D49B9607490BDBDF8E190 /* CloudKitSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitSync.swift; sourceTree = "<group>"; };
 		AC655FB6ECD683EFB08D9D2A /* StorageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageTests.swift; sourceTree = "<group>"; };
@@ -197,7 +207,9 @@
 		BBF9F9EF33AED52C9BCD464D /* TaskCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskCatalog.swift; sourceTree = "<group>"; };
 		BC09792564158736721A229E /* AddTaskView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddTaskView.swift; sourceTree = "<group>"; };
 		BC4F1A84FF71C986EBEC3197 /* ScreenshotTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenshotTests.swift; sourceTree = "<group>"; };
+		C780BE00E1AEC497667BE4AC /* HouseholdWorkspaceStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HouseholdWorkspaceStore.swift; sourceTree = "<group>"; };
 		C83482BE393F043CC98D85D5 /* CelebrationOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CelebrationOverlay.swift; sourceTree = "<group>"; };
+		CF98B5DB14DD0DA949A05F56 /* WelcomeIntroductionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WelcomeIntroductionView.swift; sourceTree = "<group>"; };
 		D11A106E8C2F206C19D308D2 /* Household.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Household.swift; sourceTree = "<group>"; };
 		D26760093C603E0412FAC1FA /* ADultingHDUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = ADultingHDUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		D6FBFA6567C2B1A40A60A5E2 /* ProfileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileView.swift; sourceTree = "<group>"; };
@@ -232,6 +244,7 @@
 			children = (
 				AC0D49B9607490BDBDF8E190 /* CloudKitSync.swift */,
 				A7A30BDBD828F7148288710C /* DataStore.swift */,
+				C780BE00E1AEC497667BE4AC /* HouseholdWorkspaceStore.swift */,
 				3657A503A8E12F538794820B /* ICloudMonitor.swift */,
 				E301F5BC8F6566FA177AF157 /* TaskStore.swift */,
 			);
@@ -281,6 +294,7 @@
 				E47DD27D62AD23DAEE39C772 /* NewFeatureTests.swift */,
 				A6B16200DEE379710BDC731E /* RecurrenceTests.swift */,
 				AC655FB6ECD683EFB08D9D2A /* StorageTests.swift */,
+				2445B7B5BDA2AD1C8AF51176 /* WelcomeOnboardingFlowTests.swift */,
 			);
 			path = ADultingHDTests;
 			sourceTree = "<group>";
@@ -323,6 +337,8 @@
 		79C1E09957FB5E6A13FDA0BE /* Welcome */ = {
 			isa = PBXGroup;
 			children = (
+				A8286C54BF6322820BC8C8F7 /* StarterHouseholdSetupView.swift */,
+				CF98B5DB14DD0DA949A05F56 /* WelcomeIntroductionView.swift */,
 				124C98670AF61F31F83E9446 /* WelcomeView.swift */,
 			);
 			path = Welcome;
@@ -683,6 +699,7 @@
 				5B6D8E8798E0F52D5D76F8C7 /* NewFeatureTests.swift in Sources */,
 				2760A02D9D2F9136B7695DBA /* RecurrenceTests.swift in Sources */,
 				3DC91DE434871AB06678003F /* StorageTests.swift in Sources */,
+				C719D3AD7924B0094411FE64 /* WelcomeOnboardingFlowTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -710,6 +727,7 @@
 				464FA6A8B7D4398D40560971 /* HouseholdListView.swift in Sources */,
 				2136E85F041B701A3FC3A6F8 /* HouseholdSwitcher.swift in Sources */,
 				EAD9D9ED183F29BF6113503F /* HouseholdView.swift in Sources */,
+				254150F357B3C00D33E26FDE /* HouseholdWorkspaceStore.swift in Sources */,
 				68ECBCF85C1FBDB970904EA3 /* ICloudMonitor.swift in Sources */,
 				85DEF4BA984FD4CCFE3F7F3E /* MailComposer.swift in Sources */,
 				81EE3B8055126ADDA86D97FA /* Models.swift in Sources */,
@@ -722,6 +740,7 @@
 				6EA755C6B47C601D4AC5214A /* SeasonalTasks.swift in Sources */,
 				2C4F273A0464A9E089084803 /* SettingsView.swift in Sources */,
 				73DD7A0B9D335663C6F31965 /* SharedDefaults.swift in Sources */,
+				1808CD64BE4AD9A38167576F /* StarterHouseholdSetupView.swift in Sources */,
 				5895179F1F076F7052A0B844 /* StatsView.swift in Sources */,
 				335B5655E85ADF9E3F7F1561 /* StoreManager.swift in Sources */,
 				59B437DD42E6A3FED446FE4B /* SuppliesView.swift in Sources */,
@@ -731,6 +750,7 @@
 				4BFE807B0EA0A3A6DE64775E /* TaskStore.swift in Sources */,
 				0A1DFB68D9B5E5EF8D71D9B7 /* Theme.swift in Sources */,
 				9230042663357D55AAB821DA /* WeeklyLeaderboard.swift in Sources */,
+				1379EEC1EC27C492E0B3BC8B /* WelcomeIntroductionView.swift in Sources */,
 				D5ED0D8A6525358B05C0F0B6 /* WelcomeView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -759,6 +779,7 @@
 				BB5FC43B97E81E7B705F1E50 /* HouseholdListView.swift in Sources */,
 				5705FDAC1189CAA5B5DC2C51 /* HouseholdSwitcher.swift in Sources */,
 				1B89BFD27BDC7BF01730F544 /* HouseholdView.swift in Sources */,
+				A75462A9581CB3FF7A71AF25 /* HouseholdWorkspaceStore.swift in Sources */,
 				D01170ED32D390FC87CD5772 /* ICloudMonitor.swift in Sources */,
 				0EBCCB3952C73766A7550BB1 /* MailComposer.swift in Sources */,
 				4E200ACE0644D64B1C8E12FE /* Models.swift in Sources */,
@@ -771,6 +792,7 @@
 				C0BA3A041B6A36D4DB2AA8C5 /* SeasonalTasks.swift in Sources */,
 				E6A654229380129922988B89 /* SettingsView.swift in Sources */,
 				E7B270A26268BE3E7C40D20D /* SharedDefaults.swift in Sources */,
+				B8252B18EC63EC300F1C71B5 /* StarterHouseholdSetupView.swift in Sources */,
 				8421DBE651D8B024824035F0 /* StatsView.swift in Sources */,
 				4686ADD3BCC33DFE1FAEE9F5 /* StoreManager.swift in Sources */,
 				C19DB4BB11AB785EE04F0097 /* SuppliesView.swift in Sources */,
@@ -780,6 +802,7 @@
 				1A414DB4EF6A72C1C2BB593C /* TaskStore.swift in Sources */,
 				39B3C852206DB89E94730D9B /* Theme.swift in Sources */,
 				B0063F961C5D09824CD606F1 /* WeeklyLeaderboard.swift in Sources */,
+				45BE22DEDFB5D6FF2D9EC8D5 /* WelcomeIntroductionView.swift in Sources */,
 				DCBFC7323C498C4BCACA07F2 /* WelcomeView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -796,6 +819,7 @@
 				6D3913B7404D76076FFBD3EC /* NewFeatureTests.swift in Sources */,
 				25C17D5FAF5A3204ACF04EEB /* RecurrenceTests.swift in Sources */,
 				B719C8440B8AA15C2D29DE11 /* StorageTests.swift in Sources */,
+				DC136BC5D68E644E3D81FA77 /* WelcomeOnboardingFlowTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -34,7 +34,10 @@ struct ContentView: View {
                 })
             }
         }
-        .sheet(item: $bindable.pendingNameClash) { clash in
+        .sheet(item: Binding(
+            get: { hasCompletedOnboarding ? bindable.pendingNameClash : nil },
+            set: { bindable.pendingNameClash = $0 }
+        )) { clash in
             NameClashSheet(clash: clash)
         }
     }

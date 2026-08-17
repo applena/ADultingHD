@@ -48,7 +48,6 @@ final class CloudKitSync: ObservableObject {
 
     static let shared = CloudKitSync()
 
-    @Published var shareURL: URL?
     @Published var isAvailable = false
     @Published var syncError: String?
 
@@ -167,7 +166,6 @@ final class CloudKitSync: ObservableObject {
                 }
             }
             configuredSubscriptionZones.remove(household.zoneName)
-            shareURL = nil
         } catch let error as CloudKitSyncError {
             throw error
         } catch {
@@ -189,8 +187,16 @@ final class CloudKitSync: ObservableObject {
         guard household.ownerIsCurrentUser else { return false }
         let zones = try await privateDB.allRecordZones()
         guard zones.contains(where: { $0.zoneID.zoneName == household.zoneName }) else { return false }
-        guard let root = try? await privateDB.record(for: rootRecordID(for: household)) else { return false }
-        return root.share != nil
+        do {
+            let root = try await privateDB.record(for: rootRecordID(for: household))
+            return root.share != nil
+        } catch {
+            // A genuinely missing root proves there is no live share. Every
+            // other CloudKit error is inconclusive and must propagate so
+            // callers that may delete local data can fail closed.
+            guard isMissingCloudKitObject(error) else { throw error }
+            return false
+        }
     }
 
     // MARK: - Push (local → CloudKit)
@@ -215,6 +221,42 @@ final class CloudKitSync: ObservableObject {
         await saveRecords([record], in: database(for: household))
     }
 
+    /// Upload every record a newly invited participant needs before the share
+    /// sheet is presented. Unlike ordinary best-effort sync, this path is
+    /// fail-closed: every per-record result must succeed or invite preparation
+    /// throws and the user can retry without sending an incomplete household.
+    func uploadInitialShareSnapshot(
+        tasks: [HouseholdTask],
+        profile: UserProfile,
+        completions: [TaskCompletion],
+        members: [UserProfile],
+        household: Household
+    ) async throws {
+        guard isAvailable else {
+            throw CloudKitSyncError.iCloudUnavailable(status: syncError ?? "unknown")
+        }
+
+        let zoneID = zoneID(for: household)
+        let rootID = rootRecordID(for: household)
+        let db = database(for: household)
+        var profilesByID = members.reduce(into: [UUID: UserProfile]()) { profiles, member in
+            profiles[member.id] = member
+        }
+        profilesByID[profile.id] = profile
+        let records = tasks.map { $0.toCKRecord(zoneID: zoneID, parentRecordID: rootID) }
+            + completions.map { $0.toCKRecord(zoneID: zoneID, parentRecordID: rootID) }
+            + profilesByID.values.map { $0.toCKRecord(zoneID: zoneID, parentRecordID: rootID) }
+
+        // Stay comfortably below CloudKit's per-operation record limit while
+        // retaining exact per-record validation for large completion histories.
+        let batchSize = 200
+        for batchStart in stride(from: 0, to: records.count, by: batchSize) {
+            let batchEnd = min(batchStart + batchSize, records.count)
+            try await saveRequiredRecords(Array(records[batchStart..<batchEnd]), in: db)
+        }
+        logger.info("☁️ Initial share snapshot uploaded: \(records.count) records")
+    }
+
     private func saveRecords(_ records: [CKRecord], in db: CKDatabase) async {
         guard !records.isEmpty else { return }
         do {
@@ -223,6 +265,40 @@ final class CloudKitSync: ObservableObject {
         } catch {
             logger.error("☁️ Push failed: \(error.localizedDescription)")
             syncError = error.localizedDescription
+        }
+    }
+
+    private func saveRequiredRecords(_ records: [CKRecord], in db: CKDatabase) async throws {
+        guard !records.isEmpty else { return }
+        do {
+            let results = try await db.modifyRecords(
+                saving: records,
+                deleting: [],
+                savePolicy: .allKeys,
+                atomically: false
+            )
+            var failures: [String] = []
+            for record in records {
+                guard let result = results.saveResults[record.recordID] else {
+                    failures.append("\(record.recordID.recordName): no result returned")
+                    continue
+                }
+                if case .failure(let error) = result {
+                    failures.append("\(record.recordID.recordName): \(error.localizedDescription)")
+                }
+            }
+            guard failures.isEmpty else {
+                throw CloudKitSyncError.shareCreationFailed(
+                    detail: "initial household upload failed: \(failures.joined(separator: " | "))"
+                )
+            }
+            logger.info("☁️ Pushed required batch of \(records.count) records")
+        } catch {
+            syncError = error.localizedDescription
+            if let cloudKitError = error as? CloudKitSyncError { throw cloudKitError }
+            throw CloudKitSyncError.shareCreationFailed(
+                detail: "initial household upload failed: \(error.localizedDescription)"
+            )
         }
     }
 
@@ -235,13 +311,21 @@ final class CloudKitSync: ObservableObject {
         do {
             async let tasks       = fetchRecords(ofType: RecordType.task,       from: db, zoneID: zoneID)
             async let completions = fetchRecords(ofType: RecordType.completion, from: db, zoneID: zoneID)
-            async let profiles    = fetchRecords(ofType: RecordType.profile,    from: db, zoneID: zoneID)
+            async let profileRecords = fetchRecords(ofType: RecordType.profile, from: db, zoneID: zoneID)
 
-            let (t, c, p) = try await (tasks, completions, profiles)
+            let (t, c, p) = try await (tasks, completions, profileRecords)
+            let decodedProfiles = p.compactMap { UserProfile(from: $0) }
+            let inviterName = household.ownerUserRecordName.flatMap { ownerRecordName in
+                p.lazy
+                    .filter { $0.creatorUserRecordID?.recordName == ownerRecordName }
+                    .compactMap { UserProfile(from: $0)?.name.trimmedNilIfEmpty }
+                    .first
+            }
             let payload = CloudKitPayload(
                 tasks:       t.compactMap { HouseholdTask(from: $0) },
                 completions: c.compactMap { TaskCompletion(from: $0) },
-                profiles:    p.compactMap { UserProfile(from: $0) }
+                profiles:    decodedProfiles,
+                inviterName: inviterName
             )
             logger.info("☁️ Pulled \(payload.tasks.count) tasks, \(payload.completions.count) completions, \(payload.profiles.count) profiles from \(household.zoneName, privacy: .public)")
             return payload
@@ -308,7 +392,16 @@ final class CloudKitSync: ObservableObject {
             logger.info("☁️ Root record already exists")
             if let shareReference = existingRoot.share {
                 if let existingShare = try? await privateDB.record(for: shareReference.recordID) as? CKShare {
-                    shareURL = existingShare.url
+                    let existingTitle = existingShare[CKShare.SystemFieldKey.title] as? String
+                    if existingTitle != household.name {
+                        existingShare[CKShare.SystemFieldKey.title] = household.name as CKRecordValue
+                        let updatedShare = try await privateDB.save(existingShare)
+                        guard let updatedShare = updatedShare as? CKShare else {
+                            throw CloudKitSyncError.shareCreationFailed(detail: "updated share had an unexpected record type")
+                        }
+                        logger.info("☁️ Reusing household share with refreshed title")
+                        return updatedShare
+                    }
                     logger.info("☁️ Reusing household share: \(existingShare.url?.absoluteString ?? "no url", privacy: .public)")
                     return existingShare
                 }
@@ -368,7 +461,6 @@ final class CloudKitSync: ObservableObject {
                 detail: "saved=[\(typeList)] failures=[\(failureList)]"
             )
         }
-        shareURL = savedShare.url
         logger.info("☁️ Created household share: \(savedShare.url?.absoluteString ?? "no url", privacy: .public)")
         return savedShare
     }
@@ -379,43 +471,53 @@ final class CloudKitSync: ObservableObject {
     /// metadata's `share.recordID.zoneID` carries both the zoneName and the
     /// inviter's user record name, which together identify the shared zone
     /// against `sharedCloudDatabase` across app restarts.
-    func acceptShare(from metadata: CKShare.Metadata) async throws -> AcceptedShareInfo {
+    func acceptShare(from metadata: CKShare.Metadata) async throws -> HouseholdShareInfo {
         try await container.accept(metadata)
+        let info = shareInfo(from: metadata)
+        logger.info("☁️ Accepted household share zone=\(info.zoneName, privacy: .public) owner=\(info.ownerUserRecordName, privacy: .public)")
+        return info
+    }
+
+    /// Read the household and owner identity embedded in share metadata
+    /// without accepting it. First-launch onboarding uses this preview so a
+    /// recipient can choose to create their own household before this app
+    /// commits their CloudKit participation.
+    func shareInfo(from metadata: CKShare.Metadata) -> HouseholdShareInfo {
         let zoneID = metadata.share.recordID.zoneID
         // CKShare title is set when the owner created the share. Fallback to
         // a generic name when missing — the joiner can rename later.
         let title = (metadata.share[CKShare.SystemFieldKey.title] as? String)?.nilIfEmpty
             ?? "Shared Household"
-        logger.info("☁️ Accepted household share zone=\(zoneID.zoneName, privacy: .public) owner=\(zoneID.ownerName, privacy: .public)")
-        return AcceptedShareInfo(
+        let inviterName = metadata.ownerIdentity.nameComponents
+            .map { PersonNameComponentsFormatter().string(from: $0) }
+            .flatMap(\.trimmedNilIfEmpty)
+        return HouseholdShareInfo(
             shareRecordName: metadata.share.recordID.recordName,
             zoneName: zoneID.zoneName,
             ownerUserRecordName: zoneID.ownerName,
-            title: title
+            title: title,
+            inviterName: inviterName
         )
     }
 
     // MARK: - Helpers
 
     private func database(for household: Household) -> CKDatabase {
-        household.ownerIsCurrentUser ? privateDB : sharedDB
+        switch household.ownership {
+        case .owned: privateDB
+        case .joined: sharedDB
+        }
     }
 
     /// Joined households embed the inviter's user record name so the zone
     /// resolves correctly in `sharedCloudDatabase`.
     private func zoneID(for household: Household) -> CKRecordZone.ID {
-        if household.ownerIsCurrentUser {
+        switch household.ownership {
+        case .owned:
             return CKRecordZone.ID(zoneName: household.zoneName)
+        case .joined(let ownerUserRecordName, _):
+            return CKRecordZone.ID(zoneName: household.zoneName, ownerName: ownerUserRecordName)
         }
-        guard let ownerName = household.ownerUserRecordName else {
-            // Should be unreachable: `Household.newJoined` requires this
-            // field. A nil here means a hand-edited or pre-schema-v3
-            // households.json — log loudly and fall back to default-owner,
-            // which will produce empty pulls (not silent wrong-zone writes).
-            logger.error("☁️ Joined household '\(household.name, privacy: .public)' is missing ownerUserRecordName — pulls will return empty")
-            return CKRecordZone.ID(zoneName: household.zoneName, ownerName: CKCurrentUserDefaultName)
-        }
-        return CKRecordZone.ID(zoneName: household.zoneName, ownerName: ownerName)
     }
 
     /// The record itself is created lazily by `createOrFetchShare` — push
@@ -433,11 +535,12 @@ final class CloudKitSync: ObservableObject {
 /// Returned by `CloudKitSync.acceptShare` so `DataStore` can persist the new
 /// joined household row with the zone identity needed to address it across
 /// future app launches.
-struct AcceptedShareInfo: Sendable {
+struct HouseholdShareInfo: Sendable {
     let shareRecordName: String
     let zoneName: String
     let ownerUserRecordName: String
     let title: String
+    let inviterName: String?
 }
 
 // MARK: - Payload
@@ -446,6 +549,7 @@ struct CloudKitPayload {
     let tasks: [HouseholdTask]
     let completions: [TaskCompletion]
     let profiles: [UserProfile]
+    let inviterName: String?
 }
 
 // MARK: - Errors
@@ -742,4 +846,9 @@ extension UserProfile {
 
 private extension String {
     var nilIfEmpty: String? { isEmpty ? nil : self }
+
+    var trimmedNilIfEmpty: String? {
+        let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
 }

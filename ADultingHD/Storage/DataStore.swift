@@ -9,6 +9,20 @@ import UIKit
 
 private let logger = Logger(subsystem: "net.shadowpuppet.ADultingHD", category: "DataStore")
 
+enum IncomingHouseholdShareError: LocalizedError {
+    case missingPendingShare
+    case sharingUnavailable
+
+    var errorDescription: String? {
+        switch self {
+        case .missingPendingShare:
+            "That household invite is no longer available. Open the invite link again."
+        case .sharingUnavailable:
+            "Household sharing is not available in this build."
+        }
+    }
+}
+
 @Observable
 @MainActor
 final class DataStore {
@@ -35,6 +49,19 @@ final class DataStore {
     /// to prompt for a unique name before leaderboards become ambiguous.
     var pendingNameClash: NameClash?
 
+    /// One atomic value for the share a first-time user is considering. The
+    /// metadata remains file-private so views can display context but cannot
+    /// accidentally accept the share outside DataStore's lifecycle methods.
+    private(set) var pendingOnboardingShare: PendingOnboardingShare?
+
+    struct PendingOnboardingShare: Identifiable {
+        let id: String
+        let householdName: String
+        let inviterName: String?
+        fileprivate let bootstrapHouseholdID: UUID?
+        fileprivate let metadata: CKShare.Metadata
+    }
+
     struct NameClash: Identifiable, Equatable {
         let id = UUID()
         let householdName: String
@@ -46,8 +73,15 @@ final class DataStore {
     private let weeklyConsistencyBonusXP = 75
     private let monthlyConsistencyBonusXP = 150
 
-    private let store = TaskStore()
+    private let store: TaskStore
+    private let householdWorkspaceStore: HouseholdWorkspaceStore
     private let ckSync = CloudKitSync.shared
+
+    init() {
+        let store = TaskStore()
+        self.store = store
+        householdWorkspaceStore = HouseholdWorkspaceStore(store: store)
+    }
 
     @ObservationIgnored
     private var notificationManager: NotificationManager?
@@ -198,7 +232,12 @@ final class DataStore {
             isReloading = false
             drainPendingReload()
         }
+        await householdWorkspaceStore.withSerializedAccess {
+            await loadSerializedWorkspace()
+        }
+    }
 
+    private func loadSerializedWorkspace() async {
         #if DEBUG
         if ProcessInfo.processInfo.arguments.contains("-demo") {
             let demo = DemoData.generate()
@@ -229,36 +268,52 @@ final class DataStore {
         let preCompletionIDs = wasLoaded ? Set(completions.map(\.id)) : []
         let preRank = wasLoaded ? leaderboard.firstIndex(where: { $0.id == profile.id }).map { $0 + 1 } : nil
 
-        // Load the household index. If it's missing (e.g. very first install
-        // with no legacy data), synthesize a fresh default household.
-        if let loadedIndex = await store.loadHouseholdIndex() {
-            householdIndex = loadedIndex
+        // Resolve the complete workspace into locals first. Publishing the
+        // index before its scoped files finish loading would briefly pair the
+        // new active household with the previous household's tasks/stock.
+        var loadedIndex: HouseholdIndex
+        if var savedIndex = await store.loadHouseholdIndex() {
+            if savedIndex.schemaVersion != HouseholdIndex.currentSchemaVersion {
+                savedIndex.schemaVersion = HouseholdIndex.currentSchemaVersion
+                await store.saveHouseholdIndex(savedIndex)
+            }
+            loadedIndex = savedIndex
         } else if householdIndex.households.isEmpty {
-            householdIndex = makeFreshDefaultIndex()
-            await store.saveHouseholdIndex(householdIndex)
+            loadedIndex = makeFreshDefaultIndex()
+            await store.saveHouseholdIndex(loadedIndex)
+        } else {
+            loadedIndex = householdIndex
         }
 
-        let activeId = householdIndex.activeHouseholdId
+        let activeId = loadedIndex.activeHouseholdId
         async let loadedTasks = store.loadTasks(for: activeId)
         async let loadedProfile = store.loadProfile()
         async let loadedCompletions = store.loadCompletions()
         async let loadedStock = store.loadSupplyStock(for: activeId)
 
-        tasks = await loadedTasks
-        profile = await loadedProfile
-        completions = await loadedCompletions
-        supplyStock = await loadedStock
-        isLoaded = true
-
-        // Make sure the device user is in the active household's member list,
-        // and persist if we had to add them.
-        let memberWasMissing = !activeHousehold.members.contains(where: { $0.id == profile.id })
-        syncDeviceUserIntoActiveHousehold()
-        if memberWasMissing {
-            await store.saveHouseholdIndex(householdIndex)
+        let loadedWorkspace = await (loadedTasks, loadedProfile, loadedCompletions, loadedStock)
+        var finalIndex = loadedIndex
+        var memberWasMissing = false
+        if let householdPosition = finalIndex.households.firstIndex(where: { $0.id == activeId }) {
+            let loadedProfile = loadedWorkspace.1
+            if let memberPosition = finalIndex.households[householdPosition].members.firstIndex(where: { $0.id == loadedProfile.id }) {
+                finalIndex.households[householdPosition].members[memberPosition] = loadedProfile
+            } else {
+                finalIndex.households[householdPosition].members.append(loadedProfile)
+                memberWasMissing = true
+            }
         }
+        if memberWasMissing { await store.saveHouseholdIndex(finalIndex) }
 
+        // One synchronous publication boundary: SwiftUI never observes a
+        // household index paired with another household's workspace.
+        householdIndex = finalIndex
+        tasks = loadedWorkspace.0
+        profile = loadedWorkspace.1
+        completions = loadedWorkspace.2
+        supplyStock = loadedWorkspace.3
         refreshStreakState()
+        isLoaded = true
         logger.info("DataStore loaded: \(self.tasks.count) tasks, level \(self.profile.level), household '\(self.activeHousehold.name, privacy: .public)'")
 
         if wasLoaded {
@@ -310,8 +365,9 @@ final class DataStore {
 
         // If another device already migrated and iCloud synced households.json
         // to us, just adopt it without touching local legacy files.
-        if let existing = await store.loadHouseholdIndex() {
-            householdIndex = existing
+        if var existing = await store.loadHouseholdIndex() {
+            existing.schemaVersion = HouseholdIndex.currentSchemaVersion
+            await store.saveHouseholdIndex(existing)
             defaults.set(true, forKey: flagKey)
             logger.info("🏠 Adopted migrated HouseholdIndex from iCloud")
             return
@@ -364,7 +420,6 @@ final class DataStore {
             schemaVersion: HouseholdIndex.currentSchemaVersion
         )
         await store.saveHouseholdIndex(index)
-        householdIndex = index
 
         // Single commit point — only flip the flag once the new layout is
         // fully written.
@@ -374,7 +429,29 @@ final class DataStore {
 
     // MARK: - Complete Task
 
+    /// Run a user-initiated mutation only if the household that originated
+    /// the action is still active when its serialized turn begins. Reloads or
+    /// switches queued ahead of the action can otherwise redirect a stale
+    /// task/supply value into a different household.
+    private func mutateActiveWorkspace(
+        expectedHouseholdID: UUID,
+        _ mutation: @MainActor () async -> Void
+    ) async {
+        await householdWorkspaceStore.withSerializedAccess {
+            guard activeHouseholdId == expectedHouseholdID else { return }
+            await mutation()
+        }
+    }
+
     func completeTask(_ task: HouseholdTask, notes: String? = nil) async {
+        let expectedHouseholdID = activeHouseholdId
+        await mutateActiveWorkspace(expectedHouseholdID: expectedHouseholdID) {
+            guard let currentTask = tasks.first(where: { $0.id == task.id }) else { return }
+            await completeTaskWhileSerialized(currentTask, notes: notes)
+        }
+    }
+
+    private func completeTaskWhileSerialized(_ task: HouseholdTask, notes: String?) async {
         refreshStreakState()
         let streakBonus = UserProfile.streakBonusXP(for: profile.currentStreak)
         let xpEarned = task.xpReward
@@ -450,7 +527,7 @@ final class DataStore {
             FeedbackManager.taskCompleted()
         }
 
-        await save()
+        await saveCurrentWorkspaceWhileSerialized()
         logger.info("Completed '\(task.name)' +\(xpEarned)XP +\(streakBonus) streak bonus")
     }
 
@@ -467,6 +544,14 @@ final class DataStore {
     /// best-streak values are recalculated from the remaining completion
     /// history, so undoing a restart or record-setting day is also exact.
     func uncompleteTask(_ completion: TaskCompletion) async {
+        let expectedHouseholdID = activeHouseholdId
+        await mutateActiveWorkspace(expectedHouseholdID: expectedHouseholdID) {
+            guard let currentCompletion = completions.first(where: { $0.id == completion.id }) else { return }
+            await uncompleteTaskWhileSerialized(currentCompletion)
+        }
+    }
+
+    private func uncompleteTaskWhileSerialized(_ completion: TaskCompletion) async {
         guard let idx = completions.firstIndex(where: { $0.id == completion.id }) else { return }
         completions.remove(at: idx)
 
@@ -492,7 +577,7 @@ final class DataStore {
 
         refreshStreakState()
 
-        await save()
+        await saveCurrentWorkspaceWhileSerialized()
         logger.info("Uncompleted '\(completion.taskName)' -\(completion.totalXP + periodBonusTotal)XP")
     }
 
@@ -510,19 +595,40 @@ final class DataStore {
         }
     }
 
+    private func persistActiveTasksWhileSerialized() async {
+        let householdID = activeHouseholdId
+        let snapshot = tasks
+        guard householdIndex.households.contains(where: { $0.id == householdID }) else { return }
+        await store.saveTasks(snapshot, for: householdID)
+    }
+
     func toggleTask(_ task: HouseholdTask) async {
+        let expectedHouseholdID = activeHouseholdId
+        await mutateActiveWorkspace(expectedHouseholdID: expectedHouseholdID) {
+            await toggleTaskWhileSerialized(task)
+        }
+    }
+
+    private func toggleTaskWhileSerialized(_ task: HouseholdTask) async {
         if let idx = tasks.firstIndex(where: { $0.id == task.id }) {
             tasks[idx].isActive.toggle()
             syncReminder(for: tasks[idx])
-            await store.saveTasks(tasks, for: activeHouseholdId)
+            await persistActiveTasksWhileSerialized()
         }
     }
 
     func addCustomTask(_ task: HouseholdTask) async {
+        let expectedHouseholdID = activeHouseholdId
+        await mutateActiveWorkspace(expectedHouseholdID: expectedHouseholdID) {
+            await addCustomTaskWhileSerialized(task)
+        }
+    }
+
+    private func addCustomTaskWhileSerialized(_ task: HouseholdTask) async {
         let normalizedTask = task.withDefaultSchedule()
         tasks.append(normalizedTask)
         syncReminder(for: normalizedTask)
-        await store.saveTasks(tasks, for: activeHouseholdId)
+        await persistActiveTasksWhileSerialized()
     }
 
     /// Tasks that don't match a built-in catalog entry by name — counted
@@ -533,12 +639,27 @@ final class DataStore {
     }
 
     func deleteTask(_ task: HouseholdTask) async {
+        let expectedHouseholdID = activeHouseholdId
+        await mutateActiveWorkspace(expectedHouseholdID: expectedHouseholdID) {
+            guard let currentTask = tasks.first(where: { $0.id == task.id }) else { return }
+            await deleteTaskWhileSerialized(currentTask)
+        }
+    }
+
+    private func deleteTaskWhileSerialized(_ task: HouseholdTask) async {
         tasks.removeAll { $0.id == task.id }
         notificationManager?.cancelTaskReminder(for: task)
-        await store.saveTasks(tasks, for: activeHouseholdId)
+        await persistActiveTasksWhileSerialized()
     }
 
     func updateTask(_ task: HouseholdTask) async {
+        let expectedHouseholdID = activeHouseholdId
+        await mutateActiveWorkspace(expectedHouseholdID: expectedHouseholdID) {
+            await updateTaskWhileSerialized(task)
+        }
+    }
+
+    private func updateTaskWhileSerialized(_ task: HouseholdTask) async {
         if let idx = tasks.firstIndex(where: { $0.id == task.id }) {
             var updated = task
             if tasks[idx].recurrenceRule != updated.recurrenceRule {
@@ -559,7 +680,7 @@ final class DataStore {
             }
             tasks[idx] = updated
             syncReminder(for: updated)
-            await store.saveTasks(tasks, for: activeHouseholdId)
+            await persistActiveTasksWhileSerialized()
         }
     }
 
@@ -582,6 +703,19 @@ final class DataStore {
     /// excludes `scheduledOverrideDate` so this can't spuriously trigger the
     /// never-completed-task `createdAt` reset meant for real schedule edits.
     func rescheduleTask(_ task: HouseholdTask, to date: Date, on referenceDate: Date = Date(), calendar: Calendar = .current) async {
+        let expectedHouseholdID = activeHouseholdId
+        await mutateActiveWorkspace(expectedHouseholdID: expectedHouseholdID) {
+            guard let currentTask = tasks.first(where: { $0.id == task.id }) else { return }
+            await rescheduleTaskWhileSerialized(currentTask, to: date, on: referenceDate, calendar: calendar)
+        }
+    }
+
+    private func rescheduleTaskWhileSerialized(
+        _ task: HouseholdTask,
+        to date: Date,
+        on referenceDate: Date,
+        calendar: Calendar
+    ) async {
         let today = calendar.startOfDay(for: referenceDate)
         let targetDay = calendar.startOfDay(for: date)
         guard targetDay >= today, let currentOccurrence = task.nextOccurrence(calendar: calendar) else { return }
@@ -592,13 +726,26 @@ final class DataStore {
 
         var updated = task
         updated.scheduledOverrideDate = targetDay
-        await updateTask(updated)
+        await updateTaskWhileSerialized(updated)
     }
 
     /// Save exactly the catalog and custom tasks the user selected during
     /// onboarding. Fresh households start empty; nothing is assigned merely
     /// because a room was selected.
     func seedOnboardingTasks(recommendedTasks: [CatalogTask], customTasks: [HouseholdTask] = []) async {
+        let expectedHouseholdID = activeHouseholdId
+        await mutateActiveWorkspace(expectedHouseholdID: expectedHouseholdID) {
+            await seedOnboardingTasksWhileSerialized(
+                recommendedTasks: recommendedTasks,
+                customTasks: customTasks
+            )
+        }
+    }
+
+    private func seedOnboardingTasksWhileSerialized(
+        recommendedTasks: [CatalogTask],
+        customTasks: [HouseholdTask]
+    ) async {
         var names = Set<String>()
         let catalogTasks = recommendedTasks.compactMap { catalogTask -> HouseholdTask? in
             let key = catalogTask.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
@@ -615,7 +762,7 @@ final class DataStore {
 
         tasks = selectedTasks
         for task in tasks { syncReminder(for: task) }
-        await store.saveTasks(tasks, for: activeHouseholdId)
+        await persistActiveTasksWhileSerialized()
     }
 
     // MARK: - Avatar
@@ -623,31 +770,45 @@ final class DataStore {
     /// Owns and equips an item without debiting coins. The single place avatar
     /// acquisition happens, so any future side effect applies to every path.
     func grantAvatarItem(_ item: AvatarItem) async {
+        await householdWorkspaceStore.withSerializedAccess {
+            await grantAvatarItemWhileSerialized(item)
+        }
+    }
+
+    private func grantAvatarItemWhileSerialized(_ item: AvatarItem) async {
         profile.avatarState.purchase(item)
         profile.avatarState.equip(item)
         await store.saveProfile(profile)
     }
 
     func purchaseAvatarItem(_ item: AvatarItem) async {
-        guard profile.coins >= item.cost else { return }
-        profile.coins -= item.cost
-        await grantAvatarItem(item)
+        await householdWorkspaceStore.withSerializedAccess {
+            guard profile.coins >= item.cost else { return }
+            profile.coins -= item.cost
+            await grantAvatarItemWhileSerialized(item)
+        }
     }
 
     /// Onboarding's companion picker only offers free items.
     func selectStarterAvatar(id: String) async {
-        guard let item = avatarItem(byId: id), item.cost == 0 else { return }
-        await grantAvatarItem(item)
+        await householdWorkspaceStore.withSerializedAccess {
+            guard let item = avatarItem(byId: id), item.cost == 0 else { return }
+            await grantAvatarItemWhileSerialized(item)
+        }
     }
 
     func equipAvatarItem(_ item: AvatarItem) async {
-        profile.avatarState.equip(item)
-        await store.saveProfile(profile)
+        await householdWorkspaceStore.withSerializedAccess {
+            profile.avatarState.equip(item)
+            await store.saveProfile(profile)
+        }
     }
 
     func unequipAvatarItem(slot: AvatarSlot) async {
-        profile.avatarState.unequip(slot: slot)
-        await store.saveProfile(profile)
+        await householdWorkspaceStore.withSerializedAccess {
+            profile.avatarState.unequip(slot: slot)
+            await store.saveProfile(profile)
+        }
     }
 
     // MARK: - Supply Stock
@@ -670,8 +831,11 @@ final class DataStore {
     }
 
     func setSupplyStock(_ supply: String, stock: SupplyStock) async {
-        supplyStock[supply] = stock
-        await store.saveSupplyStock(supplyStock, for: activeHouseholdId)
+        let expectedHouseholdID = activeHouseholdId
+        await mutateActiveWorkspace(expectedHouseholdID: expectedHouseholdID) {
+            supplyStock[supply] = stock
+            await store.saveSupplyStock(supplyStock, for: activeHouseholdId)
+        }
     }
 
     // MARK: - Streak
@@ -734,25 +898,29 @@ final class DataStore {
 
     // MARK: - Persistence
 
-    private func save() async {
-        await store.saveTasks(tasks, for: activeHouseholdId)
+    /// Persist the active workspace while `HouseholdWorkspaceStore` owns the
+    /// serialized mutation transaction, so the active id and published state
+    /// cannot change between mutation and disk writes.
+    private func saveCurrentWorkspaceWhileSerialized() async {
+        let householdID = activeHouseholdId
         await store.saveProfile(profile)
         await store.saveCompletions(completions)
-        // Mirror the device user's latest progression into the active
-        // household's member list so the leaderboard reflects current XP.
-        syncDeviceUserIntoActiveHousehold()
+        guard householdIndex.households.contains(where: { $0.id == householdID }) else { return }
+
+        await store.saveTasks(tasks, for: householdID)
+        syncDeviceUser(profile, into: householdID)
         await store.saveHouseholdIndex(householdIndex)
         updateWidgetData()
         if isHouseholdSharingEnabled && ckSync.isAvailable {
-            let target = activeHousehold
+            guard let target = householdIndex.households.first(where: { $0.id == householdID }) else { return }
             await ckSync.pushTasks(tasks, household: target)
             await ckSync.pushProfile(profile, household: target)
             for completion in completions { await ckSync.pushCompletion(completion, household: target) }
         }
     }
 
-    private func syncDeviceUserIntoActiveHousehold() {
-        guard let hIdx = householdIndex.households.firstIndex(where: { $0.id == activeHouseholdId }) else { return }
+    private func syncDeviceUser(_ profile: UserProfile, into householdID: UUID) {
+        guard let hIdx = householdIndex.households.firstIndex(where: { $0.id == householdID }) else { return }
         if let mIdx = householdIndex.households[hIdx].members.firstIndex(where: { $0.id == profile.id }) {
             householdIndex.households[hIdx].members[mIdx] = profile
         } else {
@@ -866,81 +1034,160 @@ final class DataStore {
 
     // MARK: - Multi-household management
 
+    /// The caller must hold serialized workspace access. Split from the public
+    /// commit helper so destructive flows can revalidate under that access and
+    /// then use the same snapshot-install boundary.
+    private func performHouseholdTransitionWhileSerialized(
+        _ transition: HouseholdWorkspaceStore.Transition
+    ) async {
+        let snapshot = await householdWorkspaceStore.commit(
+            transition,
+            to: householdIndex,
+            profile: profile
+        )
+        householdIndex = snapshot.householdIndex
+        if case .loaded(let loadedTasks, let loadedStock) = snapshot.workspaceUpdate {
+            tasks = loadedTasks
+            supplyStock = loadedStock
+        }
+    }
+
     /// Creates a new household and makes it active. UI gates this on Pro for
     /// the 2nd+ household. Starts with no tasks — the built-in catalog is
     /// only offered during onboarding.
     func createHousehold(name: String) async {
-        let id = UUID()
-        let household = Household.newLocal(
-            id: id,
-            name: name.isEmpty ? "New Household" : name,
-            members: [profile],
-            zoneName: ZoneName.uniqueHousehold(for: id)
-        )
-        householdIndex.households.append(household)
-        householdIndex.activeHouseholdId = id
-        // Seed scoped state directly instead of loading from disk (which would
-        // fall through to an empty read + wasted write anyway).
-        tasks = []
-        supplyStock = [:]
-        await store.saveTasks(tasks, for: id)
-        await store.saveHouseholdIndex(householdIndex)
-        logger.info("🏠 Created household '\(name, privacy: .public)' \(id.uuidString, privacy: .public)")
+        await householdWorkspaceStore.withSerializedAccess {
+            let id = UUID()
+            let household = Household.newLocal(
+                id: id,
+                name: name.isEmpty ? "New Household" : name,
+                members: [profile],
+                zoneName: ZoneName.uniqueHousehold(for: id)
+            )
+            await performHouseholdTransitionWhileSerialized(.upsertAndActivate(household))
+            logger.info("🏠 Created household '\(name, privacy: .public)' \(id.uuidString, privacy: .public)")
+        }
+    }
+
+    /// Immediately leaves an already-accepted shared household and starts a
+    /// fresh local one for onboarding. Local state changes first so choosing
+    /// "create my own" never depends on network availability; CloudKit
+    /// participant cleanup continues best-effort afterward.
+    func leaveJoinedHouseholdForOnboarding() async {
+        let joined = await householdWorkspaceStore.withSerializedAccess { () -> Household? in
+            let joined = activeHousehold
+            guard !joined.ownerIsCurrentUser else { return nil }
+
+            let transition: HouseholdWorkspaceStore.Transition
+            if let existingLocal = householdIndex.households.first(where: \.ownerIsCurrentUser) {
+                transition = .removeAndActivate(removedID: joined.id, activeID: existingLocal.id)
+            } else {
+                let localID = UUID()
+                let local = Household.newLocal(
+                    id: localID,
+                    name: "My Household",
+                    members: [profile],
+                    zoneName: ZoneName.uniqueHousehold(for: localID)
+                )
+                transition = .replaceAndActivate(removedID: joined.id, household: local)
+            }
+            await performHouseholdTransitionWhileSerialized(transition)
+            pendingNameClash = nil
+            return joined
+        }
+        guard let joined else { return }
+        logger.info("🏠 Left joined household locally and switched to a local onboarding household")
+        cleanCloudKitAfterLocalRemoval(of: joined)
+    }
+
+    private func cleanCloudKitAfterLocalRemoval(of household: Household) {
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            do {
+                try await self.removeCloudKitDataBeforeLocalDeletion(from: [household])
+            } catch {
+                logger.warning("🏠 Deferred household cleanup failed: \(error.localizedDescription, privacy: .public)")
+            }
+        }
     }
 
     func switchHousehold(to id: UUID) async {
-        guard householdIndex.households.contains(where: { $0.id == id }) else { return }
-        guard id != activeHouseholdId else { return }
-        // Persist current household's state before swapping so nothing is lost
-        await save()
-        householdIndex.activeHouseholdId = id
-        await store.saveHouseholdIndex(householdIndex)
-        async let loadedTasks = store.loadTasks(for: id)
-        async let loadedStock = store.loadSupplyStock(for: id)
-        tasks = await loadedTasks
-        supplyStock = await loadedStock
-        logger.info("🏠 Switched to household \(id.uuidString, privacy: .public)")
+        await householdWorkspaceStore.withSerializedAccess {
+            guard householdIndex.households.contains(where: { $0.id == id }) else { return }
+            guard id != activeHouseholdId else { return }
+            // Persist current household's state before swapping so nothing is lost.
+            await saveCurrentWorkspaceWhileSerialized()
+            await performHouseholdTransitionWhileSerialized(.activate(id))
+            logger.info("🏠 Switched to household \(id.uuidString, privacy: .public)")
+        }
     }
 
     func renameActiveProfile(to newName: String) async {
-        let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, trimmed != profile.name else { return }
-        profile.name = trimmed
-        await save()
+        let expectedHouseholdID = activeHouseholdId
+        await mutateActiveWorkspace(expectedHouseholdID: expectedHouseholdID) {
+            let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty, trimmed != profile.name else { return }
+            profile.name = trimmed
+            await saveCurrentWorkspaceWhileSerialized()
+            detectNameClashInJoinedHouseholds()
+        }
+    }
+
+    /// Whether another member of the active household already uses a display
+    /// name. Onboarding and clash resolution share this policy so whitespace
+    /// and case handling cannot drift between the prompt and persistence.
+    func isProfileNameTakenInActiveHousehold(_ candidate: String) -> Bool {
+        household(activeHousehold, hasMemberNamed: candidate, excluding: profile.id)
+    }
+
+    private func household(_ household: Household, hasMemberNamed candidate: String, excluding profileID: UUID) -> Bool {
+        let normalizedCandidate = normalizedProfileName(candidate)
+        guard !normalizedCandidate.isEmpty else { return false }
+        return household.members.contains { member in
+            member.id != profileID && normalizedProfileName(member.name) == normalizedCandidate
+        }
+    }
+
+    private func normalizedProfileName(_ name: String) -> String {
+        name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     }
 
     func renameHousehold(_ id: UUID, to newName: String) async {
         let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        if let idx = householdIndex.households.firstIndex(where: { $0.id == id }) {
-            householdIndex.households[idx].name = trimmed
-            await store.saveHouseholdIndex(householdIndex)
+        await householdWorkspaceStore.withSerializedAccess {
+            if let idx = householdIndex.households.firstIndex(where: { $0.id == id }) {
+                householdIndex.households[idx].name = trimmed
+                await store.saveHouseholdIndex(householdIndex)
+            }
         }
     }
 
     /// Delete a household. Refuses to delete the last remaining household. If
     /// the active household is deleted, falls back to the first remaining one.
     func deleteHousehold(_ id: UUID) async throws {
-        guard householdIndex.households.count > 1 else {
-            logger.info("🏠 Refusing to delete last household")
-            return
-        }
-        guard let target = householdIndex.households.first(where: { $0.id == id }) else { return }
+        try await householdWorkspaceStore.withSerializedAccess {
+            guard householdIndex.households.count > 1 else {
+                logger.info("🏠 Refusing to delete last household")
+                return
+            }
+            guard let target = householdIndex.households.first(where: { $0.id == id }) else { return }
 
-        // Remove the server-side share before deleting the local row. Owner
-        // deletion revokes every collaborator; joined-household deletion
-        // removes only this device's participation.
-        try await removeCloudKitDataBeforeLocalDeletion(from: [target])
+            // Remove the server-side share before deleting the local row.
+            // Owner deletion revokes every collaborator; joined-household
+            // deletion removes only this device's participation.
+            try await removeCloudKitDataBeforeLocalDeletion(from: [target])
 
-        householdIndex.households.removeAll { $0.id == id }
-        if activeHouseholdId == id, let firstRemaining = householdIndex.households.first {
-            householdIndex.activeHouseholdId = firstRemaining.id
-            tasks = await store.loadTasks(for: firstRemaining.id)
-            supplyStock = await store.loadSupplyStock(for: firstRemaining.id)
+            if activeHouseholdId == id,
+               let nextHousehold = householdIndex.households.first(where: { $0.id != id }) {
+                await performHouseholdTransitionWhileSerialized(
+                    .removeAndActivate(removedID: id, activeID: nextHousehold.id)
+                )
+            } else {
+                await performHouseholdTransitionWhileSerialized(.removeInactive(id))
+            }
+            logger.info("🏠 Deleted household \(id.uuidString, privacy: .public)")
         }
-        await store.saveHouseholdIndex(householdIndex)
-        await store.deleteHouseholdDirectory(id)
-        logger.info("🏠 Deleted household \(id.uuidString, privacy: .public)")
     }
 
     func listHouseholds() -> [Household] {
@@ -1019,7 +1266,7 @@ final class DataStore {
     /// arrive here with a local onboarding household that still points at the
     /// old share. Delete that legacy zone before creating the replacement so
     /// existing invitees lose access and the new invite gets a new URL.
-    private func isolateLegacyOnboardingHouseholdIfNeeded() async throws -> Household {
+    private func isolateLegacyOnboardingHouseholdWhileSerialized() async throws -> Household {
         let target = activeHousehold
         let defaults = UserDefaults.standard
         guard target.ownerIsCurrentUser,
@@ -1040,31 +1287,10 @@ final class DataStore {
         return isolated
     }
 
-    private func recordShare(_ share: CKShare, for householdID: UUID) async {
+    private func recordShareWhileSerialized(_ share: CKShare, for householdID: UUID) async {
         guard let index = householdIndex.households.firstIndex(where: { $0.id == householdID }) else { return }
         householdIndex.households[index].shareRecordName = share.recordID.recordName
         await store.saveHouseholdIndex(householdIndex)
-    }
-
-    /// One-time migration: push existing JSON data to CloudKit on first launch.
-    private func migrateToCloudKitIfNeeded(force: Bool = false) async {
-        let key = PrefKey.ckMigrationDone
-        guard force || !UserDefaults.standard.bool(forKey: key) else { return }
-        // Migrations only push for owned households — joined households
-        // already had their data populated by the inviter.
-        let target = activeHousehold
-        guard target.ownerIsCurrentUser else {
-            logger.info("☁️ Skipping CK migration for joined household '\(target.name, privacy: .public)'")
-            UserDefaults.standard.set(true, forKey: key)
-            return
-        }
-        logger.info("☁️ Migrating local data to CloudKit for '\(target.name, privacy: .public)'...")
-        await ckSync.pushTasks(tasks, household: target)
-        await ckSync.pushProfile(profile, household: target)
-        for completion in completions { await ckSync.pushCompletion(completion, household: target) }
-        for p in householdProfiles where p.id != profile.id { await ckSync.pushProfile(p, household: target) }
-        UserDefaults.standard.set(true, forKey: key)
-        logger.info("☁️ Migration complete")
     }
 
     /// Pull latest from CloudKit and merge, preferring higher XP / more recent completions.
@@ -1078,8 +1304,15 @@ final class DataStore {
             isReloading = false
             drainPendingReload()
         }
+        await householdWorkspaceStore.withSerializedAccess {
+            await pullSerializedWorkspaceFromCloudKit(for: activeHousehold)
+        }
+    }
 
-        guard ckSync.isAvailable, let payload = await ckSync.pullAll(for: activeHousehold) else { return }
+    private func pullSerializedWorkspaceFromCloudKit(for target: Household) async {
+        guard activeHouseholdId == target.id,
+              ckSync.isAvailable,
+              let payload = await ckSync.pullAll(for: target) else { return }
 
         // Snapshot before merge for change detection
         let preProfiles = householdProfiles
@@ -1098,6 +1331,9 @@ final class DataStore {
         // Merge profiles into the active household's members list, preferring
         // the higher-XP version for conflicts on the same profile id.
         if let hIdx = householdIndex.households.firstIndex(where: { $0.id == activeHouseholdId }) {
+            if let inviterName = payload.inviterName {
+                householdIndex.households[hIdx].inviterName = inviterName
+            }
             for cloudProfile in payload.profiles {
                 if cloudProfile.id == profile.id {
                     if cloudProfile.totalXP > profile.totalXP { profile = cloudProfile }
@@ -1111,10 +1347,11 @@ final class DataStore {
             }
         }
 
-        await save()
+        await saveCurrentWorkspaceWhileSerialized()
         logger.info("☁️ CloudKit pull merged: \(self.tasks.count) tasks, \(self.completions.count) completions")
 
         detectHouseholdChanges(preProfiles: preProfiles, preCompletionIDs: preCompletionIDs, preRank: preRank)
+        detectNameClashInJoinedHouseholds()
     }
 
     private func detectHouseholdChanges(preProfiles: [UserProfile], preCompletionIDs: Set<UUID>, preRank: Int?) {
@@ -1187,49 +1424,29 @@ final class DataStore {
         logger.info("🏠 \(newActivities.count) new household activities detected")
     }
 
-    var cloudKitShareURL: URL? { ckSync.shareURL }
-    var cloudKitError: String? { ckSync.syncError }
-
-    func createHouseholdShare() async throws -> URL? {
-        // Defensive: CloudKit paths trap if the container isn't deployed.
-        // Callers should already be gated on Features.cloudKitSharing through
-        // the UI; this guard stops a stale UserDefaults flag or a direct
-        // invocation from crashing the app.
-        guard Features.cloudKitSharing else {
-            throw CloudKitSyncError.shareCreationFailed(detail: "cloudKitSharing feature flag is off")
-        }
-        guard activeHousehold.ownerIsCurrentUser else {
-            throw CloudKitSyncError.shareCreationFailed(detail: "cannot share a household joined from someone else")
-        }
-        AppDelegate.registerForRemoteNotifications()
-        logger.info("☁️ createHouseholdShare: setup...")
-        await ckSync.setup()
-        guard ckSync.isAvailable else {
-            logger.error("☁️ createHouseholdShare aborting — setup did not mark available. syncError=\(self.ckSync.syncError ?? "nil", privacy: .public)")
-            throw CloudKitSyncError.iCloudUnavailable(status: ckSync.syncError ?? "unknown")
-        }
-        let target = try await isolateLegacyOnboardingHouseholdIfNeeded()
-        // Share creation runs first so the invite URL is available without
-        // waiting for the migration push (a one-shot that can serially push
-        // dozens of records and was making the button feel dead for 10-30s).
-        // It also creates the zone, which subscription registration needs.
-        logger.info("☁️ createHouseholdShare: createOrFetchShare...")
-        let share = try await ckSync.createOrFetchShare(for: target)
-        await recordShare(share, for: target.id)
-        UserDefaults.standard.set(true, forKey: PrefKey.householdSharingEnabled)
-        await ckSync.setupSubscriptions(for: target)
-        Task { [weak self] in
-            await self?.migrateToCloudKitIfNeeded(force: true)
-        }
-        return share.url
-    }
-
     /// Prepare a CKShare + container for presentation in UICloudSharingController.
     /// The share is saved (creating root + share atomically on first call, or
     /// reusing the existing one) so the share sheet has everything it needs
-    /// to drive participant invites. Background data migration is kicked off
-    /// after the share is ready so the share sheet opens immediately.
-    func prepareHouseholdShare() async throws -> (share: CKShare, container: CKContainer) {
+    /// to drive participant invites. The initial data snapshot finishes first
+    /// so a recipient can never join an empty or stale share.
+    struct PreparedHouseholdShare {
+        let share: CKShare
+        let container: CKContainer
+        let householdID: UUID
+        let householdName: String
+    }
+
+    func prepareHouseholdShare() async throws -> PreparedHouseholdShare {
+        let expectedHouseholdID = activeHouseholdId
+        return try await householdWorkspaceStore.withSerializedAccess {
+            guard activeHouseholdId == expectedHouseholdID else {
+                throw CloudKitSyncError.shareCreationFailed(detail: "active household changed; try again")
+            }
+            return try await prepareHouseholdShareWhileSerialized()
+        }
+    }
+
+    private func prepareHouseholdShareWhileSerialized() async throws -> PreparedHouseholdShare {
         guard Features.cloudKitSharing else {
             throw CloudKitSyncError.shareCreationFailed(detail: "cloudKitSharing feature flag is off")
         }
@@ -1241,34 +1458,28 @@ final class DataStore {
         guard ckSync.isAvailable else {
             throw CloudKitSyncError.iCloudUnavailable(status: ckSync.syncError ?? "unknown")
         }
-        let target = try await isolateLegacyOnboardingHouseholdIfNeeded()
+        let target = try await isolateLegacyOnboardingHouseholdWhileSerialized()
         let share = try await ckSync.createOrFetchShare(for: target)
-        await recordShare(share, for: target.id)
+        await recordShareWhileSerialized(share, for: target.id)
         UserDefaults.standard.set(true, forKey: PrefKey.householdSharingEnabled)
         await ckSync.setupSubscriptions(for: target)
-        Task { [weak self] in
-            await self?.migrateToCloudKitIfNeeded(force: true)
-        }
-        return (share, ckSync.cloudContainer)
-    }
-
-    /// Result envelope for invite-link generation so both the onboarding flow
-    /// and the Households settings screen use the same error wording.
-    struct InviteResult {
-        let url: URL?
-        let errorMessage: String?
-    }
-
-    func generateHouseholdInvite() async -> InviteResult {
-        do {
-            let url = try await createHouseholdShare()
-            if url == nil {
-                return InviteResult(url: nil, errorMessage: "Couldn't generate a link. Is iCloud available?")
-            }
-            return InviteResult(url: url, errorMessage: nil)
-        } catch {
-            return InviteResult(url: nil, errorMessage: error.localizedDescription)
-        }
+        let sharedTarget = householdIndex.households.first(where: { $0.id == target.id }) ?? target
+        // This is still inside HouseholdWorkspaceStore's serialized boundary.
+        // The throwing upload prevents a newer task/profile save from reaching
+        // CloudKit first and prevents presenting an incomplete share.
+        try await ckSync.uploadInitialShareSnapshot(
+            tasks: tasks,
+            profile: profile,
+            completions: completions,
+            members: householdProfiles,
+            household: sharedTarget
+        )
+        return PreparedHouseholdShare(
+            share: share,
+            container: ckSync.cloudContainer,
+            householdID: sharedTarget.id,
+            householdName: sharedTarget.name
+        )
     }
 
     // MARK: - iCloud Documents Sync
@@ -1310,10 +1521,10 @@ final class DataStore {
     func startDayRolloverObserver() {
         guard dayRolloverObserverTokens.isEmpty else { return }
         for name in [Notification.Name.NSCalendarDayChanged, Notification.Name.NSSystemClockDidChange] {
-            observe(name, into: &dayRolloverObserverTokens) { [weak self] in self?.refreshForCurrentDay() }
+            observe(name, into: &dayRolloverObserverTokens) { [weak self] in await self?.refreshForCurrentDay() }
         }
         #if os(iOS)
-        observe(UIApplication.significantTimeChangeNotification, into: &dayRolloverObserverTokens) { [weak self] in self?.refreshForCurrentDay() }
+        observe(UIApplication.significantTimeChangeNotification, into: &dayRolloverObserverTokens) { [weak self] in await self?.refreshForCurrentDay() }
         #endif
     }
 
@@ -1326,38 +1537,127 @@ final class DataStore {
     /// the notification-driven path in `startDayRolloverObserver()`, so a
     /// resume-from-background catches a rollover that happened while
     /// suspended.
-    func refreshForCurrentDay() {
-        let today = Calendar.current.startOfDay(for: Date())
-        guard today != currentDay else { return }
-        currentDay = today
-        // A streak can die at this midnight boundary — recompute it (and
-        // re-plan the streak-at-risk warning) rather than showing
-        // yesterday's flame count until the next full load().
-        refreshStreakState()
-        updateWidgetData()
-        for task in activeTasks {
-            notificationManager?.scheduleTaskReminder(for: task)
+    func refreshForCurrentDay() async {
+        await householdWorkspaceStore.withSerializedAccess {
+            let today = Calendar.current.startOfDay(for: Date())
+            guard today != currentDay else { return }
+            currentDay = today
+            // A streak can die at this midnight boundary — recompute it (and
+            // re-plan the streak-at-risk warning) rather than showing
+            // yesterday's flame count until the next full load().
+            refreshStreakState()
+            updateWidgetData()
+            for task in activeTasks {
+                notificationManager?.scheduleTaskReminder(for: task)
+            }
+            logger.info("🌅 Rolled over to new day, recomputed due/overdue state")
         }
-        logger.info("🌅 Rolled over to new day, recomputed due/overdue state")
     }
 
-    /// Drain any CKShare invites that arrived before SwiftUI was ready
-    /// (cold-launch path) and process each one. Safe to call repeatedly.
-    func drainAcceptedShareInbox() async {
-        let pending = AcceptedShareInbox.shared.drain()
-        for metadata in pending {
-            await registerJoinedHousehold(from: metadata)
+    /// Stages an incoming household without calling `CKContainer.accept`, so
+    /// first-time users can review it or choose to create their own household.
+    func stagePendingOnboardingShare(_ metadata: CKShare.Metadata) {
+        let info = ckSync.shareInfo(from: metadata)
+        let recordID = metadata.share.recordID
+        pendingOnboardingShare = PendingOnboardingShare(
+            id: "\(recordID.zoneID.ownerName)|\(recordID.zoneID.zoneName)|\(recordID.recordName)",
+            householdName: info.title,
+            inviterName: info.inviterName,
+            bootstrapHouseholdID: pristineOnboardingBootstrapID,
+            metadata: metadata
+        )
+        logger.info("🏠 Staged first-launch invite for '\(info.title, privacy: .public)' pending onboarding choice")
+    }
+
+    /// Commit the staged first-launch invite after the recipient supplies the
+    /// display name household members will see.
+    func acceptPendingOnboardingShare(id: String, displayName: String) async throws {
+        guard let pendingOnboardingShare, pendingOnboardingShare.id == id else {
+            throw IncomingHouseholdShareError.missingPendingShare
         }
+        let bootstrapHousehold = await replaceableOnboardingBootstrap(
+            withID: pendingOnboardingShare.bootstrapHouseholdID
+        )
+        if let bootstrapHousehold {
+            try await registerJoinedHousehold(
+                from: pendingOnboardingShare.metadata,
+                commit: .replaceBootstrap(bootstrapHousehold.id)
+            )
+        } else {
+            try await registerJoinedHousehold(from: pendingOnboardingShare.metadata)
+        }
+        await renameActiveProfile(to: displayName)
+        if self.pendingOnboardingShare?.id == pendingOnboardingShare.id {
+            self.pendingOnboardingShare = nil
+        }
+    }
+
+    private var pristineOnboardingBootstrapID: UUID? {
+        let household = activeHousehold
+        return isLocallyPristineOnboardingBootstrap(household) ? household.id : nil
+    }
+
+    private func isLocallyPristineOnboardingBootstrap(_ household: Household) -> Bool {
+        household.id == activeHouseholdId
+            && household.ownerIsCurrentUser
+            && household.name == "My Household"
+            && household.shareRecordName == nil
+            && household.members.count <= 1
+            && tasks.isEmpty
+            && supplyStock.isEmpty
+    }
+
+    /// Fail closed before deleting the bootstrap: legacy shared households may
+    /// have no persisted shareRecordName, so local fields alone cannot prove
+    /// there are no collaborators. Joining already requires CloudKit; use that
+    /// same online session for a read-only share check before replacement.
+    private func replaceableOnboardingBootstrap(withID bootstrapID: UUID?) async -> Household? {
+        guard Features.cloudKitSharing,
+              let bootstrapID,
+              let household = householdIndex.households.first(where: { $0.id == bootstrapID }),
+              isLocallyPristineOnboardingBootstrap(household) else {
+            return nil
+        }
+        await ckSync.setup()
+        guard ckSync.isAvailable,
+              let hasExistingShare = try? await ckSync.hasExistingShare(for: household),
+              !hasExistingShare else {
+            return nil
+        }
+        return household
+    }
+
+    /// Drop a staged invite without ever accepting CloudKit participation.
+    /// The fresh local household remains active for the default onboarding.
+    func declinePendingOnboardingShare() {
+        pendingOnboardingShare = nil
     }
 
     /// Handle acceptance of a CKShare invite. Creates a new local `Household`
     /// row pointing at the inviter's shared zone, switches to it, and pulls
     /// its data. Idempotent — re-accepting a share for a zone we already
     /// joined just switches to that existing row.
-    func registerJoinedHousehold(from metadata: CKShare.Metadata) async {
+    private enum JoinedHouseholdCommit {
+        case preserveHouseholds
+        case replaceBootstrap(UUID)
+    }
+
+    private struct JoinedHouseholdRegistration {
+        let joined: Household
+        let removedBootstrap: Household?
+    }
+
+    func registerJoinedHousehold(from metadata: CKShare.Metadata) async throws {
+        try await registerJoinedHousehold(from: metadata, commit: .preserveHouseholds)
+    }
+
+    private func registerJoinedHousehold(
+        from metadata: CKShare.Metadata,
+        commit: JoinedHouseholdCommit
+    ) async throws {
         guard Features.cloudKitSharing else {
             logger.error("🏠 Ignoring CKShare acceptance: cloudKitSharing feature is off")
-            return
+            throw IncomingHouseholdShareError.sharingUnavailable
         }
         do {
             UserDefaults.standard.set(true, forKey: PrefKey.householdSharingEnabled)
@@ -1365,59 +1665,72 @@ final class DataStore {
             await ckSync.setup()
             guard ckSync.isAvailable else {
                 logger.error("🏠 acceptShare aborting — CloudKit not available: \(self.ckSync.syncError ?? "unknown", privacy: .public)")
-                return
+                throw CloudKitSyncError.iCloudUnavailable(status: ckSync.syncError ?? "unknown")
             }
             let info = try await ckSync.acceptShare(from: metadata)
-
-            // If we already accepted this share before (e.g. tapping the
-            // invite link a second time), reuse the existing local row
-            // instead of inserting a duplicate.
-            let existing = householdIndex.households.first { household in
-                !household.ownerIsCurrentUser
-                    && household.zoneName == info.zoneName
-                    && household.ownerUserRecordName == info.ownerUserRecordName
+            let registration = await householdWorkspaceStore.withSerializedAccess {
+                let registration = await commitAcceptedShareWhileSerialized(info, commit: commit)
+                await ckSync.setupSubscriptions(for: registration.joined)
+                await pullSerializedWorkspaceFromCloudKit(for: registration.joined)
+                return registration
             }
-            var joined: Household
-            if let existing {
-                var updated = existing
-                updated.shareRecordName = info.shareRecordName
-                joined = updated
-                if let index = householdIndex.households.firstIndex(where: { $0.id == existing.id }) {
-                    householdIndex.households[index] = updated
-                }
-                logger.info("🏠 Re-joined existing shared household '\(existing.name, privacy: .public)'")
-            } else {
-                var newHousehold = Household.newJoined(
-                    name: info.title,
-                    members: [profile],
-                    zoneName: info.zoneName,
-                    ownerUserRecordName: info.ownerUserRecordName
-                )
-                newHousehold.shareRecordName = info.shareRecordName
-                joined = newHousehold
-                householdIndex.households.append(joined)
-                // Pre-seed the joined household's local supply-stock file so
-                // it exists before `pullFromCloudKit` merges — tasks already
-                // default to empty on a missing file, so no seed is needed
-                // there.
-                await store.saveSupplyStock([:], for: joined.id)
-                logger.info("🏠 Joined new shared household '\(info.title, privacy: .public)' zone=\(info.zoneName, privacy: .public)")
+            if let removedBootstrap = registration.removedBootstrap {
+                cleanCloudKitAfterLocalRemoval(of: removedBootstrap)
             }
-
-            // Persist the index BEFORE switching so a crash between accept
-            // and the post-switch save doesn't leave the joined row missing
-            // (its CloudKit zone is already plumbed at this point).
-            await store.saveHouseholdIndex(householdIndex)
-
-            if activeHouseholdId != joined.id {
-                await switchHousehold(to: joined.id)
-            }
-
-            await ckSync.setupSubscriptions(for: joined)
-            await pullFromCloudKit()
-            detectNameClashInJoinedHouseholds()
         } catch {
             logger.error("🏠 Failed to accept share: \(error.localizedDescription)")
+            throw error
+        }
+    }
+
+    /// Resolve the stable CloudKit zone identity and commit it in one
+    /// serialized operation. Concurrent/repeated accepts therefore reuse the
+    /// first row instead of both minting local UUIDs before either is visible.
+    private func commitAcceptedShareWhileSerialized(
+        _ info: HouseholdShareInfo,
+        commit: JoinedHouseholdCommit
+    ) async -> JoinedHouseholdRegistration {
+        let existing = householdIndex.households.first { household in
+            !household.ownerIsCurrentUser
+                && household.zoneName == info.zoneName
+                && household.ownerUserRecordName == info.ownerUserRecordName
+        }
+
+        let joined: Household
+        if let existing {
+            var updated = existing
+            updated.shareRecordName = info.shareRecordName
+            updated.inviterName = info.inviterName ?? existing.inviterName
+            joined = updated
+            logger.info("🏠 Re-joined existing shared household '\(existing.name, privacy: .public)'")
+        } else {
+            var newHousehold = Household.newJoined(
+                name: info.title,
+                members: [profile],
+                zoneName: info.zoneName,
+                ownerUserRecordName: info.ownerUserRecordName,
+                inviterName: info.inviterName
+            )
+            newHousehold.shareRecordName = info.shareRecordName
+            joined = newHousehold
+            logger.info("🏠 Joined new shared household '\(info.title, privacy: .public)' zone=\(info.zoneName, privacy: .public)")
+        }
+
+        switch commit {
+        case .preserveHouseholds:
+            await performHouseholdTransitionWhileSerialized(.upsertAndActivate(joined))
+            return JoinedHouseholdRegistration(joined: joined, removedBootstrap: nil)
+        case .replaceBootstrap(let expectedID):
+            guard let currentBootstrap = householdIndex.households.first(where: { $0.id == expectedID }),
+                  isLocallyPristineOnboardingBootstrap(currentBootstrap) else {
+                await performHouseholdTransitionWhileSerialized(.upsertAndActivate(joined))
+                logger.info("🏠 Preserved onboarding household because it changed while the invite was accepted")
+                return JoinedHouseholdRegistration(joined: joined, removedBootstrap: nil)
+            }
+            await performHouseholdTransitionWhileSerialized(
+                .replaceAndActivate(removedID: currentBootstrap.id, household: joined)
+            )
+            return JoinedHouseholdRegistration(joined: joined, removedBootstrap: currentBootstrap)
         }
     }
 
@@ -1425,47 +1738,59 @@ final class DataStore {
     /// profile name matches an existing member's. Keeps leaderboards and
     /// activity attribution unambiguous.
     private func detectNameClashInJoinedHouseholds() {
-        let myName = profile.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !myName.isEmpty else { return }
-        for household in householdIndex.households where !household.ownerIsCurrentUser {
-            let others = household.members.filter { $0.id != profile.id }
-            let clash = others.contains { $0.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == myName }
-            if clash {
-                pendingNameClash = NameClash(
-                    householdName: household.name,
-                    existingNames: others.map { $0.name },
-                    currentName: profile.name
-                )
-                return
-            }
-        }
+        pendingNameClash = nil
+        let household = activeHousehold
+        guard !household.ownerIsCurrentUser,
+              !normalizedProfileName(profile.name).isEmpty,
+              self.household(household, hasMemberNamed: profile.name, excluding: profile.id) else { return }
+        let others = household.members.filter { $0.id != profile.id }
+        pendingNameClash = NameClash(
+            householdName: household.name,
+            existingNames: others.map { $0.name },
+            currentName: profile.name
+        )
     }
 
     /// Resolve the pending name clash by renaming the active profile to a
     /// unique value. No-op when the new name still collides.
     func resolveNameClash(with newName: String) async {
-        let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, let clash = pendingNameClash else { return }
-        let taken = Set(clash.existingNames.map { $0.lowercased() })
-        guard !taken.contains(trimmed.lowercased()) else { return }
-        profile.name = trimmed
-        pendingNameClash = nil
-        await save()
+        let expectedHouseholdID = activeHouseholdId
+        await mutateActiveWorkspace(expectedHouseholdID: expectedHouseholdID) {
+            let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty, let clash = pendingNameClash else { return }
+            guard !clash.existingNames.contains(where: {
+                normalizedProfileName($0) == normalizedProfileName(trimmed)
+            }), !isProfileNameTakenInActiveHousehold(trimmed) else { return }
+            profile.name = trimmed
+            await saveCurrentWorkspaceWhileSerialized()
+            detectNameClashInJoinedHouseholds()
+        }
     }
 
     // MARK: - Export/Import
 
     func exportData() async -> Data? {
-        await store.exportBackup(householdId: activeHouseholdId)
+        await householdWorkspaceStore.withSerializedAccess {
+            await store.exportBackup(householdId: activeHouseholdId)
+        }
     }
 
     func importData(_ data: Data) async -> Bool {
-        let success = await store.importBackup(from: data, householdId: activeHouseholdId)
+        let householdID = activeHouseholdId
+        let success = await householdWorkspaceStore.withSerializedAccess {
+            await store.importBackup(from: data, householdId: householdID)
+        }
         if success { await load() }
         return success
     }
 
     func resetAll() async throws {
+        try await householdWorkspaceStore.withSerializedAccess {
+            try await resetAllWhileSerialized()
+        }
+    }
+
+    private func resetAllWhileSerialized() async throws {
         // Reset clears every local household, so revoke/leave every known
         // CloudKit share first. If that cannot complete, keep local state so
         // the user is not left with an inaccessible shared household.
@@ -1481,16 +1806,16 @@ final class DataStore {
         let defaults = UserDefaults.standard
         defaults.removeObject(forKey: PrefKey.householdsLayoutMigratedV2)
         defaults.removeObject(forKey: PrefKey.defaultHouseholdId)
-        defaults.removeObject(forKey: PrefKey.ckMigrationDone)
         defaults.removeObject(forKey: PrefKey.hasCompletedOnboarding)
         defaults.removeObject(forKey: PrefKey.onboardingHouseholdName)
+        defaults.removeObject(forKey: PrefKey.onboardingPlayerName)
         defaults.removeObject(forKey: PrefKey.householdSharingEnabled)
         tasks = []
         profile = UserProfile()
         completions = []
         supplyStock = [:]
         householdIndex = makeFreshDefaultIndex()
-        await save()
+        await saveCurrentWorkspaceWhileSerialized()
     }
 }
 

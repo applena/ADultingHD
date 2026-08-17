@@ -1,5 +1,4 @@
 import SwiftUI
-import CloudKit
 
 /// Pro-gated management screen for listing and managing all households the
 /// device user owns or has joined. Supports rename, delete (refuses the last
@@ -13,18 +12,7 @@ struct HouseholdListView: View {
     @State private var deleteTarget: Household?
     @State private var deleteError: String?
     @State private var showCreateSheet = false
-    @State private var inviteError: String?
-    @State private var isGeneratingInvite = false
-    @State private var shareSheetPayload: ShareSheetPayload?
-
-    /// Wraps the CKShare + container so we can present `.sheet(item:)`
-    /// (which requires Identifiable) in a single binding update.
-    private struct ShareSheetPayload: Identifiable {
-        let id = UUID()
-        let share: CKShare
-        let container: CKContainer
-        let householdName: String
-    }
+    @State private var sharePresentation = HouseholdSharePresentation()
 
     var body: some View {
         let households = dataStore.listHouseholds()
@@ -48,21 +36,21 @@ struct HouseholdListView: View {
             if Features.cloudKitSharing {
                 Section("Invite Collaborators") {
                     Button {
-                        Task { await presentShareSheet() }
+                        Task { await sharePresentation.prepare(using: dataStore) }
                     } label: {
                         HStack {
-                            if isGeneratingInvite {
+                            if sharePresentation.isPreparing {
                                 ProgressView()
                                     .controlSize(.small)
                             } else {
                                 Image(systemName: "person.crop.circle.badge.plus")
                             }
-                            Text(isGeneratingInvite ? "Preparing…" : "Invite someone to this household")
+                            Text(sharePresentation.isPreparing ? "Preparing…" : "Invite someone to this household")
                         }
                     }
-                    .disabled(isGeneratingInvite)
-                    if let inviteError {
-                        Text(inviteError)
+                    .disabled(sharePresentation.isPreparing)
+                    if let errorMessage = sharePresentation.errorMessage {
+                        Text(errorMessage)
                             .font(.caption)
                             .foregroundStyle(.red)
                             .fixedSize(horizontal: false, vertical: true)
@@ -133,12 +121,12 @@ struct HouseholdListView: View {
         } message: {
             Text(deleteError ?? "The household could not be cleaned up.")
         }
-        .sheet(item: $shareSheetPayload) { payload in
+        .sheet(item: sharePresentation.payloadBinding) { payload in
             CloudShareSheet(
                 share: payload.share,
                 container: payload.container,
                 householdName: payload.householdName,
-                onDismiss: { shareSheetPayload = nil }
+                onDismiss: sharePresentation.dismiss
             )
         }
     }
@@ -206,21 +194,5 @@ struct HouseholdListView: View {
             }
         }
         .padding(.vertical, 4)
-    }
-
-    private func presentShareSheet() async {
-        isGeneratingInvite = true
-        defer { isGeneratingInvite = false }
-        inviteError = nil
-        do {
-            let (share, container) = try await dataStore.prepareHouseholdShare()
-            shareSheetPayload = ShareSheetPayload(
-                share: share,
-                container: container,
-                householdName: dataStore.activeHousehold.name
-            )
-        } catch {
-            inviteError = error.localizedDescription
-        }
     }
 }

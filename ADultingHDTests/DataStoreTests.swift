@@ -180,6 +180,22 @@ final class DataStoreTests: XCTestCase {
         XCTAssertEqual(dataStore.tasks.last?.scheduledWeekdays, TaskFrequency.weekly.defaultWeekdays)
     }
 
+    func testResolveNameClashUsesTrimmedCaseInsensitiveComparison() async {
+        let dataStore = DataStore()
+        dataStore.pendingNameClash = DataStore.NameClash(
+            householdName: "Maple House",
+            existingNames: ["Alex"],
+            currentName: "Player"
+        )
+
+        await dataStore.resolveNameClash(with: "  aLeX  ")
+        XCTAssertNotNil(dataStore.pendingNameClash)
+
+        await dataStore.resolveNameClash(with: "Taylor")
+        XCTAssertNil(dataStore.pendingNameClash)
+        XCTAssertEqual(dataStore.profile.name, "Taylor")
+    }
+
     // MARK: - completeTask / uncompleteTask (Dashboard's Completed Tasks undo, issue #16)
 
     func testUncompleteTaskReversesXPCoinsAndCompletionCount() async {

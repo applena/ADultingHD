@@ -152,29 +152,56 @@ final class ScreenshotTests: XCTestCase {
         app.launchArguments = ["-demo", "-onboarding"]
         app.launch()
 
-        let pages = ["suggestions", "sharing", "rewards"]
+        let housePage = app.descendants(matching: .any)
+            .matching(identifier: "onboarding-page-house-name")
+            .firstMatch
+        XCTAssertTrue(housePage.waitForExistence(timeout: 5), "House naming should be the first onboarding page")
 
-        for (index, page) in pages.enumerated() {
+        let householdName = app.textFields["onboarding-household-name-field"]
+        XCTAssertTrue(householdName.waitForExistence(timeout: 3))
+        replaceText(in: householdName, with: "Maple House")
+        capture("Onboarding_01_house_name")
+        tapOnboardingPrimaryAction()
+
+        let inviteChoice = app.descendants(matching: .any)
+            .matching(identifier: "onboarding-page-invite-choice")
+            .firstMatch
+        XCTAssertTrue(inviteChoice.waitForExistence(timeout: 5), "Invite choice should follow the house name")
+        capture("Onboarding_02_invite_choice")
+        tapOnboardingPrimaryAction()
+
+        let playerPage = app.descendants(matching: .any)
+            .matching(identifier: "onboarding-page-player-name")
+            .firstMatch
+        XCTAssertTrue(playerPage.waitForExistence(timeout: 5), "Choosing to invite should ask for the owner's name")
+        let playerName = app.textFields["onboarding-player-name-field"]
+        XCTAssertTrue(playerName.waitForExistence(timeout: 3))
+        replaceText(in: playerName, with: "Alex")
+        capture("Onboarding_03_player_name")
+        tapOnboardingPrimaryAction()
+
+        let invitePage = app.descendants(matching: .any)
+            .matching(identifier: "onboarding-page-invite")
+            .firstMatch
+        XCTAssertTrue(invitePage.waitForExistence(timeout: 5), "Name entry should lead to the actionable invite page")
+        capture("Onboarding_04_invite")
+        let skipInvite = app.buttons["onboarding-secondary-action"]
+        XCTAssertTrue(skipInvite.waitForExistence(timeout: 3))
+        skipInvite.tap()
+
+        for (index, page) in ["suggestions", "rewards"].enumerated() {
             let pageView = app.descendants(matching: .any)
                 .matching(identifier: "onboarding-page-\(page)")
                 .firstMatch
             XCTAssertTrue(pageView.waitForExistence(timeout: 5), "Missing onboarding page \(page)")
-
-            capture(String(format: "Onboarding_%02d_%@", index + 1, page))
-
-            let primary = app.buttons["onboarding-primary-action"]
-            XCTAssertTrue(primary.waitForExistence(timeout: 3))
-            XCTAssertTrue(primary.isHittable, "Primary onboarding action should be hittable")
-            primary.tap()
+            capture(String(format: "Onboarding_%02d_%@", index + 5, page))
+            tapOnboardingPrimaryAction()
         }
 
         let setupPage = app.descendants(matching: .any)
             .matching(identifier: "onboarding-page-setup")
             .firstMatch
-        XCTAssertTrue(setupPage.waitForExistence(timeout: 5), "Setup should follow the three benefit screens")
-
-        let playerName = app.textFields["onboarding-player-name-field"]
-        XCTAssertTrue(playerName.waitForExistence(timeout: 3))
+        XCTAssertTrue(setupPage.waitForExistence(timeout: 5), "Optional chore setup should follow the action-first onboarding")
 
         let room = app.buttons["Kitchen"]
         XCTAssertTrue(room.waitForExistence(timeout: 3), "Room choices should be tappable")
@@ -193,6 +220,7 @@ final class ScreenshotTests: XCTestCase {
         scrollClearOfActionBar(taskSearch)
         taskSearch.tap()
         taskSearch.typeText("Polish the moon")
+        dismissTaskSearchKeyboard()
 
         let customTaskButton = app.buttons["onboarding-add-custom-task"]
         XCTAssertTrue(customTaskButton.waitForExistence(timeout: 3), "Setup should offer a custom-task action")
@@ -202,6 +230,7 @@ final class ScreenshotTests: XCTestCase {
 
         taskSearch.tap()
         taskSearch.typeText("dishes")
+        dismissTaskSearchKeyboard()
 
         let catalogMatch = app.buttons["onboarding-catalog-task-Wash dishes"]
         XCTAssertTrue(catalogMatch.waitForExistence(timeout: 3), "Catalog search should show matching chores")
@@ -210,7 +239,7 @@ final class ScreenshotTests: XCTestCase {
         catalogMatch.tap()
         XCTAssertEqual(catalogMatch.value as? String, "Selected")
 
-        capture("Onboarding_04_setup")
+        capture("Onboarding_07_setup")
 
         let finish = app.buttons["onboarding-primary-action"]
         XCTAssertTrue(finish.waitForExistence(timeout: 3))
@@ -225,6 +254,38 @@ final class ScreenshotTests: XCTestCase {
                 || homeHeader.waitForExistence(timeout: 3),
             "Completing onboarding should reach the iPhone tabs or iPad home layout"
         )
+    }
+
+    private func tapOnboardingPrimaryAction() {
+        let primary = app.buttons["onboarding-primary-action"]
+        XCTAssertTrue(primary.waitForExistence(timeout: 3))
+        if !primary.isHittable {
+            let returnKey = app.keyboards.buttons["Return"]
+            if returnKey.exists {
+                returnKey.tap()
+            }
+        }
+        XCTAssertTrue(primary.isEnabled, "Primary onboarding action should be enabled")
+        if primary.isHittable {
+            primary.tap()
+        } else {
+            primary.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        }
+    }
+
+    private func replaceText(in field: XCUIElement, with text: String) {
+        field.tap()
+        let existingCount = (field.value as? String)?.count ?? 0
+        if existingCount > 0 {
+            field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: existingCount))
+        }
+        field.typeText(text)
+    }
+
+    private func dismissTaskSearchKeyboard() {
+        let done = app.buttons["onboarding-dismiss-task-keyboard"]
+        XCTAssertTrue(done.waitForExistence(timeout: 3), "Setup search should offer a keyboard Done action")
+        done.tap()
     }
 
     /// Navigate to a tab - handles both iPhone (TabBar) and iPad (sidebar) layouts

@@ -25,8 +25,8 @@ enum ShareAcceptance {
 /// On a warm-launch the `.onContinueUserActivity` modifier handles delivery
 /// directly without going through this buffer.
 @MainActor
-final class AcceptedShareInbox: ObservableObject {
-    static let shared = AcceptedShareInbox()
+final class IncomingShareInbox: ObservableObject {
+    static let shared = IncomingShareInbox()
 
     @Published private(set) var pending: [CKShare.Metadata] = []
 
@@ -80,7 +80,7 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         userDidAcceptCloudKitShareWith metadata: CKShare.Metadata
     ) {
         Task { @MainActor in
-            AcceptedShareInbox.shared.enqueue(metadata)
+            IncomingShareInbox.shared.enqueue(metadata)
         }
     }
 }
@@ -116,7 +116,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         userDidAcceptCloudKitShareWith metadata: CKShare.Metadata
     ) {
         Task { @MainActor in
-            AcceptedShareInbox.shared.enqueue(metadata)
+            IncomingShareInbox.shared.enqueue(metadata)
         }
     }
 }

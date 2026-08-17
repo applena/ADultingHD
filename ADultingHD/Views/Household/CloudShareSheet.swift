@@ -6,6 +6,76 @@ import UIKit
 import AppKit
 #endif
 
+struct HouseholdShareSheetPayload: Identifiable {
+    let id = UUID()
+    let share: CKShare
+    let container: CKContainer
+    let householdName: String
+}
+
+/// Shared preparation state for every place that presents a household invite.
+/// Keeping CloudKit loading, payload construction, and errors here prevents
+/// onboarding and Settings from implementing subtly different invite flows.
+@Observable
+@MainActor
+final class HouseholdSharePresentation {
+    enum Phase {
+        case idle
+        case preparing(UUID)
+        case ready(HouseholdShareSheetPayload)
+        case failed(String)
+    }
+
+    private(set) var phase: Phase = .idle
+
+    var isPreparing: Bool {
+        if case .preparing = phase { return true }
+        return false
+    }
+
+    var errorMessage: String? {
+        guard case .failed(let message) = phase else { return nil }
+        return message
+    }
+
+    var payloadBinding: Binding<HouseholdShareSheetPayload?> {
+        Binding(
+            get: {
+                guard case .ready(let payload) = self.phase else { return nil }
+                return payload
+            },
+            set: { payload in
+                if let payload {
+                    self.phase = .ready(payload)
+                } else {
+                    self.dismiss()
+                }
+            }
+        )
+    }
+
+    func prepare(using dataStore: DataStore) async {
+        let preparationID = UUID()
+        phase = .preparing(preparationID)
+        do {
+            let prepared = try await dataStore.prepareHouseholdShare()
+            guard case .preparing(let activeID) = phase, activeID == preparationID else { return }
+            phase = .ready(HouseholdShareSheetPayload(
+                share: prepared.share,
+                container: prepared.container,
+                householdName: prepared.householdName
+            ))
+        } catch {
+            guard case .preparing(let activeID) = phase, activeID == preparationID else { return }
+            phase = .failed(error.localizedDescription)
+        }
+    }
+
+    func dismiss() {
+        phase = .idle
+    }
+}
+
 /// SwiftUI wrapper around Apple's native CloudKit share sheet.
 ///
 /// On iOS wraps `UICloudSharingController` — Apple's built-in share sheet
