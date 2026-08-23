@@ -190,8 +190,44 @@ struct HouseholdIndex: Codable {
     var households: [Household]
     var activeHouseholdId: UUID
     var schemaVersion: Int
+    /// Personal task IDs from households that were removed locally. Completion
+    /// history is global, so these IDs must remain private even after the
+    /// household row and its scoped task file are gone.
+    var orphanedPersonalTaskIDs: Set<UUID>
 
-    static let currentSchemaVersion = 4
+    static let currentSchemaVersion = 5
+
+    private enum CodingKeys: String, CodingKey {
+        case households, activeHouseholdId, schemaVersion, orphanedPersonalTaskIDs
+    }
+
+    init(
+        households: [Household],
+        activeHouseholdId: UUID,
+        schemaVersion: Int,
+        orphanedPersonalTaskIDs: Set<UUID> = []
+    ) {
+        self.households = households
+        self.activeHouseholdId = activeHouseholdId
+        self.schemaVersion = schemaVersion
+        self.orphanedPersonalTaskIDs = orphanedPersonalTaskIDs
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        households = try container.decode([Household].self, forKey: .households)
+        activeHouseholdId = try container.decode(UUID.self, forKey: .activeHouseholdId)
+        schemaVersion = try container.decode(Int.self, forKey: .schemaVersion)
+        orphanedPersonalTaskIDs = try container.decodeIfPresent(Set<UUID>.self, forKey: .orphanedPersonalTaskIDs) ?? []
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(households, forKey: .households)
+        try container.encode(activeHouseholdId, forKey: .activeHouseholdId)
+        try container.encode(schemaVersion, forKey: .schemaVersion)
+        try container.encode(orphanedPersonalTaskIDs, forKey: .orphanedPersonalTaskIDs)
+    }
 
     var activeHousehold: Household? {
         households.first { $0.id == activeHouseholdId }

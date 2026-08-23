@@ -663,6 +663,15 @@ final class DataStore {
         }
     }
 
+    /// Completion history is global rather than household-scoped. Retain the
+    /// private IDs before removing a household so a later save in another
+    /// household cannot upload those completions to its collaborators.
+    private func retainOrphanedPersonalTaskOwnership(from household: Household) {
+        householdIndex.orphanedPersonalTaskIDs.formUnion(household.personalTaskIDs)
+        householdIndex.orphanedPersonalTaskIDs.formUnion(household.cloudPersonalTaskIDs)
+        householdIndex.orphanedPersonalTaskIDs.formUnion(household.pendingPersonalTaskReleases)
+    }
+
     private func personalTaskIDsForSync(householdID: UUID) -> Set<UUID> {
         guard let household = householdIndex.households.first(where: { $0.id == householdID }) else {
             return Set(tasks.filter(\.isPersonal).map(\.id))
@@ -682,6 +691,7 @@ final class DataStore {
             privateTaskIDs.formUnion(household.cloudPersonalTaskIDs)
             privateTaskIDs.formUnion(household.pendingPersonalTaskReleases)
         }
+        privateTaskIDs.formUnion(householdIndex.orphanedPersonalTaskIDs)
         privateTaskIDs.formUnion(tasks.filter(\.isPersonal).map(\.id))
         return privateTaskIDs
     }
@@ -700,6 +710,7 @@ final class DataStore {
             tasks,
             personalTaskIDs: personalIDs,
             deletingPersonalTaskIDs: releasedIDs,
+            personalCompletionCleanupHouseholds: householdIndex.households,
             household: target
         )
         if synced, !releasedIDs.isEmpty {
@@ -1190,6 +1201,7 @@ final class DataStore {
         let joined = await householdWorkspaceStore.withSerializedAccess { () -> Household? in
             let joined = activeHousehold
             guard !joined.ownerIsCurrentUser else { return nil }
+            retainOrphanedPersonalTaskOwnership(from: joined)
 
             let transition: HouseholdWorkspaceStore.Transition
             if let existingLocal = householdIndex.households.first(where: \.ownerIsCurrentUser) {
@@ -1290,6 +1302,7 @@ final class DataStore {
             // Owner deletion revokes every collaborator; joined-household
             // deletion removes only this device's participation.
             try await removeCloudKitDataBeforeLocalDeletion(from: [target])
+            retainOrphanedPersonalTaskOwnership(from: target)
 
             if activeHouseholdId == id,
                let nextHousehold = householdIndex.households.first(where: { $0.id != id }) {
@@ -1438,6 +1451,10 @@ final class DataStore {
         let localPersonalTaskIDs = Set(tasks.filter(\.isPersonal).map(\.id))
         let cloudPersonalTaskIDs = payload.personalTaskIDs
             .union(payload.tasks.filter(\.isPersonal).map(\.id))
+        let persistedPrivateTaskIDs = householdIndex.orphanedPersonalTaskIDs
+            .union(target.personalTaskIDs)
+            .union(target.cloudPersonalTaskIDs)
+            .union(target.pendingPersonalTaskReleases)
         let releasedPersonalTaskIDs = householdIndex.households
             .first(where: { $0.id == target.id })?
             .pendingPersonalTaskReleases ?? []
@@ -1445,6 +1462,7 @@ final class DataStore {
             !$0.isPersonal
                 && !localPersonalTaskIDs.contains($0.id)
                 && !cloudPersonalTaskIDs.contains($0.id)
+                && !persistedPrivateTaskIDs.contains($0.id)
         }
         // Merge tasks: union by ID, keeping local custom and personal tasks
         // that are not part of the shared CloudKit snapshot.
@@ -1458,7 +1476,9 @@ final class DataStore {
         tasks = Self.mergeCloudTasks(sharedCloudTasks, preserving: tasks) + localOnly
 
         // Merge completions: union by ID
-        let personalTaskIDs = localPersonalTaskIDs.union(cloudPersonalTaskIDs)
+        let personalTaskIDs = localPersonalTaskIDs
+            .union(cloudPersonalTaskIDs)
+            .union(persistedPrivateTaskIDs)
         let newCompletions = payload.completions.filter {
             !personalTaskIDs.contains($0.taskId) && !preCompletionIDs.contains($0.id)
         }
@@ -1642,6 +1662,7 @@ final class DataStore {
             members: householdProfiles,
             personalTaskIDs: personalTaskIDs,
             deletingPersonalTaskIDs: releasedPersonalTaskIDs,
+            personalCompletionCleanupHouseholds: householdIndex.households,
             household: sharedTarget
         )
         if !releasedPersonalTaskIDs.isEmpty,

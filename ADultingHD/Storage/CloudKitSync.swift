@@ -207,6 +207,7 @@ final class CloudKitSync: ObservableObject {
         _ tasks: [HouseholdTask],
         personalTaskIDs: Set<UUID> = [],
         deletingPersonalTaskIDs: Set<UUID> = [],
+        personalCompletionCleanupHouseholds: [Household] = [],
         household: Household
     ) async -> Bool {
         guard isAvailable else { return false }
@@ -220,16 +221,24 @@ final class CloudKitSync: ObservableObject {
                 PersonalTaskTombstone(taskID: $0).toCKRecord(zoneID: zoneID, parentRecordID: rootID)
             }
         let taskRecordNames = Set(personalIDs.map(\.uuidString))
+        let releasedTaskRecordNames = Set(deletingPersonalTaskIDs.map(\.uuidString))
         let releasedTombstoneRecordNames = Set(deletingPersonalTaskIDs.map {
             PersonalTaskTombstone.recordID(for: $0, zoneID: zoneID).recordName
         })
         let taskIDsToDelete: Set<CKRecord.ID>
+        let releasedTaskIDsToDelete: Set<CKRecord.ID>
         let completionIDsToDelete: Set<CKRecord.ID>
         let releasedTombstoneIDs: Set<CKRecord.ID>
         do {
             taskIDsToDelete = try await existingRecordIDs(
                 ofType: RecordType.task,
                 recordNames: taskRecordNames,
+                from: db,
+                zoneID: zoneID
+            )
+            releasedTaskIDsToDelete = try await existingRecordIDs(
+                ofType: RecordType.task,
+                recordNames: releasedTaskRecordNames,
                 from: db,
                 zoneID: zoneID
             )
@@ -245,10 +254,22 @@ final class CloudKitSync: ObservableObject {
             syncError = error.localizedDescription
             return false
         }
-        return await saveRecords(
+        // A previously personal task record may still carry `isPersonal = 1`.
+        // Delete that record before saving the household-scoped replacement;
+        // omitting the field with `.changedKeys` does not clear it remotely.
+        guard await saveRecords([], deleting: Array(releasedTaskIDsToDelete), in: db) else { return false }
+        let saved = await saveRecords(
             records,
-            deleting: Array(taskIDsToDelete) + Array(completionIDsToDelete) + Array(releasedTombstoneIDs),
+            deleting: Array(taskIDsToDelete)
+                + Array(completionIDsToDelete)
+                + Array(releasedTombstoneIDs),
             in: db
+        )
+        guard saved else { return false }
+        return await purgePersonalCompletions(
+            for: personalIDs,
+            from: personalCompletionCleanupHouseholds,
+            excluding: household
         )
     }
 
@@ -275,6 +296,7 @@ final class CloudKitSync: ObservableObject {
         members: [UserProfile],
         personalTaskIDs: Set<UUID> = [],
         deletingPersonalTaskIDs: Set<UUID> = [],
+        personalCompletionCleanupHouseholds: [Household] = [],
         household: Household
     ) async throws {
         guard isAvailable else {
@@ -301,16 +323,24 @@ final class CloudKitSync: ObservableObject {
             + profilesByID.values.map { $0.toCKRecord(zoneID: zoneID, parentRecordID: rootID) }
 
         let taskRecordNames = Set(personalIDs.map(\.uuidString))
+        let releasedTaskRecordNames = Set(deletingPersonalTaskIDs.map(\.uuidString))
         let releasedTombstoneRecordNames = Set(deletingPersonalTaskIDs.map {
             PersonalTaskTombstone.recordID(for: $0, zoneID: zoneID).recordName
         })
         let taskIDsToDelete: Set<CKRecord.ID>
+        let releasedTaskIDsToDelete: Set<CKRecord.ID>
         let completionIDsToDelete: Set<CKRecord.ID>
         let releasedTombstoneIDs: Set<CKRecord.ID>
         do {
             taskIDsToDelete = try await existingRecordIDs(
                 ofType: RecordType.task,
                 recordNames: taskRecordNames,
+                from: db,
+                zoneID: zoneID
+            )
+            releasedTaskIDsToDelete = try await existingRecordIDs(
+                ofType: RecordType.task,
+                recordNames: releasedTaskRecordNames,
                 from: db,
                 zoneID: zoneID
             )
@@ -326,6 +356,9 @@ final class CloudKitSync: ObservableObject {
                 detail: "could not enumerate personal cleanup records: \(error.localizedDescription)"
             )
         }
+        // Recreate released records so a legacy `isPersonal = 1` field cannot
+        // survive a `.changedKeys` update that omits the field.
+        try await saveRequiredRecords([], deleting: Array(releasedTaskIDsToDelete), in: db)
         let recordsToDelete = Array(taskIDsToDelete)
             + Array(completionIDsToDelete)
             + Array(releasedTombstoneIDs)
@@ -346,6 +379,15 @@ final class CloudKitSync: ObservableObject {
             try await saveRequiredRecords(saves, deleting: deletes, in: db)
             saveOffset += savesInBatch
             deleteOffset += deletesInBatch
+        }
+        guard await purgePersonalCompletions(
+            for: personalIDs,
+            from: personalCompletionCleanupHouseholds,
+            excluding: household
+        ) else {
+            throw CloudKitSyncError.shareCreationFailed(
+                detail: "could not purge personal completions from every household zone"
+            )
         }
         logger.info("☁️ Initial share snapshot uploaded: \(records.count) records")
     }
@@ -529,6 +571,50 @@ final class CloudKitSync: ObservableObject {
         return results
     }
 
+    /// Completion records are copied into whichever household zone was active
+    /// when a save occurred. When a task becomes personal, enumerate every
+    /// known zone so old copies cannot remain visible to collaborators in a
+    /// different household.
+    private func purgePersonalCompletions(
+        for personalTaskIDs: Set<UUID>,
+        from households: [Household],
+        excluding excludedHousehold: Household
+    ) async -> Bool {
+        guard !personalTaskIDs.isEmpty else { return true }
+
+        let excludedZoneKey = zoneKey(for: excludedHousehold)
+        var seenZoneKeys: Set<String> = []
+        var succeeded = true
+        for household in households {
+            // An owned household without a share has no custom zone to query;
+            // restricting the sweep avoids turning every ordinary local
+            // household into a needless zone-not-found request.
+            guard household.shareRecordName != nil || !household.ownerIsCurrentUser else { continue }
+            let key = zoneKey(for: household)
+            guard key != excludedZoneKey, seenZoneKeys.insert(key).inserted else { continue }
+
+            let db = database(for: household)
+            let zoneID = zoneID(for: household)
+            do {
+                let completionIDs = try await remoteCompletionIDs(
+                    for: personalTaskIDs,
+                    from: db,
+                    zoneID: zoneID
+                )
+                guard !completionIDs.isEmpty else { continue }
+                if !(await saveRecords([], deleting: completionIDs, in: db)) {
+                    succeeded = false
+                }
+            } catch {
+                if isMissingCloudKitObject(error) { continue }
+                logger.error("☁️ Could not purge personal completions from \(household.zoneName, privacy: .public): \(error.localizedDescription)")
+                syncError = error.localizedDescription
+                succeeded = false
+            }
+        }
+        return succeeded
+    }
+
     private func remoteCompletionIDs(
         for personalTaskIDs: Set<UUID>,
         from db: CKDatabase,
@@ -692,6 +778,11 @@ final class CloudKitSync: ObservableObject {
     }
 
     // MARK: - Helpers
+
+    private func zoneKey(for household: Household) -> String {
+        let zoneID = zoneID(for: household)
+        return "\(zoneID.ownerName)|\(zoneID.zoneName)"
+    }
 
     private func database(for household: Household) -> CKDatabase {
         switch household.ownership {

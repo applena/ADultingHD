@@ -91,4 +91,36 @@ final class CloudKitLifecycleTests: XCTestCase {
         XCTAssertTrue(decoded.cloudPersonalTaskIDs.isEmpty)
         XCTAssertTrue(decoded.pendingPersonalTaskReleases.isEmpty)
     }
+
+    func testHouseholdIndexPersistsOrphanedPersonalTaskIDs() throws {
+        let taskID = UUID()
+        let household = Household.newLocal(name: "Maple House", members: [])
+        let index = HouseholdIndex(
+            households: [household],
+            activeHouseholdId: household.id,
+            schemaVersion: HouseholdIndex.currentSchemaVersion,
+            orphanedPersonalTaskIDs: [taskID]
+        )
+
+        let encoded = try JSONEncoder().encode(index)
+        let decoded = try JSONDecoder().decode(HouseholdIndex.self, from: encoded)
+
+        XCTAssertEqual(decoded.orphanedPersonalTaskIDs, [taskID])
+    }
+
+    func testHouseholdIndexDecodesWithoutOrphanedPersonalTaskIDs() throws {
+        let household = Household.newLocal(name: "Maple House", members: [])
+        let householdObject = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: JSONEncoder().encode(household)) as? [String: Any]
+        )
+        let legacyPayload = try JSONSerialization.data(withJSONObject: [
+            "households": [householdObject],
+            "activeHouseholdId": household.id.uuidString,
+            "schemaVersion": 4
+        ])
+
+        let decoded = try JSONDecoder().decode(HouseholdIndex.self, from: legacyPayload)
+
+        XCTAssertTrue(decoded.orphanedPersonalTaskIDs.isEmpty)
+    }
 }
