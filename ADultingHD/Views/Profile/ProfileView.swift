@@ -248,7 +248,7 @@ struct ProfileView: View {
 
             ForEach(dataStore.tasksByRoom.keys.sorted(), id: \.self) { room in
                 let tasks = dataStore.tasksByRoom[room] ?? []
-                let category = TaskCategory(rawValue: room) ?? .general
+                let category = TaskCategory.legacyFallback(for: room)
                 let active = tasks.filter(\.isActive).count
                 let total = tasks.count
 

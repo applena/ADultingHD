@@ -123,7 +123,7 @@ struct TaskListView: View {
         if let selectedRoom {
             result = result.filter { task in
                 if selectedRoom.isEmpty { return HouseholdTask.normalizedRoom(task.room) == nil }
-                return task.room?.caseInsensitiveCompare(selectedRoom) == .orderedSame
+                return HouseholdTask.roomIdentity(task.room) == HouseholdTask.roomIdentity(selectedRoom)
             }
         }
         // Only apply the assignee filter while its chip row is visible — if a
@@ -179,7 +179,7 @@ struct TaskListView: View {
         if let selectedRoom {
             result = result.filter { task in
                 if selectedRoom.isEmpty { return task.suggestedRoom == nil }
-                return task.suggestedRoom?.caseInsensitiveCompare(selectedRoom) == .orderedSame
+                return HouseholdTask.roomIdentity(task.suggestedRoom) == HouseholdTask.roomIdentity(selectedRoom)
             }
         }
         if !searchText.isEmpty {
@@ -298,7 +298,7 @@ struct TaskListView: View {
                 ForEach(roomFilterOptions, id: \.self) { room in
                     FilterChip(
                         label: room,
-                        icon: TaskCategory(rawValue: room)?.icon ?? "mappin.and.ellipse",
+                        icon: TaskCategory.legacyFallback(for: room).icon,
                         isSelected: HouseholdTask.roomIdentity(selectedRoom) == HouseholdTask.roomIdentity(room)
                     ) {
                         selectedRoom = HouseholdTask.roomIdentity(selectedRoom) == HouseholdTask.roomIdentity(room) ? nil : room

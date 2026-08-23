@@ -205,7 +205,7 @@ struct SuppliesView: View {
     @ViewBuilder
     private var roomGroupedContent: some View {
         ForEach(suppliesByRoom, id: \.0) { room, supplies in
-            let category = TaskCategory(rawValue: room) ?? .general
+            let category = TaskCategory.legacyFallback(for: room)
             Section {
                 ForEach(supplies, id: \.name) { entry in
                     SupplyRow(supply: entry.name, tasks: entry.tasks, stock: entry.stock, showStock: entry.stock != .inStock)

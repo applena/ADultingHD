@@ -202,6 +202,12 @@ final class ModelTests: XCTestCase {
         XCTAssertEqual(decoded.frequency, .unscheduled)
     }
 
+    func testLegacyRoomStylingUsesTheSameNormalizedIdentityAsGrouping() {
+        XCTAssertEqual(TaskCategory.legacyFallback(for: "kitchen"), .kitchen)
+        XCTAssertEqual(TaskCategory.legacyFallback(for: "LIVING ROOM"), .livingRoom)
+        XCTAssertEqual(HouseholdTask.roomIdentity("Café"), HouseholdTask.roomIdentity("cafe"))
+    }
+
     // MARK: - UserProfile
 
     func testLevelCalculation() {

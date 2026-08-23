@@ -243,7 +243,7 @@ struct ScheduleView: View {
 
     private func batchSection(room: String, tasks: [HouseholdTask]) -> some View {
         let isExpanded = expandedRooms.contains(room)
-        let category = TaskCategory(rawValue: room) ?? .general
+        let category = TaskCategory.legacyFallback(for: room)
         let catColor = Theme.categoryColor(category)
 
         return VStack(alignment: .leading, spacing: 0) {

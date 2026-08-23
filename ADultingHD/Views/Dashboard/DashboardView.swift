@@ -218,9 +218,9 @@ struct DashboardView: View {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 8) {
                         ForEach(rooms, id: \.self) { room in
-                            let category = TaskCategory(rawValue: room) ?? .general
+                            let category = TaskCategory.legacyFallback(for: room)
                             let dueCount = dataStore.dueTasks.filter {
-                                $0.room?.caseInsensitiveCompare(room) == .orderedSame
+                                HouseholdTask.roomIdentity($0.room) == HouseholdTask.roomIdentity(room)
                             }.count
                             NavigationLink {
                                 TaskListView(initialRoom: room)

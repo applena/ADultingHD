@@ -22,7 +22,8 @@ enum TaskCategory: String, Codable, CaseIterable, Identifiable {
 
     static func legacyFallback(for room: String?) -> TaskCategory {
         guard let room = HouseholdTask.normalizedRoom(room) else { return .general }
-        return TaskCategory(rawValue: room) ?? .general
+        let identity = HouseholdTask.roomIdentity(room)
+        return allCases.first { HouseholdTask.roomIdentity($0.rawValue) == identity } ?? .general
     }
 
     var icon: String {
