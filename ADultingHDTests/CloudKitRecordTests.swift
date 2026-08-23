@@ -31,6 +31,7 @@ final class CloudKitRecordTests: XCTestCase {
         XCTAssertEqual(decoded.isActive, true)
         XCTAssertNil(decoded.lastCompleted)
         XCTAssertNil(decoded.defaultAssigneeId)
+        XCTAssertFalse(decoded.isPersonal)
         XCTAssertTrue(decoded.scheduledWeekdays.isEmpty)
         XCTAssertTrue(decoded.checklist.isEmpty)
     }
@@ -48,6 +49,7 @@ final class CloudKitRecordTests: XCTestCase {
             isActive: false, lastCompleted: Date(timeIntervalSince1970: 1_700_000_000)
         )
         task.defaultAssigneeId = assigneeId
+        task.isPersonal = true
         task.scheduledWeekdays = [2, 6]
         task.checklist = checklist
 
@@ -59,6 +61,7 @@ final class CloudKitRecordTests: XCTestCase {
         XCTAssertEqual(decoded.isActive, false)
         XCTAssertNotNil(decoded.lastCompleted)
         XCTAssertEqual(decoded.defaultAssigneeId, assigneeId)
+        XCTAssertTrue(decoded.isPersonal)
         XCTAssertEqual(decoded.scheduledWeekdays, [2, 6])
         XCTAssertEqual(decoded.checklist.count, 2)
         XCTAssertEqual(decoded.checklist[0].text, "Step 1")
@@ -130,6 +133,16 @@ final class CloudKitRecordTests: XCTestCase {
             supplies: [], isActive: true
         )
         XCTAssertEqual(task.toCKRecord(zone: zone).recordID.recordName, id.uuidString)
+    }
+
+    func testPersonalTaskTombstoneRoundTrip() {
+        let id = UUID()
+        let record = PersonalTaskTombstone(taskID: id).toCKRecord(zoneID: zone.zoneID)
+
+        XCTAssertEqual(record.recordType, RecordType.personalTaskTombstone)
+        XCTAssertNotEqual(record.recordID.recordName, id.uuidString)
+        XCTAssertEqual(PersonalTaskTombstone.taskID(from: record), id)
+        XCTAssertNil(PersonalTaskTombstone.taskID(from: CKRecord(recordType: RecordType.task)))
     }
 
     func testTaskRecord_omitsUndeployedRecurrenceFields() {

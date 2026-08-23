@@ -124,6 +124,41 @@ final class ModelTests: XCTestCase {
         XCTAssertFalse(task.matches(.unassigned, currentProfileId: me))
     }
 
+    func testPersonalTaskIsMineAndNeverUnassigned() {
+        let me = UUID()
+        var task = HouseholdTask(
+            id: UUID(), name: "Take a shower", description: "", category: .bathroom,
+            frequency: .daily, estimatedMinutes: 10, difficulty: .easy, supplies: [], isActive: true
+        )
+        task.isPersonal = true
+        task.defaultAssigneeId = UUID()
+
+        XCTAssertTrue(task.matches(.mine, currentProfileId: me))
+        XCTAssertFalse(task.matches(.unassigned, currentProfileId: me))
+    }
+
+    func testLegacyTaskJSONDefaultsNewFields() throws {
+        let data = Data("""
+        {
+          "id": "00000000-0000-0000-0000-000000000001",
+          "name": "Clip fingernails",
+          "description": "",
+          "category": "General",
+          "frequency": "Weekly",
+          "estimatedMinutes": 10,
+          "difficulty": 1,
+          "supplies": [],
+          "isActive": true
+        }
+        """.utf8)
+
+        let task = try JSONDecoder().decode(HouseholdTask.self, from: data)
+
+        XCTAssertFalse(task.isPersonal)
+        XCTAssertTrue(task.scheduledWeekdays.isEmpty)
+        XCTAssertTrue(task.checklist.isEmpty)
+    }
+
     // MARK: - UserProfile
 
     func testLevelCalculation() {

@@ -253,6 +253,10 @@ struct HouseholdTask: Codable, Identifiable, Hashable {
     /// assignee picker once the household has more than one member (members
     /// only arrive via CloudKit share acceptance).
     var defaultAssigneeId: UUID? = nil
+    /// A task that belongs only to the current user. Personal tasks stay in
+    /// the user's local workspace and cannot be assigned to another member
+    /// when household sharing is enabled.
+    var isPersonal: Bool = false
     /// Apple weekday ints (1 = Sunday … 7 = Saturday) the task is scheduled on.
     /// Empty for daily/monthly-family frequencies. Count matches
     /// `frequency.weekdayCount` when set.
@@ -423,14 +427,65 @@ struct HouseholdTask: Codable, Identifiable, Hashable {
 
     /// Whether this task matches an `AssigneeFilter` chip selection, given the
     /// current device user's profile id. `.all` always matches; `.mine`
-    /// matches only tasks explicitly assigned to `currentProfileId`;
-    /// `.unassigned` matches only tasks with no default assignee.
+    /// matches personal tasks or tasks explicitly assigned to
+    /// `currentProfileId`; `.unassigned` matches only household tasks with no
+    /// default assignee.
     func matches(_ filter: AssigneeFilter, currentProfileId: UUID) -> Bool {
         switch filter {
         case .all: return true
-        case .mine: return defaultAssigneeId == currentProfileId
-        case .unassigned: return defaultAssigneeId == nil
+        case .mine: return isPersonal || defaultAssigneeId == currentProfileId
+        case .unassigned: return !isPersonal && defaultAssigneeId == nil
         }
+    }
+}
+
+extension HouseholdTask {
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case name
+        case description
+        case category
+        case frequency
+        case estimatedMinutes
+        case difficulty
+        case supplies
+        case isActive
+        case lastCompleted
+        case createdAt
+        case defaultAssigneeId
+        case isPersonal
+        case scheduledWeekdays
+        case scheduledDayOfMonth
+        case scheduledMonth
+        case checklist
+        case scheduledOverrideDate
+    }
+
+    /// Decode older task files that predate optional schedule, assignment,
+    /// checklist, and personal-task fields. Synthesized Codable decoding would
+    /// require every stored property key even when its declaration has a
+    /// default value, which would make an app update discard the existing task
+    /// list as unreadable.
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        description = try container.decode(String.self, forKey: .description)
+        category = try container.decode(TaskCategory.self, forKey: .category)
+        frequency = try container.decode(TaskFrequency.self, forKey: .frequency)
+        estimatedMinutes = try container.decode(Int.self, forKey: .estimatedMinutes)
+        difficulty = try container.decode(Difficulty.self, forKey: .difficulty)
+        supplies = try container.decode([String].self, forKey: .supplies)
+        isActive = try container.decode(Bool.self, forKey: .isActive)
+        lastCompleted = try container.decodeIfPresent(Date.self, forKey: .lastCompleted)
+        createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
+        defaultAssigneeId = try container.decodeIfPresent(UUID.self, forKey: .defaultAssigneeId)
+        isPersonal = try container.decodeIfPresent(Bool.self, forKey: .isPersonal) ?? false
+        scheduledWeekdays = try container.decodeIfPresent([Int].self, forKey: .scheduledWeekdays) ?? []
+        scheduledDayOfMonth = try container.decodeIfPresent(Int.self, forKey: .scheduledDayOfMonth)
+        scheduledMonth = try container.decodeIfPresent(Int.self, forKey: .scheduledMonth)
+        checklist = try container.decodeIfPresent([ChecklistItem].self, forKey: .checklist) ?? []
+        scheduledOverrideDate = try container.decodeIfPresent(Date.self, forKey: .scheduledOverrideDate)
     }
 }
 

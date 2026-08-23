@@ -24,6 +24,19 @@ struct Household: Identifiable, Codable {
     /// `ZoneName.household` so existing TestFlight users don't lose records
     /// (CloudKit can't rename zones).
     var zoneName: String
+    /// Task IDs that have been marked personal in this household, including
+    /// tasks since deleted locally. Keeping ownership separately from the
+    /// current task array prevents private completion history from being
+    /// uploaded after a personal task is removed or a household is switched.
+    var personalTaskIDs: Set<UUID>
+    /// Personal markers currently present in this household's CloudKit zone.
+    /// This is separate from local ownership so a cleared remote tombstone is
+    /// reconciled without erasing private history kept on this device.
+    var cloudPersonalTaskIDs: Set<UUID>
+    /// Personal markers waiting to be deleted because the task was explicitly
+    /// changed back to household scope. Persisting this retry state prevents a
+    /// failed/offline transition from being lost across app launches.
+    var pendingPersonalTaskReleases: Set<UUID>
 
     var ownerIsCurrentUser: Bool {
         if case .owned = ownership { return true }
@@ -53,7 +66,10 @@ struct Household: Identifiable, Codable {
         members: [UserProfile],
         shareRecordName: String? = nil,
         ownership: Ownership,
-        zoneName: String
+        zoneName: String,
+        personalTaskIDs: Set<UUID> = [],
+        cloudPersonalTaskIDs: Set<UUID> = [],
+        pendingPersonalTaskReleases: Set<UUID> = []
     ) {
         self.id = id
         self.name = name
@@ -62,6 +78,9 @@ struct Household: Identifiable, Codable {
         self.shareRecordName = shareRecordName
         self.ownership = ownership
         self.zoneName = zoneName
+        self.personalTaskIDs = personalTaskIDs
+        self.cloudPersonalTaskIDs = cloudPersonalTaskIDs
+        self.pendingPersonalTaskReleases = pendingPersonalTaskReleases
     }
 
     /// Convenience constructor for a locally-owned household. New households
@@ -108,7 +127,7 @@ struct Household: Identifiable, Codable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, name, createdAt, members, shareRecordName, ownership, zoneName
+        case id, name, createdAt, members, shareRecordName, ownership, zoneName, personalTaskIDs, cloudPersonalTaskIDs, pendingPersonalTaskReleases
         // Schema-v3 compatibility. `ownership` is authoritative; these
         // shadow fields are dual-written so older synced clients still load.
         case ownerIsCurrentUser, ownerUserRecordName, inviterName
@@ -122,6 +141,9 @@ struct Household: Identifiable, Codable {
         members = try container.decode([UserProfile].self, forKey: .members)
         shareRecordName = try container.decodeIfPresent(String.self, forKey: .shareRecordName)
         zoneName = try container.decode(String.self, forKey: .zoneName)
+        personalTaskIDs = try container.decodeIfPresent(Set<UUID>.self, forKey: .personalTaskIDs) ?? []
+        cloudPersonalTaskIDs = try container.decodeIfPresent(Set<UUID>.self, forKey: .cloudPersonalTaskIDs) ?? []
+        pendingPersonalTaskReleases = try container.decodeIfPresent(Set<UUID>.self, forKey: .pendingPersonalTaskReleases) ?? []
 
         let legacyOwnerIsCurrentUser = try container.decodeIfPresent(Bool.self, forKey: .ownerIsCurrentUser) ?? true
         let legacyOwnerUserRecordName = try container.decodeIfPresent(String.self, forKey: .ownerUserRecordName)
@@ -147,6 +169,9 @@ struct Household: Identifiable, Codable {
         try container.encodeIfPresent(shareRecordName, forKey: .shareRecordName)
         try container.encode(ownership, forKey: .ownership)
         try container.encode(zoneName, forKey: .zoneName)
+        try container.encode(personalTaskIDs, forKey: .personalTaskIDs)
+        try container.encode(cloudPersonalTaskIDs, forKey: .cloudPersonalTaskIDs)
+        try container.encode(pendingPersonalTaskReleases, forKey: .pendingPersonalTaskReleases)
         // Dual-write schema-v3 ownership keys while household indexes sync
         // through iCloud to devices that may still run an older app build.
         switch ownership {
@@ -165,8 +190,44 @@ struct HouseholdIndex: Codable {
     var households: [Household]
     var activeHouseholdId: UUID
     var schemaVersion: Int
+    /// Personal task IDs from households that were removed locally. Completion
+    /// history is global, so these IDs must remain private even after the
+    /// household row and its scoped task file are gone.
+    var orphanedPersonalTaskIDs: Set<UUID>
 
-    static let currentSchemaVersion = 4
+    static let currentSchemaVersion = 5
+
+    private enum CodingKeys: String, CodingKey {
+        case households, activeHouseholdId, schemaVersion, orphanedPersonalTaskIDs
+    }
+
+    init(
+        households: [Household],
+        activeHouseholdId: UUID,
+        schemaVersion: Int,
+        orphanedPersonalTaskIDs: Set<UUID> = []
+    ) {
+        self.households = households
+        self.activeHouseholdId = activeHouseholdId
+        self.schemaVersion = schemaVersion
+        self.orphanedPersonalTaskIDs = orphanedPersonalTaskIDs
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        households = try container.decode([Household].self, forKey: .households)
+        activeHouseholdId = try container.decode(UUID.self, forKey: .activeHouseholdId)
+        schemaVersion = try container.decode(Int.self, forKey: .schemaVersion)
+        orphanedPersonalTaskIDs = try container.decodeIfPresent(Set<UUID>.self, forKey: .orphanedPersonalTaskIDs) ?? []
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(households, forKey: .households)
+        try container.encode(activeHouseholdId, forKey: .activeHouseholdId)
+        try container.encode(schemaVersion, forKey: .schemaVersion)
+        try container.encode(orphanedPersonalTaskIDs, forKey: .orphanedPersonalTaskIDs)
+    }
 
     var activeHousehold: Household? {
         households.first { $0.id == activeHouseholdId }

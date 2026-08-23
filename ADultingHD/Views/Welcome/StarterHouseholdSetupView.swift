@@ -14,6 +14,7 @@ struct StarterHouseholdSetupView: View {
     @State private var taskSearchText = ""
     @State private var customTaskCategory: TaskCategory = .general
     @State private var customTaskFrequency: TaskFrequency = .weekly
+    @State private var customTaskIsPersonal = false
     @State private var selectedAvatarID = "person"
     @State private var isSaving = false
     @FocusState private var isTaskSearchFocused: Bool
@@ -439,6 +440,15 @@ struct StarterHouseholdSetupView: View {
                 .accessibilityLabel("Custom chore frequency")
             }
 
+            Toggle(isOn: $customTaskIsPersonal) {
+                Label("Personal task", systemImage: "person.fill")
+            }
+            if customTaskIsPersonal {
+                Text("Only you can complete this task. It won't be shared with household members.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             Button(action: addCustomTaskFromSearch) {
                 Label("Add custom chore", systemImage: "plus")
                     .font(.subheadline.weight(.semibold))
@@ -514,7 +524,9 @@ struct StarterHouseholdSetupView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(task.name)
                     .font(.subheadline.weight(.semibold))
-                Text("Custom · \(task.frequency.rawValue) · \(task.estimatedMinutes) min")
+                Text(task.isPersonal
+                    ? "Personal · \(task.frequency.rawValue) · \(task.estimatedMinutes) min"
+                    : "Custom · \(task.frequency.rawValue) · \(task.estimatedMinutes) min")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -627,10 +639,13 @@ struct StarterHouseholdSetupView: View {
                   frequency: customTaskFrequency
               ) else { return }
 
-        selectedCustomTasks.append(task)
+        var customTask = task
+        customTask.isPersonal = customTaskIsPersonal
+        selectedCustomTasks.append(customTask)
         taskSearchText = ""
         customTaskCategory = .general
         customTaskFrequency = .weekly
+        customTaskIsPersonal = false
     }
 
     private func save() {

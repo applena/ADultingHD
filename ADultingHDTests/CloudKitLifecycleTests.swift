@@ -29,12 +29,21 @@ final class CloudKitLifecycleTests: XCTestCase {
     func testShareRecordNamePersistsForCleanup() throws {
         var household = Household.newLocal(name: "Shared", members: [])
         household.shareRecordName = "cloudkit.share.record"
+        let personalTaskID = UUID()
+        let releasedTaskID = UUID()
+        let cloudTaskID = UUID()
+        household.personalTaskIDs = [personalTaskID]
+        household.cloudPersonalTaskIDs = [cloudTaskID]
+        household.pendingPersonalTaskReleases = [releasedTaskID]
 
         let encoded = try JSONEncoder().encode(household)
         let decoded = try JSONDecoder().decode(Household.self, from: encoded)
 
         XCTAssertEqual(decoded.shareRecordName, household.shareRecordName)
         XCTAssertEqual(decoded.zoneName, household.zoneName)
+        XCTAssertEqual(decoded.personalTaskIDs, Set([personalTaskID]))
+        XCTAssertEqual(decoded.cloudPersonalTaskIDs, Set([cloudTaskID]))
+        XCTAssertEqual(decoded.pendingPersonalTaskReleases, Set([releasedTaskID]))
     }
 
     func testJoinedHouseholdPersistsInviterName() throws {
@@ -78,5 +87,40 @@ final class CloudKitLifecycleTests: XCTestCase {
         XCTAssertNil(decoded.inviterName)
         XCTAssertFalse(decoded.ownerIsCurrentUser)
         XCTAssertEqual(decoded.ownerUserRecordName, "owner")
+        XCTAssertTrue(decoded.personalTaskIDs.isEmpty)
+        XCTAssertTrue(decoded.cloudPersonalTaskIDs.isEmpty)
+        XCTAssertTrue(decoded.pendingPersonalTaskReleases.isEmpty)
+    }
+
+    func testHouseholdIndexPersistsOrphanedPersonalTaskIDs() throws {
+        let taskID = UUID()
+        let household = Household.newLocal(name: "Maple House", members: [])
+        let index = HouseholdIndex(
+            households: [household],
+            activeHouseholdId: household.id,
+            schemaVersion: HouseholdIndex.currentSchemaVersion,
+            orphanedPersonalTaskIDs: [taskID]
+        )
+
+        let encoded = try JSONEncoder().encode(index)
+        let decoded = try JSONDecoder().decode(HouseholdIndex.self, from: encoded)
+
+        XCTAssertEqual(decoded.orphanedPersonalTaskIDs, [taskID])
+    }
+
+    func testHouseholdIndexDecodesWithoutOrphanedPersonalTaskIDs() throws {
+        let household = Household.newLocal(name: "Maple House", members: [])
+        let householdObject = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: JSONEncoder().encode(household)) as? [String: Any]
+        )
+        let legacyPayload = try JSONSerialization.data(withJSONObject: [
+            "households": [householdObject],
+            "activeHouseholdId": household.id.uuidString,
+            "schemaVersion": 4
+        ])
+
+        let decoded = try JSONDecoder().decode(HouseholdIndex.self, from: legacyPayload)
+
+        XCTAssertTrue(decoded.orphanedPersonalTaskIDs.isEmpty)
     }
 }

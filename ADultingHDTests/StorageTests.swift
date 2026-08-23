@@ -6,14 +6,14 @@ final class StorageTests: XCTestCase {
     func testTaskRoundTrip() async {
         let store = TaskStore()
         let householdId = UUID()
-        let tasks = [
-            HouseholdTask(
-                id: UUID(), name: "Test Task", description: "A test",
-                category: .kitchen, frequency: .weekly, estimatedMinutes: 10,
-                difficulty: .easy, supplies: ["Sponge", "Soap"], isActive: true,
-                lastCompleted: Date()
-            )
-        ]
+        var task = HouseholdTask(
+            id: UUID(), name: "Test Task", description: "A test",
+            category: .kitchen, frequency: .weekly, estimatedMinutes: 10,
+            difficulty: .easy, supplies: ["Sponge", "Soap"], isActive: true,
+            lastCompleted: Date()
+        )
+        task.isPersonal = true
+        let tasks = [task]
 
         await store.saveTasks(tasks, for: householdId)
         let loaded = await store.loadTasks(for: householdId)
@@ -21,6 +21,7 @@ final class StorageTests: XCTestCase {
         XCTAssertEqual(loaded.count, tasks.count)
         XCTAssertEqual(loaded.first?.name, "Test Task")
         XCTAssertEqual(loaded.first?.supplies, ["Sponge", "Soap"])
+        XCTAssertTrue(loaded.first?.isPersonal == true)
     }
 
     func testProfileRoundTrip() async {

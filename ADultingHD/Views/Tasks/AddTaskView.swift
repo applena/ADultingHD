@@ -46,6 +46,7 @@ private struct TaskFormView: View {
     @State private var checklist: [ChecklistItem]
     @State private var expandedChecklistId: UUID?
     @State private var assigneeId: UUID?
+    @State private var isPersonal: Bool
 
     private let existingTask: HouseholdTask?
 
@@ -69,6 +70,7 @@ private struct TaskFormView: View {
         _scheduledMonth = State(initialValue: existingTask?.scheduledMonth ?? 1)
         _checklist = State(initialValue: existingTask?.checklist ?? [])
         _assigneeId = State(initialValue: existingTask?.defaultAssigneeId)
+        _isPersonal = State(initialValue: existingTask?.isPersonal ?? false)
     }
 
     var body: some View {
@@ -104,8 +106,27 @@ private struct TaskFormView: View {
 
                     Stepper("Estimated: \(estimatedMinutes) min", value: $estimatedMinutes, in: 1...480, step: 5)
 
-                    if dataStore.hasMultipleAssignees {
+                    if dataStore.hasMultipleAssignees && !isPersonal {
                         AssigneePicker(profiles: dataStore.householdProfiles, selection: $assigneeId)
+                    }
+                }
+
+                Section("Task Scope") {
+                    if canChangePersonalScope {
+                        Toggle(isOn: $isPersonal) {
+                            Label("Personal task", systemImage: "person.fill")
+                        }
+                    } else {
+                        Label("Personal task", systemImage: "person.fill")
+                            .foregroundStyle(.secondary)
+                        Text("Only the household owner can make a shared task personal.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    if isPersonal {
+                        Text("Only you can complete this task. It won't be shared with household members.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
                 }
 
@@ -209,6 +230,11 @@ private struct TaskFormView: View {
         }
     }
 
+    private var canChangePersonalScope: Bool {
+        guard let existingTask else { return true }
+        return existingTask.isPersonal || dataStore.activeHousehold.ownerIsCurrentUser
+    }
+
     private func save() {
         let supplies = HouseholdTask.parseSupplies(from: suppliesText)
 
@@ -224,7 +250,9 @@ private struct TaskFormView: View {
         task.estimatedMinutes = estimatedMinutes
         task.difficulty = difficulty
         task.supplies = supplies
-        task.defaultAssigneeId = assigneeId
+        let scopeIsPersonal = canChangePersonalScope ? isPersonal : (existingTask?.isPersonal ?? false)
+        task.isPersonal = scopeIsPersonal
+        task.defaultAssigneeId = scopeIsPersonal ? dataStore.profile.id : assigneeId
         task.checklist = checklist.compactMap { item in
             let trimmed = item.text.trimmingCharacters(in: .whitespaces)
             guard !trimmed.isEmpty else { return nil }
