@@ -136,6 +136,16 @@ final class CloudKitRecordTests: XCTestCase {
         XCTAssertEqual(task.toCKRecord(zone: zone).recordID.recordName, id.uuidString)
     }
 
+    func testPersonalTaskTombstoneRoundTrip() {
+        let id = UUID()
+        let record = PersonalTaskTombstone(taskID: id).toCKRecord(zoneID: zone.zoneID)
+
+        XCTAssertEqual(record.recordType, RecordType.personalTaskTombstone)
+        XCTAssertNotEqual(record.recordID.recordName, id.uuidString)
+        XCTAssertEqual(PersonalTaskTombstone.taskID(from: record), id)
+        XCTAssertNil(PersonalTaskTombstone.taskID(from: CKRecord(recordType: RecordType.task)))
+    }
+
     // MARK: - TaskCompletion
 
     func testCompletionRoundTrip() {

@@ -20,17 +20,23 @@ Every `Household` row maps to a single custom CKRecordZone. Owned
 households live in `privateCloudDatabase`; joined households live in
 `sharedCloudDatabase` and carry `ownerUserRecordName` so the zone
 ID resolves correctly across app restarts. Records in the zone
-(`HouseholdTask`, `TaskCompletion`, `MemberProfile`, `HouseholdRoot`)
+(`HouseholdTask`, `PersonalTaskTombstone`, `TaskCompletion`, `MemberProfile`, `HouseholdRoot`)
 sync cross-device via CloudKit zone subscriptions plus our
 `userDidAcceptCloudKitShareWith` AppDelegate hook and the
 `onContinueUserActivity` SwiftUI modifier.
+
+Tasks marked **Personal** remain in the owner's local workspace and are never
+shared with household members. When an existing shared task changes scope, the
+owner publishes a UUID-only `PersonalTaskTombstone` so other devices remove
+their stale copy; associated completion records are purged as part of the same
+sync.
 
 ## Code map
 
 | File | Role |
 |---|---|
 | `ADultingHD/App/Features.swift` | `Features.cloudKitSharing` compile-time flag that gates every CloudKit code path. Never call `CKContainer(identifier:)` when this is off — the init traps if the container entitlement isn't in the signed profile |
-| `ADultingHD/Storage/CloudKitSync.swift` | `CloudKitSync` singleton: per-household zone+database routing, record push/pull, `createOrFetchShare(for:)` that saves the root + CKShare atomically, and `removeHouseholdCloudData(for:)` for owner revocation or participant leave. `uploadInitialShareSnapshot(...)` validates every required record before invite presentation. `acceptShare(from:)` returns `HouseholdShareInfo` including owner and inviter identity |
+| `ADultingHD/Storage/CloudKitSync.swift` | `CloudKitSync` singleton: per-household zone+database routing, record push/pull, privacy-preserving `PersonalTaskTombstone` markers, `createOrFetchShare(for:)` that saves the root + CKShare atomically, and `removeHouseholdCloudData(for:)` for owner revocation or participant leave. `uploadInitialShareSnapshot(...)` validates every required record before invite presentation. `acceptShare(from:)` returns `HouseholdShareInfo` including owner and inviter identity |
 | `ADultingHD/Storage/DataStore.swift` | `prepareHouseholdShare()` creates the share and awaits a fail-closed initial snapshot upload before returning `PreparedHouseholdShare`. `stagePendingOnboardingShare(...)` previews first-launch metadata without accepting it; `acceptPendingOnboardingShare(...)` commits the chosen invite and display name |
 | `ADultingHD/Models/Household.swift` | `Household` value type with explicit `.owned` / `.joined(ownerUserRecordName:inviterName:)` ownership. `HouseholdIndex.currentSchemaVersion = 4` |
 | `ADultingHD/Views/Household/CloudShareSheet.swift` | SwiftUI wrapper around `UICloudSharingController` (iOS) with a simple URL-and-copy fallback for macOS |

@@ -293,17 +293,23 @@ final class DataStore {
 
         let loadedWorkspace = await (loadedTasks, loadedProfile, loadedCompletions, loadedStock)
         var finalIndex = loadedIndex
-        var memberWasMissing = false
+        var indexNeedsSave = false
         if let householdPosition = finalIndex.households.firstIndex(where: { $0.id == activeId }) {
             let loadedProfile = loadedWorkspace.1
             if let memberPosition = finalIndex.households[householdPosition].members.firstIndex(where: { $0.id == loadedProfile.id }) {
                 finalIndex.households[householdPosition].members[memberPosition] = loadedProfile
             } else {
                 finalIndex.households[householdPosition].members.append(loadedProfile)
-                memberWasMissing = true
+                indexNeedsSave = true
+            }
+
+            let localPersonalTaskIDs = Set(loadedWorkspace.0.filter(\.isPersonal).map(\.id))
+            if !localPersonalTaskIDs.isSubset(of: finalIndex.households[householdPosition].personalTaskIDs) {
+                finalIndex.households[householdPosition].personalTaskIDs.formUnion(localPersonalTaskIDs)
+                indexNeedsSave = true
             }
         }
-        if memberWasMissing { await store.saveHouseholdIndex(finalIndex) }
+        if indexNeedsSave { await store.saveHouseholdIndex(finalIndex) }
 
         // One synchronous publication boundary: SwiftUI never observes a
         // household index paired with another household's workspace.
@@ -600,6 +606,8 @@ final class DataStore {
         let snapshot = tasks
         guard householdIndex.households.contains(where: { $0.id == householdID }) else { return }
         await store.saveTasks(snapshot, for: householdID)
+        await store.saveHouseholdIndex(householdIndex)
+        await syncTasksWhileSerialized(householdID: householdID)
     }
 
     func toggleTask(_ task: HouseholdTask) async {
@@ -629,6 +637,65 @@ final class DataStore {
         return normalized
     }
 
+    /// Keep private-task ownership durable even after the task itself leaves
+    /// the local array. Completion history is global, so deriving this set
+    /// from `tasks` alone would eventually re-upload a deleted personal task's
+    /// history to a household.
+    private func registerPersonalTaskOwnership(
+        for task: HouseholdTask,
+        previousIsPersonal: Bool? = nil,
+        householdID: UUID
+    ) {
+        guard let householdIndex = householdIndex.households.firstIndex(where: { $0.id == householdID }) else { return }
+        if task.isPersonal {
+            self.householdIndex.households[householdIndex].personalTaskIDs.insert(task.id)
+            self.householdIndex.households[householdIndex].pendingPersonalTaskReleases.remove(task.id)
+        } else if previousIsPersonal == true
+                    || self.householdIndex.households[householdIndex].personalTaskIDs.contains(task.id) {
+            self.householdIndex.households[householdIndex].personalTaskIDs.remove(task.id)
+            self.householdIndex.households[householdIndex].pendingPersonalTaskReleases.insert(task.id)
+        }
+    }
+
+    private func registerPersonalTaskOwnership(for tasks: [HouseholdTask], householdID: UUID) {
+        for task in tasks where task.isPersonal {
+            registerPersonalTaskOwnership(for: task, householdID: householdID)
+        }
+    }
+
+    private func personalTaskIDsForSync(householdID: UUID) -> Set<UUID> {
+        let persistedIDs = householdIndex.households
+            .first(where: { $0.id == householdID })?
+            .personalTaskIDs ?? []
+        return persistedIDs.union(tasks.filter(\.isPersonal).map(\.id))
+    }
+
+    @discardableResult
+    private func syncTasksWhileSerialized(householdID: UUID) async -> Bool {
+        guard isHouseholdSharingEnabled,
+              ckSync.isAvailable,
+              let target = householdIndex.households.first(where: { $0.id == householdID }) else {
+            return false
+        }
+
+        let personalIDs = personalTaskIDsForSync(householdID: householdID)
+        let releasedIDs = target.pendingPersonalTaskReleases
+        let synced = await ckSync.pushTasks(
+            tasks,
+            completions: completions,
+            personalTaskIDs: personalIDs,
+            deletingPersonalTaskIDs: releasedIDs,
+            household: target
+        )
+        if synced, !releasedIDs.isEmpty {
+            if let householdPosition = householdIndex.households.firstIndex(where: { $0.id == householdID }) {
+                self.householdIndex.households[householdPosition].pendingPersonalTaskReleases.subtract(releasedIDs)
+                await store.saveHouseholdIndex(self.householdIndex)
+            }
+        }
+        return synced
+    }
+
     func addCustomTask(_ task: HouseholdTask) async {
         let expectedHouseholdID = activeHouseholdId
         await mutateActiveWorkspace(expectedHouseholdID: expectedHouseholdID) {
@@ -639,6 +706,7 @@ final class DataStore {
     private func addCustomTaskWhileSerialized(_ task: HouseholdTask) async {
         let normalizedTask = normalizePersonalAssignment(task.withDefaultSchedule())
         tasks.append(normalizedTask)
+        registerPersonalTaskOwnership(for: normalizedTask, householdID: activeHouseholdId)
         syncReminder(for: normalizedTask)
         await persistActiveTasksWhileSerialized()
     }
@@ -673,6 +741,7 @@ final class DataStore {
 
     private func updateTaskWhileSerialized(_ task: HouseholdTask) async {
         if let idx = tasks.firstIndex(where: { $0.id == task.id }) {
+            let previousIsPersonal = tasks[idx].isPersonal
             var updated = normalizePersonalAssignment(task)
             if tasks[idx].recurrenceRule != updated.recurrenceRule {
                 // Editing the recurrence rule of a task that's never been
@@ -691,6 +760,11 @@ final class DataStore {
                 updated.scheduledOverrideDate = nil
             }
             tasks[idx] = updated
+            registerPersonalTaskOwnership(
+                for: updated,
+                previousIsPersonal: previousIsPersonal,
+                householdID: activeHouseholdId
+            )
             syncReminder(for: updated)
             await persistActiveTasksWhileSerialized()
         }
@@ -773,6 +847,7 @@ final class DataStore {
         guard !selectedTasks.isEmpty else { return }
 
         tasks = selectedTasks
+        registerPersonalTaskOwnership(for: selectedTasks, householdID: activeHouseholdId)
         for task in tasks { syncReminder(for: task) }
         await persistActiveTasksWhileSerialized()
     }
@@ -925,9 +1000,9 @@ final class DataStore {
         updateWidgetData()
         if isHouseholdSharingEnabled && ckSync.isAvailable {
             guard let target = householdIndex.households.first(where: { $0.id == householdID }) else { return }
-            await ckSync.pushTasks(tasks, household: target)
+            _ = await syncTasksWhileSerialized(householdID: householdID)
             await ckSync.pushProfile(profile, household: target)
-            let personalTaskIDs = Set(tasks.filter(\.isPersonal).map(\.id))
+            let personalTaskIDs = personalTaskIDsForSync(householdID: householdID)
             for completion in completions where !personalTaskIDs.contains(completion.taskId) {
                 await ckSync.pushCompletion(completion, household: target)
             }
@@ -1334,18 +1409,27 @@ final class DataStore {
         let preCompletionIDs = Set(completions.map(\.id))
         let preRank = leaderboard.firstIndex(where: { $0.id == profile.id }).map { $0 + 1 }
 
-        // Personal tasks are intentionally local-only. Keep the local copy
-        // even if a stale CloudKit record for the same id still exists, while
-        // excluding any personal records that arrive from an older client.
+        // Personal tasks are intentionally local-only. Keep a local personal
+        // copy, while a UUID-only CloudKit marker removes any stale shared
+        // copy from this device without exposing its private details.
         let localPersonalTaskIDs = Set(tasks.filter(\.isPersonal).map(\.id))
-        let cloudPersonalTaskIDs = Set(payload.tasks.filter(\.isPersonal).map(\.id))
+        let cloudPersonalTaskIDs = payload.personalTaskIDs
+            .union(payload.tasks.filter(\.isPersonal).map(\.id))
+        let releasedPersonalTaskIDs = householdIndex.households
+            .first(where: { $0.id == target.id })?
+            .pendingPersonalTaskReleases ?? []
         let sharedCloudTasks = payload.tasks.filter {
             !$0.isPersonal && !localPersonalTaskIDs.contains($0.id)
         }
         // Merge tasks: union by ID, keeping local custom and personal tasks
         // that are not part of the shared CloudKit snapshot.
         let cloudTaskIds = Set(sharedCloudTasks.map(\.id))
-        let localOnly = tasks.filter { !cloudTaskIds.contains($0.id) }
+        let localOnly = tasks.filter { task in
+            !cloudTaskIds.contains(task.id)
+                && (!cloudPersonalTaskIDs.contains(task.id)
+                    || task.isPersonal
+                    || releasedPersonalTaskIDs.contains(task.id))
+        }
         tasks = sharedCloudTasks + localOnly
 
         // Merge completions: union by ID
@@ -1358,6 +1442,10 @@ final class DataStore {
         // Merge profiles into the active household's members list, preferring
         // the higher-XP version for conflicts on the same profile id.
         if let hIdx = householdIndex.households.firstIndex(where: { $0.id == activeHouseholdId }) {
+            householdIndex.households[hIdx].personalTaskIDs.formUnion(
+                cloudPersonalTaskIDs.subtracting(releasedPersonalTaskIDs)
+            )
+            householdIndex.households[hIdx].personalTaskIDs.formUnion(localPersonalTaskIDs)
             if let inviterName = payload.inviterName {
                 householdIndex.households[hIdx].inviterName = inviterName
             }
@@ -1494,13 +1582,24 @@ final class DataStore {
         // This is still inside HouseholdWorkspaceStore's serialized boundary.
         // The throwing upload prevents a newer task/profile save from reaching
         // CloudKit first and prevents presenting an incomplete share.
+        let personalTaskIDs = personalTaskIDsForSync(householdID: sharedTarget.id)
+        let releasedPersonalTaskIDs = householdIndex.households
+            .first(where: { $0.id == sharedTarget.id })?
+            .pendingPersonalTaskReleases ?? []
         try await ckSync.uploadInitialShareSnapshot(
             tasks: tasks,
             profile: profile,
             completions: completions,
             members: householdProfiles,
+            personalTaskIDs: personalTaskIDs,
+            deletingPersonalTaskIDs: releasedPersonalTaskIDs,
             household: sharedTarget
         )
+        if !releasedPersonalTaskIDs.isEmpty,
+           let householdIndex = householdIndex.households.firstIndex(where: { $0.id == sharedTarget.id }) {
+            self.householdIndex.households[householdIndex].pendingPersonalTaskReleases.subtract(releasedPersonalTaskIDs)
+            await store.saveHouseholdIndex(self.householdIndex)
+        }
         return PreparedHouseholdShare(
             share: share,
             container: ckSync.cloudContainer,

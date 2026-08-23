@@ -11,6 +11,7 @@ private let sharedJSONDecoder = JSONDecoder()
 
 enum RecordType {
     static let task       = "HouseholdTask"
+    static let personalTaskTombstone = "PersonalTaskTombstone"
     static let completion = "TaskCompletion"
     static let profile    = "MemberProfile"
     /// Root record for the shared household zone. CKShare needs a concrete
@@ -201,28 +202,59 @@ final class CloudKitSync: ObservableObject {
 
     // MARK: - Push (local → CloudKit)
 
-    func pushTasks(_ tasks: [HouseholdTask], household: Household) async {
-        guard isAvailable else { return }
+    @discardableResult
+    func pushTasks(
+        _ tasks: [HouseholdTask],
+        completions: [TaskCompletion] = [],
+        personalTaskIDs: Set<UUID> = [],
+        deletingPersonalTaskIDs: Set<UUID> = [],
+        household: Household
+    ) async -> Bool {
+        guard isAvailable else { return false }
         let zoneID = zoneID(for: household)
         let rootID = rootRecordID(for: household)
-        let sharedTasks = tasks.filter { !$0.isPersonal }
+        let db = database(for: household)
+        let personalIDs = personalTaskIDs.union(tasks.filter(\.isPersonal).map(\.id))
+        let sharedTasks = tasks.filter { !$0.isPersonal && !personalIDs.contains($0.id) }
         let records = sharedTasks.map { $0.toCKRecord(zoneID: zoneID, parentRecordID: rootID) }
-        let personalTaskIDs = tasks
-            .filter(\.isPersonal)
-            .map { CKRecord.ID(recordName: $0.id.uuidString, zoneID: zoneID) }
-        await saveRecords(records, deleting: personalTaskIDs, in: database(for: household))
+            + personalIDs.map {
+                PersonalTaskTombstone(taskID: $0).toCKRecord(zoneID: zoneID, parentRecordID: rootID)
+            }
+        let taskIDsToDelete = personalIDs.map {
+            CKRecord.ID(recordName: $0.uuidString, zoneID: zoneID)
+        }
+        var completionIDsToDelete = Set(completions
+            .filter { personalIDs.contains($0.taskId) }
+            .map { CKRecord.ID(recordName: $0.id.uuidString, zoneID: zoneID) })
+        if !personalIDs.isEmpty {
+            do {
+                completionIDsToDelete.formUnion(try await remoteCompletionIDs(for: personalIDs, from: db, zoneID: zoneID))
+            } catch {
+                logger.error("☁️ Could not enumerate personal completion records: \(error.localizedDescription)")
+                syncError = error.localizedDescription
+                return false
+            }
+        }
+        let releasedTombstoneIDs = deletingPersonalTaskIDs.map {
+            PersonalTaskTombstone.recordID(for: $0, zoneID: zoneID)
+        }
+        return await saveRecords(
+            records,
+            deleting: taskIDsToDelete + Array(completionIDsToDelete) + releasedTombstoneIDs,
+            in: db
+        )
     }
 
     func pushProfile(_ profile: UserProfile, household: Household) async {
         guard isAvailable else { return }
         let record = profile.toCKRecord(zoneID: zoneID(for: household), parentRecordID: rootRecordID(for: household))
-        await saveRecords([record], in: database(for: household))
+        _ = await saveRecords([record], in: database(for: household))
     }
 
     func pushCompletion(_ completion: TaskCompletion, household: Household) async {
         guard isAvailable else { return }
         let record = completion.toCKRecord(zoneID: zoneID(for: household), parentRecordID: rootRecordID(for: household))
-        await saveRecords([record], in: database(for: household))
+        _ = await saveRecords([record], in: database(for: household))
     }
 
     /// Upload every record a newly invited participant needs before the share
@@ -234,6 +266,8 @@ final class CloudKitSync: ObservableObject {
         profile: UserProfile,
         completions: [TaskCompletion],
         members: [UserProfile],
+        personalTaskIDs: Set<UUID> = [],
+        deletingPersonalTaskIDs: Set<UUID> = [],
         household: Household
     ) async throws {
         guard isAvailable else {
@@ -249,25 +283,56 @@ final class CloudKitSync: ObservableObject {
         profilesByID[profile.id] = profile
         // Personal tasks stay in the owner's local workspace and are not part
         // of the household snapshot presented to a new participant.
-        let personalTaskIDs = Set(tasks.filter(\.isPersonal).map(\.id))
-        let sharedTasks = tasks.filter { !$0.isPersonal }
-        let sharedCompletions = completions.filter { !personalTaskIDs.contains($0.taskId) }
+        let personalIDs = personalTaskIDs.union(tasks.filter(\.isPersonal).map(\.id))
+        let sharedTasks = tasks.filter { !$0.isPersonal && !personalIDs.contains($0.id) }
+        let sharedCompletions = completions.filter { !personalIDs.contains($0.taskId) }
         let records = sharedTasks.map { $0.toCKRecord(zoneID: zoneID, parentRecordID: rootID) }
+            + personalIDs.map {
+                PersonalTaskTombstone(taskID: $0).toCKRecord(zoneID: zoneID, parentRecordID: rootID)
+            }
             + sharedCompletions.map { $0.toCKRecord(zoneID: zoneID, parentRecordID: rootID) }
             + profilesByID.values.map { $0.toCKRecord(zoneID: zoneID, parentRecordID: rootID) }
+
+        let taskIDsToDelete = personalIDs.map {
+            CKRecord.ID(recordName: $0.uuidString, zoneID: zoneID)
+        }
+        var completionIDsToDelete = Set(completions
+            .filter { personalIDs.contains($0.taskId) }
+            .map { CKRecord.ID(recordName: $0.id.uuidString, zoneID: zoneID) })
+        if !personalIDs.isEmpty {
+            do {
+                completionIDsToDelete.formUnion(try await remoteCompletionIDs(for: personalIDs, from: db, zoneID: zoneID))
+            } catch {
+                throw CloudKitSyncError.shareCreationFailed(
+                    detail: "could not enumerate personal completion records: \(error.localizedDescription)"
+                )
+            }
+        }
+        let releasedTombstoneIDs = deletingPersonalTaskIDs.map {
+            PersonalTaskTombstone.recordID(for: $0, zoneID: zoneID)
+        }
+        let recordsToDelete = taskIDsToDelete + Array(completionIDsToDelete) + releasedTombstoneIDs
 
         // Stay comfortably below CloudKit's per-operation record limit while
         // retaining exact per-record validation for large completion histories.
         let batchSize = 200
-        for batchStart in stride(from: 0, to: records.count, by: batchSize) {
-            let batchEnd = min(batchStart + batchSize, records.count)
-            try await saveRequiredRecords(Array(records[batchStart..<batchEnd]), in: db)
+        if records.isEmpty {
+            try await saveRequiredRecords([], deleting: recordsToDelete, in: db)
+        } else {
+            for batchStart in stride(from: 0, to: records.count, by: batchSize) {
+                let batchEnd = min(batchStart + batchSize, records.count)
+                try await saveRequiredRecords(
+                    Array(records[batchStart..<batchEnd]),
+                    deleting: batchStart == 0 ? recordsToDelete : [],
+                    in: db
+                )
+            }
         }
         logger.info("☁️ Initial share snapshot uploaded: \(records.count) records")
     }
 
-    private func saveRecords(_ records: [CKRecord], deleting recordIDs: [CKRecord.ID] = [], in db: CKDatabase) async {
-        guard !records.isEmpty || !recordIDs.isEmpty else { return }
+    private func saveRecords(_ records: [CKRecord], deleting recordIDs: [CKRecord.ID] = [], in db: CKDatabase) async -> Bool {
+        guard !records.isEmpty || !recordIDs.isEmpty else { return true }
         do {
             _ = try await db.modifyRecords(saving: records, deleting: recordIDs)
             if recordIDs.isEmpty {
@@ -275,18 +340,24 @@ final class CloudKitSync: ObservableObject {
             } else {
                 logger.info("☁️ Pushed \(records.count) records and removed \(recordIDs.count) personal task records")
             }
+            return true
         } catch {
             logger.error("☁️ Push failed: \(error.localizedDescription)")
             syncError = error.localizedDescription
+            return false
         }
     }
 
-    private func saveRequiredRecords(_ records: [CKRecord], in db: CKDatabase) async throws {
-        guard !records.isEmpty else { return }
+    private func saveRequiredRecords(
+        _ records: [CKRecord],
+        deleting recordIDs: [CKRecord.ID] = [],
+        in db: CKDatabase
+    ) async throws {
+        guard !records.isEmpty || !recordIDs.isEmpty else { return }
         do {
             let results = try await db.modifyRecords(
                 saving: records,
-                deleting: [],
+                deleting: recordIDs,
                 savePolicy: .allKeys,
                 atomically: false
             )
@@ -323,10 +394,16 @@ final class CloudKitSync: ObservableObject {
         let zoneID = zoneID(for: household)
         do {
             async let tasks       = fetchRecords(ofType: RecordType.task,       from: db, zoneID: zoneID)
+            async let personalTaskTombstones = fetchRecords(ofType: RecordType.personalTaskTombstone, from: db, zoneID: zoneID)
             async let completions = fetchRecords(ofType: RecordType.completion, from: db, zoneID: zoneID)
             async let profileRecords = fetchRecords(ofType: RecordType.profile, from: db, zoneID: zoneID)
 
-            let (t, c, p) = try await (tasks, completions, profileRecords)
+            let (t, tombstones, c, p) = try await (tasks, personalTaskTombstones, completions, profileRecords)
+            let personalTaskIDs = Set(tombstones.compactMap(PersonalTaskTombstone.taskID(from:)))
+                .union(t.compactMap { task in
+                    guard (task["isPersonal"] as? Int ?? 0) == 1 else { return nil }
+                    return UUID(uuidString: task.recordID.recordName)
+                })
             let decodedProfiles = p.compactMap { UserProfile(from: $0) }
             let inviterName = household.ownerUserRecordName.flatMap { ownerRecordName in
                 p.lazy
@@ -338,9 +415,10 @@ final class CloudKitSync: ObservableObject {
                 tasks:       t.compactMap { HouseholdTask(from: $0) },
                 completions: c.compactMap { TaskCompletion(from: $0) },
                 profiles:    decodedProfiles,
-                inviterName: inviterName
+                inviterName: inviterName,
+                personalTaskIDs: personalTaskIDs
             )
-            logger.info("☁️ Pulled \(payload.tasks.count) tasks, \(payload.completions.count) completions, \(payload.profiles.count) profiles from \(household.zoneName, privacy: .public)")
+            logger.info("☁️ Pulled \(payload.tasks.count) tasks, \(payload.completions.count) completions, \(payload.profiles.count) profiles and \(payload.personalTaskIDs.count) personal task markers from \(household.zoneName, privacy: .public)")
             return payload
         } catch {
             logger.error("☁️ Pull failed: \(error.localizedDescription)")
@@ -376,6 +454,20 @@ final class CloudKitSync: ObservableObject {
         } while cursor != nil
 
         return results
+    }
+
+    private func remoteCompletionIDs(
+        for personalTaskIDs: Set<UUID>,
+        from db: CKDatabase,
+        zoneID: CKRecordZone.ID
+    ) async throws -> [CKRecord.ID] {
+        guard !personalTaskIDs.isEmpty else { return [] }
+        let records = try await fetchRecords(ofType: RecordType.completion, from: db, zoneID: zoneID)
+        return records.compactMap { record in
+            guard let taskID = (record["taskId"] as? String).flatMap(UUID.init),
+                  personalTaskIDs.contains(taskID) else { return nil }
+            return record.recordID
+        }
     }
 
     // MARK: - Sharing (household invite)
@@ -563,6 +655,7 @@ struct CloudKitPayload {
     let completions: [TaskCompletion]
     let profiles: [UserProfile]
     let inviterName: String?
+    let personalTaskIDs: Set<UUID>
 }
 
 // MARK: - Errors
@@ -690,6 +783,36 @@ private extension CKDatabase {
 }
 
 // MARK: - CKRecord conversions
+
+/// A privacy-preserving CloudKit marker for a task that was removed from the
+/// shared household because it became personal. The marker carries only the
+/// task UUID, so other household members can remove an old shared copy without
+/// receiving the task's name, schedule, notes, or checklist.
+struct PersonalTaskTombstone {
+    private static let recordNamePrefix = "personal-task-"
+    let taskID: UUID
+
+    static func recordID(for taskID: UUID, zoneID: CKRecordZone.ID) -> CKRecord.ID {
+        CKRecord.ID(recordName: recordNamePrefix + taskID.uuidString, zoneID: zoneID)
+    }
+
+    func toCKRecord(zoneID: CKRecordZone.ID, parentRecordID: CKRecord.ID? = nil) -> CKRecord {
+        let record = CKRecord(
+            recordType: RecordType.personalTaskTombstone,
+            recordID: Self.recordID(for: taskID, zoneID: zoneID)
+        )
+        if let parentRecordID {
+            record.parent = CKRecord.Reference(recordID: parentRecordID, action: .none)
+        }
+        return record
+    }
+
+    static func taskID(from record: CKRecord) -> UUID? {
+        guard record.recordType == RecordType.personalTaskTombstone else { return nil }
+        guard record.recordID.recordName.hasPrefix(recordNamePrefix) else { return nil }
+        return UUID(uuidString: String(record.recordID.recordName.dropFirst(recordNamePrefix.count)))
+    }
+}
 
 extension HouseholdTask {
     func toCKRecord(zone: CKRecordZone) -> CKRecord {

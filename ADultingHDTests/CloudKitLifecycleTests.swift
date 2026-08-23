@@ -29,12 +29,18 @@ final class CloudKitLifecycleTests: XCTestCase {
     func testShareRecordNamePersistsForCleanup() throws {
         var household = Household.newLocal(name: "Shared", members: [])
         household.shareRecordName = "cloudkit.share.record"
+        let personalTaskID = UUID()
+        let releasedTaskID = UUID()
+        household.personalTaskIDs = [personalTaskID]
+        household.pendingPersonalTaskReleases = [releasedTaskID]
 
         let encoded = try JSONEncoder().encode(household)
         let decoded = try JSONDecoder().decode(Household.self, from: encoded)
 
         XCTAssertEqual(decoded.shareRecordName, household.shareRecordName)
         XCTAssertEqual(decoded.zoneName, household.zoneName)
+        XCTAssertEqual(decoded.personalTaskIDs, Set([personalTaskID]))
+        XCTAssertEqual(decoded.pendingPersonalTaskReleases, Set([releasedTaskID]))
     }
 
     func testJoinedHouseholdPersistsInviterName() throws {
@@ -78,5 +84,7 @@ final class CloudKitLifecycleTests: XCTestCase {
         XCTAssertNil(decoded.inviterName)
         XCTAssertFalse(decoded.ownerIsCurrentUser)
         XCTAssertEqual(decoded.ownerUserRecordName, "owner")
+        XCTAssertTrue(decoded.personalTaskIDs.isEmpty)
+        XCTAssertTrue(decoded.pendingPersonalTaskReleases.isEmpty)
     }
 }

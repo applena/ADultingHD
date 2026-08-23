@@ -24,6 +24,15 @@ struct Household: Identifiable, Codable {
     /// `ZoneName.household` so existing TestFlight users don't lose records
     /// (CloudKit can't rename zones).
     var zoneName: String
+    /// Task IDs that have been marked personal in this household, including
+    /// tasks since deleted locally. Keeping ownership separately from the
+    /// current task array prevents private completion history from being
+    /// uploaded after a personal task is removed or a household is switched.
+    var personalTaskIDs: Set<UUID>
+    /// Personal markers waiting to be deleted because the task was explicitly
+    /// changed back to household scope. Persisting this retry state prevents a
+    /// failed/offline transition from being lost across app launches.
+    var pendingPersonalTaskReleases: Set<UUID>
 
     var ownerIsCurrentUser: Bool {
         if case .owned = ownership { return true }
@@ -53,7 +62,9 @@ struct Household: Identifiable, Codable {
         members: [UserProfile],
         shareRecordName: String? = nil,
         ownership: Ownership,
-        zoneName: String
+        zoneName: String,
+        personalTaskIDs: Set<UUID> = [],
+        pendingPersonalTaskReleases: Set<UUID> = []
     ) {
         self.id = id
         self.name = name
@@ -62,6 +73,8 @@ struct Household: Identifiable, Codable {
         self.shareRecordName = shareRecordName
         self.ownership = ownership
         self.zoneName = zoneName
+        self.personalTaskIDs = personalTaskIDs
+        self.pendingPersonalTaskReleases = pendingPersonalTaskReleases
     }
 
     /// Convenience constructor for a locally-owned household. New households
@@ -108,7 +121,7 @@ struct Household: Identifiable, Codable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, name, createdAt, members, shareRecordName, ownership, zoneName
+        case id, name, createdAt, members, shareRecordName, ownership, zoneName, personalTaskIDs, pendingPersonalTaskReleases
         // Schema-v3 compatibility. `ownership` is authoritative; these
         // shadow fields are dual-written so older synced clients still load.
         case ownerIsCurrentUser, ownerUserRecordName, inviterName
@@ -122,6 +135,8 @@ struct Household: Identifiable, Codable {
         members = try container.decode([UserProfile].self, forKey: .members)
         shareRecordName = try container.decodeIfPresent(String.self, forKey: .shareRecordName)
         zoneName = try container.decode(String.self, forKey: .zoneName)
+        personalTaskIDs = try container.decodeIfPresent(Set<UUID>.self, forKey: .personalTaskIDs) ?? []
+        pendingPersonalTaskReleases = try container.decodeIfPresent(Set<UUID>.self, forKey: .pendingPersonalTaskReleases) ?? []
 
         let legacyOwnerIsCurrentUser = try container.decodeIfPresent(Bool.self, forKey: .ownerIsCurrentUser) ?? true
         let legacyOwnerUserRecordName = try container.decodeIfPresent(String.self, forKey: .ownerUserRecordName)
@@ -147,6 +162,8 @@ struct Household: Identifiable, Codable {
         try container.encodeIfPresent(shareRecordName, forKey: .shareRecordName)
         try container.encode(ownership, forKey: .ownership)
         try container.encode(zoneName, forKey: .zoneName)
+        try container.encode(personalTaskIDs, forKey: .personalTaskIDs)
+        try container.encode(pendingPersonalTaskReleases, forKey: .pendingPersonalTaskReleases)
         // Dual-write schema-v3 ownership keys while household indexes sync
         // through iCloud to devices that may still run an older app build.
         switch ownership {

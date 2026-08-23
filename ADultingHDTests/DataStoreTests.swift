@@ -205,6 +205,40 @@ final class DataStoreTests: XCTestCase {
         XCTAssertEqual(dataStore.tasks.first?.defaultAssigneeId, dataStore.profile.id)
     }
 
+    func testPersonalTaskOwnershipSurvivesTaskDeletion() async throws {
+        let dataStore = DataStore()
+        await dataStore.createHousehold(name: "Personal task test")
+
+        var task = makeTask()
+        task.isPersonal = true
+        await dataStore.addCustomTask(task)
+        let storedTask = try XCTUnwrap(dataStore.tasks.first)
+
+        await dataStore.deleteTask(storedTask)
+
+        let household = try XCTUnwrap(dataStore.listHouseholds().first)
+        XCTAssertTrue(household.personalTaskIDs.contains(task.id))
+    }
+
+    func testReturningPersonalTaskToHouseholdScopeReleasesOwnership() async throws {
+        let dataStore = DataStore()
+        await dataStore.createHousehold(name: "Scope transition test")
+
+        var task = makeTask()
+        task.isPersonal = true
+        await dataStore.addCustomTask(task)
+        var householdTask = try XCTUnwrap(dataStore.tasks.first)
+        XCTAssertTrue(dataStore.listHouseholds().first?.personalTaskIDs.contains(task.id) == true)
+
+        householdTask.isPersonal = false
+        await dataStore.updateTask(householdTask)
+
+        let household = try XCTUnwrap(dataStore.listHouseholds().first)
+        XCTAssertFalse(household.personalTaskIDs.contains(task.id))
+        XCTAssertTrue(household.pendingPersonalTaskReleases.contains(task.id))
+        XCTAssertFalse(dataStore.tasks.first?.isPersonal == true)
+    }
+
     func testResolveNameClashUsesTrimmedCaseInsensitiveComparison() async {
         let dataStore = DataStore()
         dataStore.pendingNameClash = DataStore.NameClash(
