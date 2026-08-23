@@ -362,6 +362,10 @@ actor TaskStore {
             logger.error("Rejected backup with duplicate task IDs")
             return false
         }
+        guard Set(backup.completions.map(\.id)).count == backup.completions.count else {
+            logger.error("Rejected backup with duplicate completion IDs")
+            return false
+        }
         saveTasks(backup.tasks, for: householdId)
         saveProfile(backup.profile)
         saveCompletions(backup.completions)

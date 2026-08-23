@@ -281,6 +281,27 @@ final class DataStoreTests: XCTestCase {
         XCTAssertTrue(dataStore.tasks.first?.isDue == true)
     }
 
+    func testUndoRecurringCompletionPreservesOneTimeDateAddedLater() async throws {
+        let dataStore = DataStore()
+        let task = makeTask(frequency: .weekly)
+        dataStore.tasks = [task]
+
+        await dataStore.completeTask(task)
+        let completion = try XCTUnwrap(dataStore.completions.first)
+        XCTAssertNil(completion.oneTimeDueDate)
+
+        let dueDate = Calendar.current.startOfDay(for: Date().addingTimeInterval(86_400))
+        var edited = try XCTUnwrap(dataStore.tasks.first)
+        edited.frequency = .unscheduled
+        edited.scheduledWeekdays = []
+        edited.scheduledOverrideDate = dueDate
+        await dataStore.updateTask(edited)
+
+        await dataStore.uncompleteTask(completion)
+
+        XCTAssertEqual(dataStore.tasks.first?.scheduledOverrideDate, dueDate)
+    }
+
     func testRoomGroupingDeduplicatesCaseAndDiacriticVariants() {
         let dataStore = DataStore()
         var first = makeTask()

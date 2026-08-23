@@ -597,8 +597,11 @@ final class DataStore {
             let hasLaterCompletion = completions.contains {
                 $0.taskId == completion.taskId && $0.completedAt > completion.completedAt
             }
-            if tasks[taskIdx].frequency == .unscheduled && !hasLaterCompletion {
-                tasks[taskIdx].scheduledOverrideDate = completion.oneTimeDueDate
+            if tasks[taskIdx].frequency == .unscheduled,
+               tasks[taskIdx].scheduledOverrideDate == nil,
+               !hasLaterCompletion,
+               let oneTimeDueDate = completion.oneTimeDueDate {
+                tasks[taskIdx].scheduledOverrideDate = oneTimeDueDate
             }
             syncReminder(for: tasks[taskIdx])
         }

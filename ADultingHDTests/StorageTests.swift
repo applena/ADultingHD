@@ -173,5 +173,25 @@ final class StorageTests: XCTestCase {
         )
 
         XCTAssertFalse(imported)
+
+        let completion = TaskCompletion(
+            id: UUID(), taskId: task.id, taskName: task.name,
+            completedAt: Date(), xpEarned: 10, streakBonus: 0,
+            notes: nil, profileId: nil
+        )
+        let duplicateCompletionBackup = TaskStore.AppBackup(
+            version: 1,
+            exported: ISO8601DateFormatter().string(from: Date()),
+            tasks: [task],
+            profile: UserProfile(),
+            completions: [completion, completion]
+        )
+
+        let importedDuplicateCompletions = await store.importBackup(
+            from: try encoder.encode(duplicateCompletionBackup),
+            householdId: householdId
+        )
+
+        XCTAssertFalse(importedDuplicateCompletions)
     }
 }
