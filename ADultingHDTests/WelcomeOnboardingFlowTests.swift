@@ -33,6 +33,21 @@ final class WelcomeOnboardingFlowTests: XCTestCase {
         XCTAssertEqual(flow.current, .inviteChoice)
     }
 
+    func testSendingInviteAdvancesToSuggestionsOnlyOnce() {
+        var flow = WelcomeOnboardingFlow()
+        flow.start(.creating)
+        flow.advance()
+        flow.answerInvitation(true)
+        flow.advance()
+
+        XCTAssertEqual(flow.current, .invite)
+        flow.markInviteSent()
+        XCTAssertEqual(flow.current, .suggestions)
+
+        flow.markInviteSent()
+        XCTAssertEqual(flow.current, .suggestions)
+    }
+
     func testPendingInviteStartsWithJoinAndNameStep() {
         var flow = WelcomeOnboardingFlow()
         flow.start(.pendingInvite(id: "invite-1", householdName: "Maple House", inviterName: "Alex"))
