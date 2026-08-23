@@ -7,6 +7,12 @@ private let logger = Logger(subsystem: "net.shadowpuppet.ADultingHD", category: 
 private let sharedJSONEncoder = JSONEncoder()
 private let sharedJSONDecoder = JSONDecoder()
 
+private struct CloudKitTaskMetadata: Codable {
+    let checklist: [ChecklistItem]
+    let createdAt: Date
+    let scheduledOverrideDate: Date?
+}
+
 // MARK: - CloudKit record type names
 
 enum RecordType {
@@ -702,8 +708,15 @@ extension HouseholdTask {
         r["scheduledWeekdays"] = scheduledWeekdays.isEmpty ? nil : scheduledWeekdays as CKRecordValue?
         r["scheduledDayOfMonth"] = scheduledDayOfMonth as CKRecordValue?
         r["scheduledMonth"] = scheduledMonth as CKRecordValue?
-        r["checklist"] = checklist.isEmpty ? nil : (try? sharedJSONEncoder.encode(checklist)) as CKRecordValue?
-        r["scheduledOverrideDate"] = scheduledOverrideDate as CKRecordValue?
+        // `createdAt` and `scheduledOverrideDate` were added after the
+        // production schema was deployed. Carry both in the already-deployed
+        // checklist bytes instead of creating undeployed custom fields.
+        let metadata = CloudKitTaskMetadata(
+            checklist: checklist,
+            createdAt: createdAt,
+            scheduledOverrideDate: scheduledOverrideDate
+        )
+        r["checklist"] = (try? sharedJSONEncoder.encode(metadata)) as CKRecordValue?
         return r
     }
 
@@ -730,23 +743,28 @@ extension HouseholdTask {
         self.supplies = record["supplies"] as? [String] ?? []
         self.isActive = (record["isActive"] as? Int ?? 1) == 1
         self.lastCompleted = record["lastCompleted"] as? Date
-        // `createdAt` was added after the production schema was deployed, so
-        // it is intentionally not uploaded as a custom field. Use the
-        // server-managed record creation date to keep recurrence anchors
-        // stable for shared tasks, while still accepting any older records
-        // that may already contain the custom field in Development.
-        self.createdAt = record["createdAt"] as? Date ?? record.creationDate ?? Date()
+        let customCreatedAt = record["createdAt"] as? Date
+        var metadataCreatedAt: Date?
+        var decodedChecklist: [ChecklistItem] = []
+        var metadataOverrideDate: Date?
+        if let data = record["checklist"] as? Data,
+           let metadata = try? sharedJSONDecoder.decode(CloudKitTaskMetadata.self, from: data) {
+            decodedChecklist = metadata.checklist
+            metadataCreatedAt = metadata.createdAt
+            metadataOverrideDate = metadata.scheduledOverrideDate
+        } else if let data = record["checklist"] as? Data,
+                  let decoded = try? sharedJSONDecoder.decode([ChecklistItem].self, from: data) {
+            // Records written before the metadata envelope used a bare
+            // checklist array. Keep those records readable during rollout.
+            decodedChecklist = decoded
+        }
+        self.createdAt = customCreatedAt ?? metadataCreatedAt ?? record.creationDate ?? Date()
         self.defaultAssigneeId = (record["defaultAssigneeId"] as? String).flatMap(UUID.init)
         self.scheduledWeekdays = record["scheduledWeekdays"] as? [Int] ?? []
         self.scheduledDayOfMonth = record["scheduledDayOfMonth"] as? Int
         self.scheduledMonth = record["scheduledMonth"] as? Int
-        if let data = record["checklist"] as? Data,
-           let decoded = try? sharedJSONDecoder.decode([ChecklistItem].self, from: data) {
-            self.checklist = decoded
-        } else {
-            self.checklist = []
-        }
-        self.scheduledOverrideDate = record["scheduledOverrideDate"] as? Date
+        self.checklist = decodedChecklist
+        self.scheduledOverrideDate = (record["scheduledOverrideDate"] as? Date) ?? metadataOverrideDate
     }
 }
 

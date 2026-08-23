@@ -25,9 +25,10 @@ sync cross-device via CloudKit zone subscriptions plus our
 `userDidAcceptCloudKitShareWith` AppDelegate hook and the
 `onContinueUserActivity` SwiftUI modifier.
 
-`HouseholdTask.createdAt` remains a local JSON field. It is not uploaded as a
-custom CloudKit field because the production schema predates that recurrence
-anchor; fetched records use CloudKit's server-managed `creationDate` instead.
+`HouseholdTask.createdAt` and `scheduledOverrideDate` remain local model fields,
+but their values travel inside the already-deployed `checklist` bytes. They
+are not uploaded as custom CloudKit fields because the production schema
+predates them; bare checklist arrays from older builds remain readable.
 
 ## Code map
 
