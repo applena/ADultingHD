@@ -25,6 +25,13 @@ sync cross-device via CloudKit zone subscriptions plus our
 `userDidAcceptCloudKitShareWith` AppDelegate hook and the
 `onContinueUserActivity` SwiftUI modifier.
 
+`HouseholdTask.createdAt` and `scheduledOverrideDate` remain local model fields
+and are not uploaded as custom CloudKit fields because the production schema
+predates them. Existing local values are preserved when a matching cloud task
+is merged; a newly joined device falls back to CloudKit's stable system
+`creationDate` for records without local recurrence metadata. Checklist data
+keeps its original array wire format for older clients.
+
 ## Code map
 
 | File | Role |
