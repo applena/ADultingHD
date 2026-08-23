@@ -133,6 +133,19 @@ final class CloudKitRecordTests: XCTestCase {
         XCTAssertEqual(task.toCKRecord(zone: zone).recordID.recordName, id.uuidString)
     }
 
+    func testTaskRecord_omitsCreatedAtCustomField() {
+        var task = HouseholdTask(
+            id: UUID(), name: "Test", description: "", category: .general,
+            frequency: .weekly, estimatedMinutes: 10, difficulty: .easy,
+            supplies: [], isActive: true
+        )
+        task.createdAt = Date(timeIntervalSince1970: 1_700_000_000)
+
+        let record = task.toCKRecord(zone: zone)
+
+        XCTAssertNil(record["createdAt"])
+    }
+
     // MARK: - TaskCompletion
 
     func testCompletionRoundTrip() {
