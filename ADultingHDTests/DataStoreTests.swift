@@ -180,6 +180,31 @@ final class DataStoreTests: XCTestCase {
         XCTAssertEqual(dataStore.tasks.last?.scheduledWeekdays, TaskFrequency.weekly.defaultWeekdays)
     }
 
+    func testAddingPersonalTaskAssignsItToCurrentProfile() async {
+        let dataStore = DataStore()
+        var task = makeTask()
+        task.isPersonal = true
+        task.defaultAssigneeId = UUID()
+
+        await dataStore.addCustomTask(task)
+
+        XCTAssertEqual(dataStore.tasks.first?.defaultAssigneeId, dataStore.profile.id)
+        XCTAssertTrue(dataStore.tasks.first?.isPersonal == true)
+    }
+
+    func testUpdatingPersonalTaskCannotAssignItToHousemate() async {
+        let dataStore = DataStore()
+        let original = makeTask()
+        dataStore.tasks = [original]
+
+        var updated = original
+        updated.isPersonal = true
+        updated.defaultAssigneeId = UUID()
+        await dataStore.updateTask(updated)
+
+        XCTAssertEqual(dataStore.tasks.first?.defaultAssigneeId, dataStore.profile.id)
+    }
+
     func testResolveNameClashUsesTrimmedCaseInsensitiveComparison() async {
         let dataStore = DataStore()
         dataStore.pendingNameClash = DataStore.NameClash(

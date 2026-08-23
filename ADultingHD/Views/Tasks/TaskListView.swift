@@ -355,6 +355,12 @@ struct TaskRow: View {
                                 .foregroundStyle(task.isActive ? .primary : .secondary)
                                 .strikethrough(!task.isActive, color: .secondary)
                                 .fixedSize(horizontal: false, vertical: true)
+                            if task.isPersonal {
+                                Image(systemName: "person.fill")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                                    .accessibilityLabel("Personal task")
+                            }
                             if status.isDue && task.isActive {
                                 Image(systemName: status.isOverdue ? "exclamationmark.circle.fill" : "clock.fill")
                                     .font(.caption2)
@@ -387,7 +393,7 @@ struct TaskRow: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Open \(task.name)")
+            .accessibilityLabel(task.isPersonal ? "Open \(task.name), personal task" : "Open \(task.name)")
             .accessibilityHint("View or edit task details")
         }
         .padding(.vertical, 2)

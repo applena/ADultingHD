@@ -31,6 +31,7 @@ final class CloudKitRecordTests: XCTestCase {
         XCTAssertEqual(decoded.isActive, true)
         XCTAssertNil(decoded.lastCompleted)
         XCTAssertNil(decoded.defaultAssigneeId)
+        XCTAssertFalse(decoded.isPersonal)
         XCTAssertTrue(decoded.scheduledWeekdays.isEmpty)
         XCTAssertTrue(decoded.checklist.isEmpty)
     }
@@ -48,6 +49,7 @@ final class CloudKitRecordTests: XCTestCase {
             isActive: false, lastCompleted: Date(timeIntervalSince1970: 1_700_000_000)
         )
         task.defaultAssigneeId = assigneeId
+        task.isPersonal = true
         task.scheduledWeekdays = [2, 6]
         task.checklist = checklist
 
@@ -59,6 +61,7 @@ final class CloudKitRecordTests: XCTestCase {
         XCTAssertEqual(decoded.isActive, false)
         XCTAssertNotNil(decoded.lastCompleted)
         XCTAssertEqual(decoded.defaultAssigneeId, assigneeId)
+        XCTAssertTrue(decoded.isPersonal)
         XCTAssertEqual(decoded.scheduledWeekdays, [2, 6])
         XCTAssertEqual(decoded.checklist.count, 2)
         XCTAssertEqual(decoded.checklist[0].text, "Step 1")

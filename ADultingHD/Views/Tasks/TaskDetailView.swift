@@ -91,9 +91,16 @@ struct TaskDetailView: View {
                     Text(task.name)
                         .font(.title2.bold())
                         .fixedSize(horizontal: false, vertical: true)
-                    Text(task.category.rawValue)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                    HStack(spacing: 8) {
+                        Text(task.category.rawValue)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                        if task.isPersonal {
+                            Label("Personal", systemImage: "person.fill")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                        }
+                    }
                 }
 
                 Spacer()
@@ -156,6 +163,11 @@ struct TaskDetailView: View {
 
             DetailItem(label: "Difficulty", value: task.difficulty.label, icon: task.difficulty.icon)
             DetailItem(label: "Est. Time", value: "\(task.estimatedMinutes) min", icon: "clock")
+            DetailItem(
+                label: "Scope",
+                value: task.isPersonal ? "Personal" : "Household",
+                icon: task.isPersonal ? "person.fill" : "person.3"
+            )
 
             if let days = task.daysSinceLastCompleted {
                 DetailItem(label: "Last Done", value: "\(days)d ago", icon: "calendar.badge.clock")
@@ -163,7 +175,7 @@ struct TaskDetailView: View {
                 DetailItem(label: "Last Done", value: "Never", icon: "calendar.badge.clock")
             }
 
-            if dataStore.hasMultipleAssignees {
+            if !task.isPersonal && dataStore.hasMultipleAssignees {
                 Button { showAssigneePicker = true } label: {
                     DetailItem(label: "Assignee", value: assigneeDisplay(for: task), icon: "person.crop.circle")
                 }
@@ -393,9 +405,14 @@ struct AssigneePickerSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                AssigneePicker(profiles: dataStore.householdProfiles, selection: $selected)
-                    .pickerStyle(.inline)
-                    .labelsHidden()
+                if task.isPersonal {
+                    Text("Personal tasks can only be completed by you.")
+                        .foregroundStyle(.secondary)
+                } else {
+                    AssigneePicker(profiles: dataStore.householdProfiles, selection: $selected)
+                        .pickerStyle(.inline)
+                        .labelsHidden()
+                }
             }
             .navigationTitle("Assignee")
             #if os(iOS)
@@ -407,13 +424,17 @@ struct AssigneePickerSheet: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") { saveAndDismiss() }
-                        .disabled(selected == task.defaultAssigneeId)
+                        .disabled(task.isPersonal || selected == task.defaultAssigneeId)
                 }
             }
         }
     }
 
     private func saveAndDismiss() {
+        guard !task.isPersonal else {
+            dismiss()
+            return
+        }
         var updated = task
         updated.defaultAssigneeId = selected
         Task { await dataStore.updateTask(updated) }

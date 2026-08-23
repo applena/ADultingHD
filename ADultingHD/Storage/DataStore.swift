@@ -617,6 +617,18 @@ final class DataStore {
         }
     }
 
+    /// Personal tasks belong to the device user even when the active
+    /// household has several members. Keep the assignee invariant here, at
+    /// the storage boundary, so non-form callers cannot assign one to a
+    /// housemate accidentally.
+    private func normalizePersonalAssignment(_ task: HouseholdTask) -> HouseholdTask {
+        var normalized = task
+        if normalized.isPersonal {
+            normalized.defaultAssigneeId = profile.id
+        }
+        return normalized
+    }
+
     func addCustomTask(_ task: HouseholdTask) async {
         let expectedHouseholdID = activeHouseholdId
         await mutateActiveWorkspace(expectedHouseholdID: expectedHouseholdID) {
@@ -625,7 +637,7 @@ final class DataStore {
     }
 
     private func addCustomTaskWhileSerialized(_ task: HouseholdTask) async {
-        let normalizedTask = task.withDefaultSchedule()
+        let normalizedTask = normalizePersonalAssignment(task.withDefaultSchedule())
         tasks.append(normalizedTask)
         syncReminder(for: normalizedTask)
         await persistActiveTasksWhileSerialized()
@@ -661,7 +673,7 @@ final class DataStore {
 
     private func updateTaskWhileSerialized(_ task: HouseholdTask) async {
         if let idx = tasks.firstIndex(where: { $0.id == task.id }) {
-            var updated = task
+            var updated = normalizePersonalAssignment(task)
             if tasks[idx].recurrenceRule != updated.recurrenceRule {
                 // Editing the recurrence rule of a task that's never been
                 // completed gives it a fresh start instead of re-anchoring to
@@ -755,7 +767,7 @@ final class DataStore {
         let additionalTasks = customTasks.compactMap { customTask -> HouseholdTask? in
             let key = customTask.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
             guard !key.isEmpty, names.insert(key).inserted else { return nil }
-            return customTask.withDefaultSchedule()
+            return normalizePersonalAssignment(customTask.withDefaultSchedule())
         }
         let selectedTasks = catalogTasks + additionalTasks
         guard !selectedTasks.isEmpty else { return }
@@ -915,7 +927,10 @@ final class DataStore {
             guard let target = householdIndex.households.first(where: { $0.id == householdID }) else { return }
             await ckSync.pushTasks(tasks, household: target)
             await ckSync.pushProfile(profile, household: target)
-            for completion in completions { await ckSync.pushCompletion(completion, household: target) }
+            let personalTaskIDs = Set(tasks.filter(\.isPersonal).map(\.id))
+            for completion in completions where !personalTaskIDs.contains(completion.taskId) {
+                await ckSync.pushCompletion(completion, household: target)
+            }
         }
     }
 
@@ -1319,13 +1334,25 @@ final class DataStore {
         let preCompletionIDs = Set(completions.map(\.id))
         let preRank = leaderboard.firstIndex(where: { $0.id == profile.id }).map { $0 + 1 }
 
-        // Merge tasks: union by ID, keeping local custom tasks not in cloud
-        let cloudTaskIds = Set(payload.tasks.map(\.id))
+        // Personal tasks are intentionally local-only. Keep the local copy
+        // even if a stale CloudKit record for the same id still exists, while
+        // excluding any personal records that arrive from an older client.
+        let localPersonalTaskIDs = Set(tasks.filter(\.isPersonal).map(\.id))
+        let cloudPersonalTaskIDs = Set(payload.tasks.filter(\.isPersonal).map(\.id))
+        let sharedCloudTasks = payload.tasks.filter {
+            !$0.isPersonal && !localPersonalTaskIDs.contains($0.id)
+        }
+        // Merge tasks: union by ID, keeping local custom and personal tasks
+        // that are not part of the shared CloudKit snapshot.
+        let cloudTaskIds = Set(sharedCloudTasks.map(\.id))
         let localOnly = tasks.filter { !cloudTaskIds.contains($0.id) }
-        tasks = payload.tasks + localOnly
+        tasks = sharedCloudTasks + localOnly
 
         // Merge completions: union by ID
-        let newCompletions = payload.completions.filter { !preCompletionIDs.contains($0.id) }
+        let personalTaskIDs = localPersonalTaskIDs.union(cloudPersonalTaskIDs)
+        let newCompletions = payload.completions.filter {
+            !personalTaskIDs.contains($0.taskId) && !preCompletionIDs.contains($0.id)
+        }
         completions = (completions + newCompletions).sorted { $0.completedAt > $1.completedAt }
 
         // Merge profiles into the active household's members list, preferring

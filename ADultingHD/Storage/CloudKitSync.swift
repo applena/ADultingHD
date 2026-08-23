@@ -205,8 +205,12 @@ final class CloudKitSync: ObservableObject {
         guard isAvailable else { return }
         let zoneID = zoneID(for: household)
         let rootID = rootRecordID(for: household)
-        let records = tasks.map { $0.toCKRecord(zoneID: zoneID, parentRecordID: rootID) }
-        await saveRecords(records, in: database(for: household))
+        let sharedTasks = tasks.filter { !$0.isPersonal }
+        let records = sharedTasks.map { $0.toCKRecord(zoneID: zoneID, parentRecordID: rootID) }
+        let personalTaskIDs = tasks
+            .filter(\.isPersonal)
+            .map { CKRecord.ID(recordName: $0.id.uuidString, zoneID: zoneID) }
+        await saveRecords(records, deleting: personalTaskIDs, in: database(for: household))
     }
 
     func pushProfile(_ profile: UserProfile, household: Household) async {
@@ -243,8 +247,13 @@ final class CloudKitSync: ObservableObject {
             profiles[member.id] = member
         }
         profilesByID[profile.id] = profile
-        let records = tasks.map { $0.toCKRecord(zoneID: zoneID, parentRecordID: rootID) }
-            + completions.map { $0.toCKRecord(zoneID: zoneID, parentRecordID: rootID) }
+        // Personal tasks stay in the owner's local workspace and are not part
+        // of the household snapshot presented to a new participant.
+        let personalTaskIDs = Set(tasks.filter(\.isPersonal).map(\.id))
+        let sharedTasks = tasks.filter { !$0.isPersonal }
+        let sharedCompletions = completions.filter { !personalTaskIDs.contains($0.taskId) }
+        let records = sharedTasks.map { $0.toCKRecord(zoneID: zoneID, parentRecordID: rootID) }
+            + sharedCompletions.map { $0.toCKRecord(zoneID: zoneID, parentRecordID: rootID) }
             + profilesByID.values.map { $0.toCKRecord(zoneID: zoneID, parentRecordID: rootID) }
 
         // Stay comfortably below CloudKit's per-operation record limit while
@@ -257,11 +266,15 @@ final class CloudKitSync: ObservableObject {
         logger.info("☁️ Initial share snapshot uploaded: \(records.count) records")
     }
 
-    private func saveRecords(_ records: [CKRecord], in db: CKDatabase) async {
-        guard !records.isEmpty else { return }
+    private func saveRecords(_ records: [CKRecord], deleting recordIDs: [CKRecord.ID] = [], in db: CKDatabase) async {
+        guard !records.isEmpty || !recordIDs.isEmpty else { return }
         do {
-            _ = try await db.modifyRecords(saving: records, deleting: [])
-            logger.info("☁️ Pushed \(records.count) records")
+            _ = try await db.modifyRecords(saving: records, deleting: recordIDs)
+            if recordIDs.isEmpty {
+                logger.info("☁️ Pushed \(records.count) records")
+            } else {
+                logger.info("☁️ Pushed \(records.count) records and removed \(recordIDs.count) personal task records")
+            }
         } catch {
             logger.error("☁️ Push failed: \(error.localizedDescription)")
             syncError = error.localizedDescription
@@ -700,6 +713,12 @@ extension HouseholdTask {
         r["lastCompleted"]    = lastCompleted as CKRecordValue?
         r["createdAt"]        = createdAt as CKRecordValue?
         r["defaultAssigneeId"] = defaultAssigneeId?.uuidString as CKRecordValue?
+        // Personal tasks are filtered before upload. Keep the field available
+        // for defensive round-trips, but omit the false value so existing
+        // CloudKit schemas continue to accept ordinary household records.
+        if isPersonal {
+            r["isPersonal"] = 1 as CKRecordValue
+        }
         r["scheduledWeekdays"] = scheduledWeekdays.isEmpty ? nil : scheduledWeekdays as CKRecordValue?
         r["scheduledDayOfMonth"] = scheduledDayOfMonth as CKRecordValue?
         r["scheduledMonth"] = scheduledMonth as CKRecordValue?
@@ -733,6 +752,7 @@ extension HouseholdTask {
         self.lastCompleted = record["lastCompleted"] as? Date
         self.createdAt = record["createdAt"] as? Date ?? Date()
         self.defaultAssigneeId = (record["defaultAssigneeId"] as? String).flatMap(UUID.init)
+        self.isPersonal = (record["isPersonal"] as? Int ?? 0) == 1
         self.scheduledWeekdays = record["scheduledWeekdays"] as? [Int] ?? []
         self.scheduledDayOfMonth = record["scheduledDayOfMonth"] as? Int
         self.scheduledMonth = record["scheduledMonth"] as? Int
