@@ -143,7 +143,7 @@ enum Recurrence {
         createdAt: Date,
         scheduledOverrideDate: Date? = nil,
         calendar: Calendar
-    ) -> Date {
+    ) -> Date? {
         if let override = scheduledOverrideDate {
             return calendar.startOfDay(for: override)
         }
@@ -151,6 +151,9 @@ enum Recurrence {
         let createdDay = calendar.startOfDay(for: createdAt)
 
         switch frequency {
+        case .unscheduled:
+            return nil
+
         case .daily:
             return intervalOccurrence(lastCompleted: lastCompleted, createdDay: createdDay, days: 1, calendar: calendar)
 

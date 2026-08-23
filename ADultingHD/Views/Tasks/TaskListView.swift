@@ -15,15 +15,16 @@ struct TaskListView: View {
     @Environment(DataStore.self) private var dataStore
     @Environment(StoreManager.self) private var storeManager
     @State private var selectedTab: TaskTab = .myTasks
-    @State private var selectedCategory: TaskCategory?
+    /// `nil` means all rooms; an empty string means tasks without a room.
+    @State private var selectedRoom: String?
     @State private var assigneeFilter: AssigneeFilter = .all
     @State private var searchText = ""
     @State private var showAddCustom = false
     @State private var showProUpgrade = false
 
-    init(initialTab: TaskTab = .myTasks, initialCategory: TaskCategory? = nil) {
+    init(initialTab: TaskTab = .myTasks, initialCategory: TaskCategory? = nil, initialRoom: String? = nil) {
         _selectedTab = State(initialValue: initialTab)
-        _selectedCategory = State(initialValue: initialCategory)
+        _selectedRoom = State(initialValue: initialRoom ?? initialCategory.map { $0.roomValue ?? "" })
     }
 
     private var canCreateCustomTask: Bool {
@@ -53,7 +54,7 @@ struct TaskListView: View {
                 .padding(.horizontal)
                 .padding(.vertical, 8)
                 .onChange(of: selectedTab) {
-                    selectedCategory = nil
+                    selectedRoom = nil
                 }
 
                 Group {
@@ -119,7 +120,12 @@ struct TaskListView: View {
 
     private var filteredTasks: [HouseholdTask] {
         var result = dataStore.tasks
-        if let cat = selectedCategory { result = result.filter { $0.category == cat } }
+        if let selectedRoom {
+            result = result.filter { task in
+                if selectedRoom.isEmpty { return HouseholdTask.normalizedRoom(task.room) == nil }
+                return task.room?.caseInsensitiveCompare(selectedRoom) == .orderedSame
+            }
+        }
         // Only apply the assignee filter while its chip row is visible — if a
         // household shrinks back to one member (a share is revoked or a
         // member leaves) while "Mine"/"Unassigned" was selected, the row
@@ -134,20 +140,15 @@ struct TaskListView: View {
                 $0.description.localizedCaseInsensitiveContains(searchText)
             }
         }
-        return result.sorted { ($0.category.rawValue, $0.name) < ($1.category.rawValue, $1.name) }
-    }
-
-    private var groupedTasks: [(TaskCategory, [HouseholdTask])] {
-        Dictionary(grouping: filteredTasks, by: \.category)
-            .sorted { $0.key.rawValue < $1.key.rawValue }
+        return result.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     }
 
     private var myTasksList: some View {
         List {
-            categoryFilter
+            roomFilter
             assigneeFilterRow
 
-            if groupedTasks.isEmpty {
+            if filteredTasks.isEmpty {
                 ContentUnavailableView {
                     Label("No Tasks Yet", systemImage: "checklist")
                 } description: {
@@ -155,26 +156,9 @@ struct TaskListView: View {
                 }
             }
 
-            ForEach(groupedTasks, id: \.0) { category, tasks in
-                let dueCount = tasks.filter { $0.isDue && $0.isActive }.count
-                Section {
-                    ForEach(tasks) { task in
-                        TaskRow(task: task)
-                    }
-                } header: {
-                    HStack(spacing: 6) {
-                        Label(category.rawValue, systemImage: category.icon)
-                            .foregroundStyle(Theme.categoryColor(category))
-                        Spacer()
-                        if dueCount > 0 {
-                            Text("\(dueCount) due")
-                                .font(.caption2.weight(.semibold))
-                                .foregroundStyle(Theme.streakOrange)
-                        }
-                        Text("\(tasks.count)")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
+            Section {
+                ForEach(filteredTasks) { task in
+                    TaskRow(task: task)
                 }
             }
         }
@@ -192,7 +176,12 @@ struct TaskListView: View {
 
     private var filteredCatalog: [CatalogTask] {
         var result = taskCatalog
-        if let cat = selectedCategory { result = result.filter { $0.category == cat } }
+        if let selectedRoom {
+            result = result.filter { task in
+                if selectedRoom.isEmpty { return task.suggestedRoom == nil }
+                return task.suggestedRoom?.caseInsensitiveCompare(selectedRoom) == .orderedSame
+            }
+        }
         if !searchText.isEmpty {
             result = result.filter {
                 $0.name.localizedCaseInsensitiveContains(searchText) ||
@@ -209,7 +198,7 @@ struct TaskListView: View {
 
     private var catalogList: some View {
         List {
-            categoryFilter
+            roomFilter
 
             Section {
                 Button {
@@ -228,7 +217,7 @@ struct TaskListView: View {
                                 .font(.body.weight(.medium))
                                 .foregroundStyle(.primary)
                             if canCreateCustomTask {
-                                Text("Add your own task with a custom schedule")
+                                Text("Start with a name, then configure details if useful")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             } else {
@@ -280,19 +269,41 @@ struct TaskListView: View {
 
     // MARK: - Shared
 
-    private var categoryFilter: some View {
+    private var roomFilterOptions: [String] {
+        let taskRooms = dataStore.tasks.compactMap { HouseholdTask.normalizedRoom($0.room) }
+        let templateRooms = taskCatalog.compactMap(\.suggestedRoom)
+        return Array(Set(taskRooms + templateRooms)).sorted {
+            $0.localizedCaseInsensitiveCompare($1) == .orderedAscending
+        }
+    }
+
+    private var hasTasksWithoutRoom: Bool {
+        dataStore.tasks.contains { HouseholdTask.normalizedRoom($0.room) == nil }
+            || taskCatalog.contains { $0.suggestedRoom == nil }
+    }
+
+    private var roomFilter: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
-                FilterChip(label: "All", isSelected: selectedCategory == nil) {
-                    selectedCategory = nil
+                FilterChip(label: "All", isSelected: selectedRoom == nil) {
+                    selectedRoom = nil
                 }
-                ForEach(TaskCategory.allCases) { category in
+                if hasTasksWithoutRoom {
                     FilterChip(
-                        label: category.rawValue,
-                        icon: category.icon,
-                        isSelected: selectedCategory == category
+                        label: "No Room",
+                        icon: "square.dashed",
+                        isSelected: selectedRoom == ""
                     ) {
-                        selectedCategory = selectedCategory == category ? nil : category
+                        selectedRoom = selectedRoom == "" ? nil : ""
+                    }
+                }
+                ForEach(roomFilterOptions, id: \.self) { room in
+                    FilterChip(
+                        label: room,
+                        icon: TaskCategory(rawValue: room)?.icon ?? "mappin.and.ellipse",
+                        isSelected: selectedRoom == room
+                    ) {
+                        selectedRoom = selectedRoom == room ? nil : room
                     }
                 }
             }
@@ -373,6 +384,11 @@ struct TaskRow: View {
                             Text(task.isActive ? task.frequency.rawValue : "Paused")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
+                            if let room = task.room {
+                                Text(room)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
                             Text("\(task.estimatedMinutes)m")
                                 .font(.caption)
                                 .foregroundStyle(.tertiary)

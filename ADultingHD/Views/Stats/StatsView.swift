@@ -7,12 +7,12 @@ import Charts
 /// into one struct means each dependency is computed once.
 private struct StatsAggregates {
     let completionsByDay: [Date: [TaskCompletion]]
-    let taskCategoryMap: [UUID: TaskCategory]
+    let taskRoomMap: [UUID: String]
 
     init(completions: [TaskCompletion], tasks: [HouseholdTask]) {
         let calendar = Calendar.current
         self.completionsByDay = Dictionary(grouping: completions) { calendar.startOfDay(for: $0.completedAt) }
-        self.taskCategoryMap = Dictionary(uniqueKeysWithValues: tasks.map { ($0.id, $0.category) })
+        self.taskRoomMap = Dictionary(uniqueKeysWithValues: tasks.map { ($0.id, $0.roomDisplayName) })
     }
 }
 
@@ -34,7 +34,7 @@ struct StatsView: View {
                     if storeManager.isPro {
                         xpPerDayChart(aggregates: aggregates)
                         completionTrendChart(aggregates: aggregates)
-                        categoryBreakdownChart(aggregates: aggregates)
+                        roomBreakdownChart(aggregates: aggregates)
                     } else {
                         ProPromptCard(title: "Pro Analytics", icon: "chart.bar.fill")
                     }
@@ -59,7 +59,7 @@ struct StatsView: View {
                     completionTrendChart(aggregates: aggregates).frame(maxWidth: .infinity)
                 }
                 HStack(alignment: .top, spacing: Theme.sectionSpacing) {
-                    categoryBreakdownChart(aggregates: aggregates).frame(maxWidth: .infinity)
+                    roomBreakdownChart(aggregates: aggregates).frame(maxWidth: .infinity)
                     streakCalendar(aggregates: aggregates).frame(maxWidth: .infinity)
                 }
             } else {
@@ -253,48 +253,47 @@ struct StatsView: View {
         .card()
     }
 
-    // MARK: - Category Breakdown
+    // MARK: - Room Breakdown
 
-    private func categoryData(aggregates: StatsAggregates) -> [(category: TaskCategory, count: Int)] {
-        let categoryMap = aggregates.taskCategoryMap
-        var counts: [TaskCategory: Int] = [:]
+    private func roomData(aggregates: StatsAggregates) -> [(room: String, count: Int)] {
+        let roomMap = aggregates.taskRoomMap
+        var counts: [String: Int] = [:]
         for completion in dataStore.completions {
-            if let category = categoryMap[completion.taskId] {
-                counts[category, default: 0] += 1
+            if let room = roomMap[completion.taskId] {
+                counts[room, default: 0] += 1
             }
         }
-        return TaskCategory.allCases.compactMap { category in
-            guard let count = counts[category], count > 0 else { return nil }
-            return (category, count)
-        }
+        return counts.map { (room: $0.key, count: $0.value) }
+            .sorted { $0.room.localizedCaseInsensitiveCompare($1.room) == .orderedAscending }
     }
 
-    private func categoryBreakdownChart(aggregates: StatsAggregates) -> some View {
-        let categoryData = categoryData(aggregates: aggregates)
+    private func roomBreakdownChart(aggregates: StatsAggregates) -> some View {
+        let roomData = roomData(aggregates: aggregates)
         return VStack(alignment: .leading, spacing: 8) {
-            Label("Completions by Category", systemImage: "chart.pie")
+            Label("Completions by Room", systemImage: "chart.pie")
                 .font(.headline)
 
-            if !categoryData.isEmpty {
-                Chart(categoryData, id: \.category) { entry in
+            if !roomData.isEmpty {
+                Chart(roomData, id: \.room) { entry in
                     SectorMark(
                         angle: .value("Count", entry.count),
                         innerRadius: .ratio(0.5),
                         angularInset: 1.5
                     )
-                    .foregroundStyle(Theme.categoryColor(entry.category))
+                    .foregroundStyle(Theme.categoryColor(TaskCategory(rawValue: entry.room) ?? .general))
                     .cornerRadius(4)
                 }
                 .frame(height: 200)
 
                 // Legend
                 LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 6) {
-                    ForEach(categoryData, id: \.category) { entry in
+                    ForEach(roomData, id: \.room) { entry in
+                        let category = TaskCategory(rawValue: entry.room) ?? .general
                         HStack(spacing: 4) {
                             Circle()
-                                .fill(Theme.categoryColor(entry.category))
+                                .fill(Theme.categoryColor(category))
                                 .frame(width: 8, height: 8)
-                            Text(entry.category.rawValue)
+                            Text(entry.room)
                                 .font(.caption)
                             Spacer()
                             Text("\(entry.count)")
@@ -304,7 +303,7 @@ struct StatsView: View {
                     }
                 }
             } else {
-                emptyState("Complete tasks to see category breakdown")
+                emptyState("Complete tasks to see room breakdown")
             }
         }
         .card()

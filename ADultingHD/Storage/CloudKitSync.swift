@@ -1004,8 +1004,10 @@ extension HouseholdTask {
         }
         r["name"]             = name as CKRecordValue
         r["taskDescription"]  = description as CKRecordValue
+        r["room"]             = HouseholdTask.normalizedRoom(room) as CKRecordValue?
         r["category"]         = category.rawValue as CKRecordValue
-        r["frequency"]        = frequency.rawValue as CKRecordValue
+        r["scheduleFrequency"] = frequency.rawValue as CKRecordValue
+        r["frequency"]        = (frequency == .unscheduled ? TaskFrequency.weekly.rawValue : frequency.rawValue) as CKRecordValue
         r["estimatedMinutes"] = estimatedMinutes as CKRecordValue
         r["difficulty"]       = difficulty.rawValue as CKRecordValue
         r["supplies"]         = supplies as CKRecordValue
@@ -1029,19 +1031,22 @@ extension HouseholdTask {
         guard
             let uuidString = record.recordID.recordName.nilIfEmpty,
             let id = UUID(uuidString: uuidString),
-            let name = record["name"] as? String,
-            let categoryRaw = record["category"] as? String,
-            let category = TaskCategory(rawValue: categoryRaw),
-            let frequencyRaw = record["frequency"] as? String,
-            let frequency = TaskFrequency(rawValue: frequencyRaw),
-            let difficultyRaw = record["difficulty"] as? Int,
-            let difficulty = Difficulty(rawValue: difficultyRaw)
+            let name = record["name"] as? String
         else { return nil }
+
+        let preferredFrequency = record["scheduleFrequency"] as? String
+        let legacyFrequency = record["frequency"] as? String
+        let frequency = preferredFrequency.flatMap(TaskFrequency.init(rawValue:))
+            ?? legacyFrequency.flatMap(TaskFrequency.init(rawValue:))
+            ?? .unscheduled
+        let difficulty = (record["difficulty"] as? Int).flatMap(Difficulty.init(rawValue:)) ?? .medium
+        let preferredRoom = HouseholdTask.normalizedRoom(record["room"] as? String)
+        let legacyRoom = HouseholdTask.normalizedRoom(record["category"] as? String)
 
         self.id = id
         self.name = name
         self.description = record["taskDescription"] as? String ?? ""
-        self.category = category
+        self.room = preferredRoom ?? legacyRoom
         self.frequency = frequency
         self.estimatedMinutes = record["estimatedMinutes"] as? Int ?? 30
         self.difficulty = difficulty

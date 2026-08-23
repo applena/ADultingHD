@@ -154,9 +154,52 @@ final class ModelTests: XCTestCase {
 
         let task = try JSONDecoder().decode(HouseholdTask.self, from: data)
 
+        XCTAssertNil(task.room)
+        XCTAssertEqual(task.frequency, .weekly)
         XCTAssertFalse(task.isPersonal)
         XCTAssertTrue(task.scheduledWeekdays.isEmpty)
         XCTAssertTrue(task.checklist.isEmpty)
+    }
+
+    func testUnknownLegacyCategoryMigratesToCustomRoom() throws {
+        let data = Data("""
+        {
+          "id": "00000000-0000-0000-0000-000000000002",
+          "name": "Clear the mudroom",
+          "description": "",
+          "category": "Mudroom",
+          "frequency": "Monthly",
+          "estimatedMinutes": 10,
+          "difficulty": 1,
+          "supplies": [],
+          "isActive": true
+        }
+        """.utf8)
+
+        let task = try JSONDecoder().decode(HouseholdTask.self, from: data)
+
+        XCTAssertEqual(task.room, "Mudroom")
+        XCTAssertEqual(task.category, .general, "custom rooms use the legacy General fallback")
+    }
+
+    func testFreeformRoomAndUnscheduledStateRoundTripWithLegacyFallbacks() throws {
+        var task = HouseholdTask(
+            id: UUID(), name: "Sort the costume closet", description: "",
+            category: .general, frequency: .unscheduled, estimatedMinutes: 15,
+            difficulty: .medium, supplies: [], isActive: true
+        )
+        task.room = "Costume Closet"
+
+        let data = try JSONEncoder().encode(task)
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let decoded = try JSONDecoder().decode(HouseholdTask.self, from: data)
+
+        XCTAssertEqual(json["room"] as? String, "Costume Closet")
+        XCTAssertEqual(json["category"] as? String, "General")
+        XCTAssertEqual(json["scheduleFrequency"] as? String, "No Schedule")
+        XCTAssertEqual(json["frequency"] as? String, "Weekly")
+        XCTAssertEqual(decoded.room, "Costume Closet")
+        XCTAssertEqual(decoded.frequency, .unscheduled)
     }
 
     // MARK: - UserProfile
@@ -205,6 +248,7 @@ final class ModelTests: XCTestCase {
     // MARK: - TaskFrequency
 
     func testFrequencyDays() {
+        XCTAssertEqual(TaskFrequency.unscheduled.days, 0)
         XCTAssertEqual(TaskFrequency.daily.days, 1)
         XCTAssertEqual(TaskFrequency.weekly.days, 7)
         XCTAssertEqual(TaskFrequency.biweekly.days, 14)
@@ -279,16 +323,32 @@ final class ModelTests: XCTestCase {
         XCTAssertNil(onboardingCatalogTask(named: "polish the moon"))
     }
 
-    func testOnboardingCustomTaskUsesExplicitNameAndScheduleDefaults() throws {
-        let task = try XCTUnwrap(
-            makeOnboardingCustomTask(named: "  Polish the moon  ", category: .outdoor, frequency: .weekly)
-        )
+    func testOnboardingCustomTaskRequiresOnlyAName() throws {
+        let task = try XCTUnwrap(makeOnboardingCustomTask(named: "  Polish the moon  "))
 
         XCTAssertEqual(task.name, "Polish the moon")
-        XCTAssertEqual(task.category, .outdoor)
-        XCTAssertEqual(task.frequency, .weekly)
-        XCTAssertEqual(task.scheduledWeekdays, TaskFrequency.weekly.defaultWeekdays)
+        XCTAssertNil(task.room)
+        XCTAssertEqual(task.frequency, .unscheduled)
+        XCTAssertNil(task.nextOccurrence())
         XCTAssertNil(makeOnboardingCustomTask(named: "   "))
+    }
+
+    func testCatalogTemplateCopiesEditableDefaults() {
+        let template = taskCatalog[0]
+        var task = template.toHouseholdTask()
+
+        XCTAssertEqual(task.room, template.suggestedRoom)
+        XCTAssertEqual(task.frequency, template.suggestedFrequency)
+
+        task.room = nil
+        task.frequency = .unscheduled
+        task.supplies = []
+        task.difficulty = .epic
+
+        XCTAssertNil(task.room)
+        XCTAssertEqual(task.frequency, .unscheduled)
+        XCTAssertFalse(template.supplies.isEmpty)
+        XCTAssertNotEqual(template.difficulty, task.difficulty)
     }
 
     func testStarterAvatarsAreFreeAndHaveImages() {

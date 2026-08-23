@@ -35,7 +35,7 @@ private struct TaskFormView: View {
 
     @State private var name: String
     @State private var description: String
-    @State private var category: TaskCategory
+    @State private var room: String
     @State private var frequency: TaskFrequency
     @State private var estimatedMinutes: Int
     @State private var difficulty: Difficulty
@@ -58,8 +58,8 @@ private struct TaskFormView: View {
         self.onSave = onSave
         _name = State(initialValue: existingTask?.name ?? "")
         _description = State(initialValue: existingTask?.description ?? "")
-        _category = State(initialValue: existingTask?.category ?? .general)
-        let initialFrequency = existingTask?.frequency ?? .weekly
+        _room = State(initialValue: existingTask?.room ?? "")
+        let initialFrequency = existingTask?.frequency ?? .unscheduled
         _frequency = State(initialValue: initialFrequency)
         _estimatedMinutes = State(initialValue: existingTask?.estimatedMinutes ?? 15)
         _difficulty = State(initialValue: existingTask?.difficulty ?? .medium)
@@ -83,13 +83,10 @@ private struct TaskFormView: View {
                 }
 
                 Section("Details") {
-                    Picker("Category", selection: $category) {
-                        ForEach(TaskCategory.allCases) { cat in
-                            Label(cat.rawValue, systemImage: cat.icon).tag(cat)
-                        }
-                    }
+                    TextField("Room or context (optional)", text: $room)
+                        .textContentType(.location)
 
-                    Picker("Frequency", selection: $frequency) {
+                    Picker("Schedule", selection: $frequency) {
                         ForEach(TaskFrequency.allCases) { freq in
                             Text(freq.rawValue).tag(freq)
                         }
@@ -240,12 +237,12 @@ private struct TaskFormView: View {
 
         var task = existingTask ?? HouseholdTask(
             id: UUID(), name: "", description: "", category: .general,
-            frequency: .weekly, estimatedMinutes: 15, difficulty: .medium,
+            frequency: .unscheduled, estimatedMinutes: 15, difficulty: .medium,
             supplies: [], isActive: true
         )
         task.name = name.trimmingCharacters(in: .whitespaces)
         task.description = description.trimmingCharacters(in: .whitespaces)
-        task.category = category
+        task.room = HouseholdTask.normalizedRoom(room)
         task.frequency = frequency
         task.estimatedMinutes = estimatedMinutes
         task.difficulty = difficulty

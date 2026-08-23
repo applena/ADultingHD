@@ -24,7 +24,7 @@ The goal is a native iOS/macOS app that makes household management genuinely eng
 
 3. **Cross-platform with native feel** — iOS and macOS from a single codebase, but each platform gets its own navigation paradigm (TabView vs. NavigationSplitView) and layout tuning. No lowest-common-denominator UI.
 
-4. **Opinionated defaults, zero setup friction** — Ship with 50+ pre-built tasks, sensible frequencies, and difficulty ratings. Users should feel the game loop within 30 seconds of launching, not after 20 minutes of configuration.
+4. **Start with the task, configure when useful** — A task name is enough to begin. Ship 50+ editable templates with sensible room, schedule, supply, and difficulty suggestions, but never make a room or recurring schedule a creation gate. Users should feel the game loop within 30 seconds of launching, not after 20 minutes of configuration.
 
 5. **Pure architecture** — Model and engine functions stay pure (no side effects, no I/O). Storage is isolated behind actors. This keeps the codebase testable and the mental model simple.
 
@@ -37,18 +37,18 @@ The goal is a native iOS/macOS app that makes household management genuinely eng
 The app delivers a full gamification cycle: discover tasks, complete them with quality ratings, earn XP, level up, maintain streaks, unlock achievements, and celebrate progress. Households can add multiple members who compete on a shared leaderboard. Widgets surface key stats without opening the app. Statistics charts visualize progress over time. Supply tracking connects tasks to real-world inventory. The experience feels rewarding on day one and sustaining on day thirty.
 
 - **Core loop** — Completing any task feels immediately rewarding through XP gains, streak maintenance, and progress toward the next level
-- **Depth** — Achievements, seasonal suggestions, quality ratings, and category mastery give long-term players new goals to chase
-- **Task clarity** — Every task carries a description and a supply list; tasks can also carry ordered step-by-step instructions (`ChecklistItem.instructions`) for when "what" isn't enough and a chore needs a "how"
+- **Depth** — Achievements, seasonal suggestions, quality ratings, and optional room insights give long-term players new goals to chase
+- **Task clarity** — Every task starts with a user-defined name. Optional descriptions, supplies, rooms, schedules, and ordered step-by-step instructions (`ChecklistItem.instructions`) add context when "what" is not enough and a chore needs a "how"
 - **Household play** — Shipped via CloudKit `CKShare`: a household owner invites others (even across Apple IDs) through the native share sheet; accepted invites sync the same task list, completions, and leaderboard. Tasks can carry a `defaultAssigneeId` so a household can divide chores by member, and the activity feed/leaderboard shows who did what and when
 - **Passive engagement** — Widgets and notifications keep the game present without requiring the app to be open
 - **Supply awareness** — Task-linked inventory tracking bridges the gap between "what needs doing" and "what do I need to buy"
 
 ### v2.0 — Smarter Scheduling *(shipped)*
 
-The app moves beyond tracking what's due to actively helping users plan their time. `ScheduleView` estimates daily effort, batches tasks by room/category, and `PowerHourView` guides users through a focused, timed, sequential completion flow. The experience is proactive ("here's your optimal block") rather than purely reactive.
+The app moves beyond tracking what's due to actively helping users plan their time. `ScheduleView` estimates daily effort, can optionally batch configured tasks by room, and `PowerHourView` guides users through a focused, timed, sequential completion flow. Unscheduled tasks remain trackable without being treated as recurring due work. The experience is proactive ("here's your optimal block") rather than purely reactive.
 
-- **Time intelligence** — Shipped. The schedule header and category batch rows show per-task and per-day minute totals so users can see effort before committing.
-- **Spatial batching** — Shipped. Today's tasks group into collapsible category sections (`todayBatchesCard`) so a cleaning run can move room-to-room instead of task-to-task.
+- **Time intelligence** — Shipped. The schedule header and optional room batch rows show per-task and per-day minute totals so users can see effort before committing.
+- **Spatial batching** — Shipped. Today's scheduled tasks default to a task-first list and can switch into collapsible room sections when spatial batching is useful.
 - **Guided sessions** — Shipped. "Start Power Hour" launches a coached, timed, one-task-at-a-time flow with pacing and completion tracking.
 - **Flexible rescheduling** — Shipped (issue #25). Dragging a task to a different day in `ScheduleView`'s week view sets a one-off `scheduledOverrideDate` that moves that occurrence without touching the recurring schedule; completing the task resumes the normal cadence.
 
@@ -62,7 +62,7 @@ ADultingHD becomes the default way a household thinks about maintenance — not 
 
 ## Non-Goals
 
-- **Not a general-purpose to-do app** — ADultingHD is specifically for recurring household tasks. One-off reminders, work projects, and grocery lists belong elsewhere.
+- **Not a general-purpose to-do app** — ADultingHD is specifically for household maintenance tasks, whether recurring, one-time, or not scheduled yet. Work projects and generic grocery lists belong elsewhere.
 
 - **No custom backend or ADultingHD account** — Cross-device sync and household invites are shipped, but they ride entirely on the user's existing iCloud account (iCloud Documents mirroring + CloudKit `CKShare`). There is no server we operate and no separate account to create just to use the app.
 

@@ -92,7 +92,7 @@ struct TaskDetailView: View {
                         .font(.title2.bold())
                         .fixedSize(horizontal: false, vertical: true)
                     HStack(spacing: 8) {
-                        Text(task.category.rawValue)
+                        Text(task.roomDisplayName)
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                         if task.isPersonal {
@@ -127,11 +127,13 @@ struct TaskDetailView: View {
                 }
             }
 
-            Text(task.description)
-                .font(.body)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            if !task.description.isEmpty {
+                Text(task.description)
+                    .font(.body)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
         }
         .card()
     }
@@ -154,7 +156,7 @@ struct TaskDetailView: View {
         LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
             Button { showFrequencyPicker = true } label: {
                 DetailItem(
-                    label: "Frequency",
+                    label: "Schedule",
                     value: frequencyDisplay(for: task),
                     icon: task.frequency.icon
                 )
@@ -162,6 +164,7 @@ struct TaskDetailView: View {
             .buttonStyle(.plain)
 
             DetailItem(label: "Difficulty", value: task.difficulty.label, icon: task.difficulty.icon)
+            DetailItem(label: "Room", value: task.roomDisplayName, icon: task.category.icon)
             DetailItem(label: "Est. Time", value: "\(task.estimatedMinutes) min", icon: "clock")
             DetailItem(
                 label: "Scope",
@@ -317,8 +320,8 @@ struct FrequencyPickerSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Frequency") {
-                    Picker("Frequency", selection: $selected) {
+                Section("Schedule") {
+                    Picker("Schedule", selection: $selected) {
                         ForEach(TaskFrequency.allCases) { freq in
                             Label(freq.rawValue, systemImage: freq.icon).tag(freq)
                         }
@@ -335,7 +338,7 @@ struct FrequencyPickerSheet: View {
                     month: $month
                 )
             }
-            .navigationTitle("Frequency")
+            .navigationTitle("Schedule")
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif

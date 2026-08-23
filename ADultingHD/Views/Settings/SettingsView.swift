@@ -508,24 +508,17 @@ struct ManageTasksView: View {
 
     var body: some View {
         List {
-            ForEach(TaskCategory.allCases) { category in
-                let tasks = dataStore.tasksByCategory[category] ?? []
-                if !tasks.isEmpty {
-                    Section {
-                        ForEach(tasks) { task in
-                            Toggle(isOn: Binding(
-                                get: { task.isActive },
-                                set: { _ in Task { await dataStore.toggleTask(task) } }
-                            )) {
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(task.name).font(.subheadline)
-                                    Text("\(task.frequency.rawValue) - \(task.estimatedMinutes)m")
-                                        .font(.caption).foregroundStyle(.secondary)
-                                }
-                            }
+            Section {
+                ForEach(dataStore.tasks.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }) { task in
+                    Toggle(isOn: Binding(
+                        get: { task.isActive },
+                        set: { _ in Task { await dataStore.toggleTask(task) } }
+                    )) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(task.name).font(.subheadline)
+                            Text("\(task.frequency.rawValue) · \(task.roomDisplayName) · \(task.estimatedMinutes)m")
+                                .font(.caption).foregroundStyle(.secondary)
                         }
-                    } header: {
-                        Label(category.rawValue, systemImage: category.icon)
                     }
                 }
             }

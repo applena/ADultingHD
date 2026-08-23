@@ -171,6 +171,12 @@ final class DataStore {
         Dictionary(grouping: tasks, by: \.category)
     }
 
+    /// Optional spatial organization for screens that explicitly opt into a
+    /// room view. Task-first screens should use `tasks` directly.
+    var tasksByRoom: [String: [HouseholdTask]] {
+        Dictionary(grouping: tasks, by: \.roomDisplayName)
+    }
+
     var allSupplies: [String: [HouseholdTask]] {
         var result: [String: [HouseholdTask]] = [:]
         for task in activeTasks {

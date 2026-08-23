@@ -107,6 +107,29 @@ final class RecurrenceTests: XCTestCase {
         XCTAssertFalse(task.isOverdue(on: referenceDate, calendar: utc))
     }
 
+    func testUnscheduledTaskHasNoOccurrenceButRemainsActive() {
+        let referenceDate = utcDate(2024, 3, 6)
+        let task = makeTask(frequency: .unscheduled, createdAt: utcDate(2024, 1, 1))
+
+        XCTAssertTrue(task.isActive)
+        XCTAssertNil(task.nextOccurrence(calendar: utc))
+        XCTAssertFalse(task.isDue(on: referenceDate, calendar: utc))
+        XCTAssertFalse(task.isOverdue(on: referenceDate, calendar: utc))
+    }
+
+    func testUnscheduledTaskCanCarryAOneTimeOverrideDate() {
+        let dueDate = utcDate(2024, 3, 10)
+        let task = makeTask(
+            frequency: .unscheduled,
+            scheduledOverrideDate: dueDate,
+            createdAt: utcDate(2024, 3, 1)
+        )
+
+        XCTAssertEqual(task.nextOccurrence(calendar: utc), utc.startOfDay(for: dueDate))
+        XCTAssertFalse(task.isDue(on: utcDate(2024, 3, 9), calendar: utc))
+        XCTAssertTrue(task.isDue(on: dueDate, calendar: utc))
+    }
+
     // MARK: - On-schedule vs. off-schedule completion
 
     func testOnScheduleCompletionRollsToNextMatchingWeek() {

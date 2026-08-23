@@ -15,6 +15,16 @@ enum TaskCategory: String, Codable, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
+    /// Maps the fixed legacy category vocabulary onto the new freeform room
+    /// field. `General` represented "no meaningful room" in older records,
+    /// so it migrates to `nil` instead of becoming a user-visible room.
+    var roomValue: String? { self == .general ? nil : rawValue }
+
+    static func legacyFallback(for room: String?) -> TaskCategory {
+        guard let room = HouseholdTask.normalizedRoom(room) else { return .general }
+        return TaskCategory(rawValue: room) ?? .general
+    }
+
     var icon: String {
         switch self {
         case .kitchen: "fork.knife"
@@ -47,6 +57,7 @@ enum TaskCategory: String, Codable, CaseIterable, Identifiable {
 // MARK: - Task Frequency
 
 enum TaskFrequency: String, Codable, CaseIterable, Identifiable {
+    case unscheduled = "No Schedule"
     case daily = "Daily"
     case twiceWeekly = "Twice Weekly"
     case weekly = "Weekly"
@@ -60,6 +71,7 @@ enum TaskFrequency: String, Codable, CaseIterable, Identifiable {
 
     var days: Int {
         switch self {
+        case .unscheduled: 0
         case .daily: 1
         case .twiceWeekly: 3
         case .weekly: 7
@@ -73,6 +85,7 @@ enum TaskFrequency: String, Codable, CaseIterable, Identifiable {
 
     var icon: String {
         switch self {
+        case .unscheduled: "calendar.badge.minus"
         case .daily: "clock"
         case .twiceWeekly: "clock.badge.checkmark"
         case .weekly: "calendar.badge.clock"
@@ -121,6 +134,7 @@ enum TaskFrequency: String, Codable, CaseIterable, Identifiable {
     /// day that was just completed.
     var minGap: Int {
         switch self {
+        case .unscheduled: return 0
         case .daily: return 1
         case .twiceWeekly: return 2
         case .weekly: return 6
@@ -232,7 +246,10 @@ struct HouseholdTask: Codable, Identifiable, Hashable {
     let id: UUID
     var name: String
     var description: String
-    var category: TaskCategory
+    /// Optional, user-editable room or context. This is deliberately a
+    /// string rather than an enum so adding "Mudroom" or "Mom's office"
+    /// never requires an app update or loses data during decoding.
+    var room: String?
     var frequency: TaskFrequency
     var estimatedMinutes: Int
     var difficulty: Difficulty
@@ -280,6 +297,54 @@ struct HouseholdTask: Codable, Identifiable, Hashable {
     /// moved-to day passes, same as `Recurrence`'s existing semantics.
     var scheduledOverrideDate: Date? = nil
 
+    /// Compatibility projection for older UI/data code and the CloudKit
+    /// fallback field. New code should display/group by `room`; a custom or
+    /// missing room intentionally projects to legacy `General`.
+    var category: TaskCategory {
+        get { TaskCategory.legacyFallback(for: room) }
+        set { room = newValue.roomValue }
+    }
+
+    init(
+        id: UUID,
+        name: String,
+        description: String,
+        category: TaskCategory,
+        frequency: TaskFrequency,
+        estimatedMinutes: Int,
+        difficulty: Difficulty,
+        supplies: [String],
+        isActive: Bool,
+        lastCompleted: Date? = nil,
+        createdAt: Date = Date(),
+        defaultAssigneeId: UUID? = nil,
+        isPersonal: Bool = false,
+        scheduledWeekdays: [Int] = [],
+        scheduledDayOfMonth: Int? = nil,
+        scheduledMonth: Int? = nil,
+        checklist: [ChecklistItem] = [],
+        scheduledOverrideDate: Date? = nil
+    ) {
+        self.id = id
+        self.name = name
+        self.description = description
+        self.room = category.roomValue
+        self.frequency = frequency
+        self.estimatedMinutes = estimatedMinutes
+        self.difficulty = difficulty
+        self.supplies = supplies
+        self.isActive = isActive
+        self.lastCompleted = lastCompleted
+        self.createdAt = createdAt
+        self.defaultAssigneeId = defaultAssigneeId
+        self.isPersonal = isPersonal
+        self.scheduledWeekdays = scheduledWeekdays
+        self.scheduledDayOfMonth = scheduledDayOfMonth
+        self.scheduledMonth = scheduledMonth
+        self.checklist = checklist
+        self.scheduledOverrideDate = scheduledOverrideDate
+    }
+
     var xpReward: Int {
         Self.computeXP(difficulty: difficulty, frequency: frequency, estimatedMinutes: estimatedMinutes)
     }
@@ -296,6 +361,16 @@ struct HouseholdTask: Codable, Identifiable, Hashable {
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }
     }
+
+    static func normalizedRoom(_ value: String?) -> String? {
+        guard let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !trimmed.isEmpty,
+              trimmed.caseInsensitiveCompare(TaskCategory.general.rawValue) != .orderedSame
+        else { return nil }
+        return trimmed
+    }
+
+    var roomDisplayName: String { Self.normalizedRoom(room) ?? "No Room" }
 
     var isDue: Bool { isDue(on: Date()) }
 
@@ -392,6 +467,8 @@ struct HouseholdTask: Codable, Identifiable, Hashable {
     /// and detail views. Returns `nil` when no specific day is set.
     var scheduleSummary: String? {
         switch frequency {
+        case .unscheduled:
+            return nil
         case .daily:
             return nil
         case .weekly, .biweekly, .twiceWeekly:
@@ -445,7 +522,9 @@ extension HouseholdTask {
         case name
         case description
         case category
+        case room
         case frequency
+        case scheduleFrequency
         case estimatedMinutes
         case difficulty
         case supplies
@@ -471,8 +550,19 @@ extension HouseholdTask {
         id = try container.decode(UUID.self, forKey: .id)
         name = try container.decode(String.self, forKey: .name)
         description = try container.decode(String.self, forKey: .description)
-        category = try container.decode(TaskCategory.self, forKey: .category)
-        frequency = try container.decode(TaskFrequency.self, forKey: .frequency)
+        if container.contains(.room) {
+            room = Self.normalizedRoom(try container.decodeIfPresent(String.self, forKey: .room))
+        } else {
+            // Legacy JSON had only the closed TaskCategory field. Preserve an
+            // unknown string as a custom room instead of rejecting the task.
+            let legacyRoom = try container.decodeIfPresent(String.self, forKey: .category)
+            room = Self.normalizedRoom(legacyRoom)
+        }
+        let preferredFrequency = try container.decodeIfPresent(String.self, forKey: .scheduleFrequency)
+        let legacyFrequency = try container.decodeIfPresent(String.self, forKey: .frequency)
+        frequency = preferredFrequency.flatMap(TaskFrequency.init(rawValue:))
+            ?? legacyFrequency.flatMap(TaskFrequency.init(rawValue:))
+            ?? .unscheduled
         estimatedMinutes = try container.decode(Int.self, forKey: .estimatedMinutes)
         difficulty = try container.decode(Difficulty.self, forKey: .difficulty)
         supplies = try container.decode([String].self, forKey: .supplies)
@@ -486,6 +576,40 @@ extension HouseholdTask {
         scheduledMonth = try container.decodeIfPresent(Int.self, forKey: .scheduledMonth)
         checklist = try container.decodeIfPresent([ChecklistItem].self, forKey: .checklist) ?? []
         scheduledOverrideDate = try container.decodeIfPresent(Date.self, forKey: .scheduledOverrideDate)
+    }
+
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(name, forKey: .name)
+        try container.encode(description, forKey: .description)
+        if let room = Self.normalizedRoom(room) {
+            try container.encode(room, forKey: .room)
+        } else {
+            try container.encodeNil(forKey: .room)
+        }
+        // Dual-write new freeform/schedule fields with legacy-safe fallbacks
+        // so older clients can continue decoding records during rollout.
+        try container.encode(category.rawValue, forKey: .category)
+        try container.encode(frequency.rawValue, forKey: .scheduleFrequency)
+        try container.encode(
+            frequency == .unscheduled ? TaskFrequency.weekly.rawValue : frequency.rawValue,
+            forKey: .frequency
+        )
+        try container.encode(estimatedMinutes, forKey: .estimatedMinutes)
+        try container.encode(difficulty, forKey: .difficulty)
+        try container.encode(supplies, forKey: .supplies)
+        try container.encode(isActive, forKey: .isActive)
+        try container.encodeIfPresent(lastCompleted, forKey: .lastCompleted)
+        try container.encode(createdAt, forKey: .createdAt)
+        try container.encodeIfPresent(defaultAssigneeId, forKey: .defaultAssigneeId)
+        try container.encode(isPersonal, forKey: .isPersonal)
+        try container.encode(scheduledWeekdays, forKey: .scheduledWeekdays)
+        try container.encodeIfPresent(scheduledDayOfMonth, forKey: .scheduledDayOfMonth)
+        try container.encodeIfPresent(scheduledMonth, forKey: .scheduledMonth)
+        try container.encode(checklist, forKey: .checklist)
+        try container.encodeIfPresent(scheduledOverrideDate, forKey: .scheduledOverrideDate)
     }
 }
 

@@ -239,15 +239,16 @@ struct ProfileView: View {
         .buttonStyle(.plain)
     }
 
-    // MARK: - Category Breakdown
+    // MARK: - Room Breakdown
 
     private var categoryBreakdown: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Label("Tasks by Category", systemImage: "chart.bar")
+            Label("Tasks by Room", systemImage: "chart.bar")
                 .font(.headline)
 
-            ForEach(TaskCategory.allCases) { category in
-                let tasks = dataStore.tasksByCategory[category] ?? []
+            ForEach(dataStore.tasksByRoom.keys.sorted(), id: \.self) { room in
+                let tasks = dataStore.tasksByRoom[room] ?? []
+                let category = TaskCategory(rawValue: room) ?? .general
                 let active = tasks.filter(\.isActive).count
                 let total = tasks.count
 
@@ -255,7 +256,7 @@ struct ProfileView: View {
                     Image(systemName: category.icon)
                         .foregroundStyle(Theme.categoryColor(category))
                         .frame(width: 20)
-                    Text(category.rawValue)
+                    Text(room)
                         .font(.subheadline)
                     Spacer()
                     Text("\(active)/\(total) active")
@@ -265,7 +266,7 @@ struct ProfileView: View {
                         .tint(Theme.categoryColor(category))
                         .frame(width: 60)
                 }
-                .accessibilityIdentifier("profile-category-\(category.rawValue)")
+                .accessibilityIdentifier("profile-room-\(room)")
             }
         }
         .card()

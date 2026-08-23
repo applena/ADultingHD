@@ -202,9 +202,8 @@ struct DashboardView: View {
 
     @ViewBuilder
     private var roomSummaryRow: some View {
-        let rooms = TaskCategory.allCases.filter { category in
-            dataStore.activeTasks.contains { $0.category == category }
-        }
+        let rooms = Array(Set(dataStore.activeTasks.compactMap { HouseholdTask.normalizedRoom($0.room) }))
+            .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
 
         if !rooms.isEmpty {
             VStack(alignment: .leading, spacing: 8) {
@@ -219,15 +218,18 @@ struct DashboardView: View {
 
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 8) {
-                        ForEach(rooms) { category in
-                            let dueCount = dataStore.dueTasks.filter { $0.category == category }.count
+                        ForEach(rooms, id: \.self) { room in
+                            let category = TaskCategory(rawValue: room) ?? .general
+                            let dueCount = dataStore.dueTasks.filter {
+                                $0.room?.caseInsensitiveCompare(room) == .orderedSame
+                            }.count
                             NavigationLink {
-                                TaskListView(initialCategory: category)
+                                TaskListView(initialRoom: room)
                             } label: {
                                 HStack(spacing: 7) {
                                     Image(systemName: category.icon)
                                         .font(.caption.weight(.semibold))
-                                    Text(category.rawValue)
+                                    Text(room)
                                         .font(.caption.weight(.semibold))
                                     if dueCount > 0 {
                                         Text("\(dueCount)")

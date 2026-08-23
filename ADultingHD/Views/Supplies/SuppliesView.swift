@@ -3,7 +3,7 @@ import SwiftUI
 enum SupplySortMode: String, CaseIterable {
     case byStatus = "By Status"
     case byName = "A-Z"
-    case byCategory = "By Room"
+    case byRoom = "By Room"
 }
 
 struct SuppliesView: View {
@@ -41,13 +41,13 @@ struct SuppliesView: View {
         return (attention, inStock)
     }
 
-    private var suppliesByCategory: [(TaskCategory, [SupplyEntry])] {
-        var grouped: [TaskCategory: [SupplyEntry]] = [:]
+    private var suppliesByRoom: [(String, [SupplyEntry])] {
+        var grouped: [String: [SupplyEntry]] = [:]
         for entry in allEntries {
-            let cat = entry.tasks.first?.category ?? .general
-            grouped[cat, default: []].append(entry)
+            let room = entry.tasks.first?.roomDisplayName ?? "No Room"
+            grouped[room, default: []].append(entry)
         }
-        return grouped.sorted { $0.key.rawValue < $1.key.rawValue }
+        return grouped.sorted { $0.key.localizedCaseInsensitiveCompare($1.key) == .orderedAscending }
     }
 
     var body: some View {
@@ -130,8 +130,8 @@ struct SuppliesView: View {
                 statusGroupedContent
             case .byName:
                 alphabeticalContent
-            case .byCategory:
-                categoryGroupedContent
+            case .byRoom:
+                roomGroupedContent
             }
         }
         .rootTabScrollClearance()
@@ -205,18 +205,19 @@ struct SuppliesView: View {
         }
     }
 
-    // MARK: - By Category
+    // MARK: - By Room
 
     @ViewBuilder
-    private var categoryGroupedContent: some View {
-        ForEach(suppliesByCategory, id: \.0) { category, supplies in
+    private var roomGroupedContent: some View {
+        ForEach(suppliesByRoom, id: \.0) { room, supplies in
+            let category = TaskCategory(rawValue: room) ?? .general
             Section {
                 ForEach(supplies, id: \.name) { entry in
                     SupplyRow(supply: entry.name, tasks: entry.tasks, stock: entry.stock, showStock: entry.stock != .inStock)
                 }
             } header: {
                 HStack {
-                    Label(category.rawValue, systemImage: category.icon)
+                    Label(room, systemImage: category.icon)
                         .foregroundStyle(Theme.categoryColor(category))
                     Spacer()
                     Text("\(supplies.count)")

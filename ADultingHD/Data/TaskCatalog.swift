@@ -5,24 +5,48 @@ struct CatalogTask: Identifiable {
     let id = UUID()
     let name: String
     let description: String
-    let category: TaskCategory
+    let suggestedRoom: String?
     let suggestedFrequency: TaskFrequency
     let estimatedMinutes: Int
     let difficulty: Difficulty
     let supplies: [String]
 
+    /// Legacy visual grouping for the built-in library. The template itself
+    /// stores a freeform optional suggestion, just like the task it creates.
+    var category: TaskCategory { TaskCategory.legacyFallback(for: suggestedRoom) }
+
+    init(
+        name: String,
+        description: String,
+        category: TaskCategory? = nil,
+        suggestedFrequency: TaskFrequency,
+        estimatedMinutes: Int,
+        difficulty: Difficulty,
+        supplies: [String]
+    ) {
+        self.name = name
+        self.description = description
+        self.suggestedRoom = category?.roomValue
+        self.suggestedFrequency = suggestedFrequency
+        self.estimatedMinutes = estimatedMinutes
+        self.difficulty = difficulty
+        self.supplies = supplies
+    }
+
     func toHouseholdTask() -> HouseholdTask {
-        HouseholdTask(
+        var task = HouseholdTask(
             id: UUID(),
             name: name,
             description: description,
-            category: category,
+            category: .general,
             frequency: suggestedFrequency,
             estimatedMinutes: estimatedMinutes,
             difficulty: difficulty,
             supplies: supplies,
             isActive: true
-        ).withDefaultSchedule()
+        )
+        task.room = suggestedRoom
+        return task.withDefaultSchedule()
     }
 }
 
@@ -66,7 +90,7 @@ func onboardingCatalogTask(named name: String) -> CatalogTask? {
 func makeOnboardingCustomTask(
     named name: String,
     category: TaskCategory = .general,
-    frequency: TaskFrequency = .weekly
+    frequency: TaskFrequency = .unscheduled
 ) -> HouseholdTask? {
     let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmedName.isEmpty else { return nil }
@@ -84,15 +108,15 @@ func makeOnboardingCustomTask(
     ).withDefaultSchedule()
 }
 
-/// The rooms onboarding offers, in display order. Derived from the curated
-/// recommendations below so an offered room always has quests to suggest —
-/// adding a room is a single edit to `onboardingRecommendationNames`.
+/// Legacy room vocabulary represented in the optional template library.
+/// Onboarding presents all of these templates without asking the user to
+/// select a room first.
 let onboardingRooms: [TaskCategory] = TaskCategory.allCases.filter {
     onboardingRecommendationNames[$0]?.isEmpty == false
 }
 
-/// The subset of `onboardingRooms` preselected on first run. Kept small so the
-/// starting quest list stays approachable; users can add the rest inline.
+/// A compact template subset retained for recommendation callers and tests.
+/// It does not preselect tasks or rooms in onboarding.
 let onboardingStarterCategories: Set<TaskCategory> = [.kitchen, .bathroom, .general]
 
 private let onboardingRecommendationNames: [TaskCategory: [String]] = [
@@ -105,8 +129,7 @@ private let onboardingRecommendationNames: [TaskCategory: [String]] = [
 ]
 
 /// Returns a deterministic, intentionally small recommendation set for the
-/// onboarding picker. Empty catalog categories are omitted so a new user never
-/// selects a room and lands on an empty task list.
+/// onboarding picker. Empty legacy groups are omitted from the template list.
 func onboardingRecommendedCatalogTasks(for categories: Set<TaskCategory>) -> [CatalogTask] {
     TaskCategory.allCases
         .filter { categories.contains($0) }

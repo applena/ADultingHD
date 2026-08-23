@@ -13,6 +13,8 @@ final class StorageTests: XCTestCase {
             lastCompleted: Date()
         )
         task.isPersonal = true
+        task.room = "Galley"
+        task.frequency = .unscheduled
         let tasks = [task]
 
         await store.saveTasks(tasks, for: householdId)
@@ -21,6 +23,8 @@ final class StorageTests: XCTestCase {
         XCTAssertEqual(loaded.count, tasks.count)
         XCTAssertEqual(loaded.first?.name, "Test Task")
         XCTAssertEqual(loaded.first?.supplies, ["Sponge", "Soap"])
+        XCTAssertEqual(loaded.first?.room, "Galley")
+        XCTAssertEqual(loaded.first?.frequency, .unscheduled)
         XCTAssertTrue(loaded.first?.isPersonal == true)
     }
 
@@ -64,7 +68,13 @@ final class StorageTests: XCTestCase {
     func testBackupRoundTrip() async {
         let store = TaskStore()
         let householdId = UUID()
-        let tasks = taskCatalog.prefix(5).map { $0.toHouseholdTask() }
+        var customTask = HouseholdTask(
+            id: UUID(), name: "Sort the costume closet", description: "",
+            category: .general, frequency: .unscheduled, estimatedMinutes: 15,
+            difficulty: .medium, supplies: [], isActive: true
+        )
+        customTask.room = "Costume Closet"
+        let tasks = taskCatalog.prefix(5).map { $0.toHouseholdTask() } + [customTask]
         var profile = UserProfile()
         profile.totalXP = 250
         profile.totalTasksCompleted = 10
@@ -85,6 +95,8 @@ final class StorageTests: XCTestCase {
         let loadedTasks = await store.loadTasks(for: householdId)
         let loadedProfile = await store.loadProfile()
         XCTAssertEqual(loadedTasks.count, tasks.count)
+        XCTAssertEqual(loadedTasks.last?.room, "Costume Closet")
+        XCTAssertEqual(loadedTasks.last?.frequency, .unscheduled)
         XCTAssertEqual(loadedProfile.totalXP, 250)
     }
 }

@@ -1,19 +1,16 @@
 import SwiftUI
 
 /// Optional, deep setup step kept separate from the short onboarding story.
-/// It owns all avatar, room, search, and starter-task state and exposes only
+/// It owns avatar, search, and starter-task state and exposes only
 /// navigation callbacks to the parent coordinator.
 struct StarterHouseholdSetupView: View {
     @Environment(DataStore.self) private var dataStore
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
 
-    @State private var selectedCategories: Set<TaskCategory> = []
     @State private var selectedTaskNames: Set<String> = []
     @State private var selectedCustomTasks: [HouseholdTask] = []
     @State private var recommendedTaskGroups: [(category: TaskCategory, tasks: [CatalogTask])] = []
     @State private var taskSearchText = ""
-    @State private var customTaskCategory: TaskCategory = .general
-    @State private var customTaskFrequency: TaskFrequency = .weekly
     @State private var customTaskIsPersonal = false
     @State private var selectedAvatarID = "person"
     @State private var isSaving = false
@@ -103,15 +100,15 @@ struct StarterHouseholdSetupView: View {
 
     private var artwork: some View {
         HStack(spacing: 12) {
-            roomSymbol("fork.knife", color: Theme.hearthGold)
+            roomSymbol("text.badge.plus", color: Theme.hearthGold)
             Image(systemName: "arrow.right")
                 .font(.headline.weight(.bold))
                 .foregroundStyle(Theme.hearthGold)
-            roomSymbol("shower", color: Theme.sky)
+            roomSymbol("checklist", color: Theme.sky)
             Image(systemName: "arrow.right")
                 .font(.headline.weight(.bold))
                 .foregroundStyle(Theme.hearthGold)
-            roomSymbol("washer", color: Theme.leafGreen)
+            roomSymbol("slider.horizontal.3", color: Theme.leafGreen)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 16)
@@ -129,12 +126,12 @@ struct StarterHouseholdSetupView: View {
 
     private var heading: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Choose your first chores")
+            Text("What tasks do you want to track?")
                 .font(.system(.largeTitle, design: .rounded).weight(.bold))
                 .foregroundStyle(.primary)
                 .fixedSize(horizontal: false, vertical: true)
 
-            Text("Pick a companion and anything that feels useful now. You can leave the list empty and change it later.")
+            Text("Type any task in your own words, or copy an editable template. Room and schedule can wait until later.")
                 .font(.title3)
                 .foregroundStyle(colorSchemeContrast == .increased ? .primary : .secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -143,19 +140,10 @@ struct StarterHouseholdSetupView: View {
 
     private var content: some View {
         VStack(alignment: .leading, spacing: 22) {
-            companionPicker
-
-            VStack(alignment: .leading, spacing: 12) {
-                sectionHeader("Rooms", detail: "\(selectedCategories.count) selected")
-                roomPicker
-            }
-
             starterQuestPicker
+            companionPicker
         }
         .padding(.bottom, Theme.controlHeight + 24)
-        .onChange(of: selectedCategories) { _, _ in
-            refreshRecommendations()
-        }
     }
 
     private func sectionHeader(_ title: String, detail: String) -> some View {
@@ -217,72 +205,6 @@ struct StarterHouseholdSetupView: View {
         }
     }
 
-    // MARK: - Rooms
-
-    private var roomPicker: some View {
-        LazyVGrid(columns: [GridItem(.adaptive(minimum: 104), spacing: 10)], spacing: 10) {
-            ForEach(onboardingRooms) { category in
-                let selected = selectedCategories.contains(category)
-                Button {
-                    if selected {
-                        selectedCategories.remove(category)
-                    } else {
-                        selectedCategories.insert(category)
-                    }
-                } label: {
-                    roomTile(category, selected: selected)
-                }
-                .buttonStyle(.plain)
-                .contentShape(RoundedRectangle(cornerRadius: Theme.chipCornerRadius))
-                .accessibilityLabel(category.rawValue)
-                .accessibilityValue(selected ? "Selected" : "Not selected")
-                .accessibilityHint(selected ? "Double tap to remove this room" : "Double tap to add this room")
-                .accessibilityAddTraits(selected ? .isSelected : [])
-            }
-        }
-    }
-
-    private func roomTile(_ category: TaskCategory, selected: Bool) -> some View {
-        let color = Theme.categoryColor(category)
-        return ZStack(alignment: .topTrailing) {
-            VStack(spacing: 6) {
-                Image(systemName: category.icon)
-                    .font(.title3.weight(.semibold))
-                    .accessibilityHidden(true)
-
-                Text(category.rawValue)
-                    .font(.caption.weight(.semibold))
-                    .multilineTextAlignment(.center)
-                    .lineLimit(2)
-                    .minimumScaleFactor(0.9)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .frame(maxWidth: .infinity, minHeight: 76)
-            .padding(.horizontal, 5)
-
-            Image(systemName: selected ? "checkmark.circle.fill" : "circle")
-                .font(.caption.weight(.semibold))
-                .padding(7)
-                .accessibilityHidden(true)
-        }
-        .foregroundStyle(selected ? roomSelectionForeground(for: category) : color)
-        .frame(maxWidth: .infinity)
-        .background(selected ? color : color.opacity(0.09), in: RoundedRectangle(cornerRadius: Theme.chipCornerRadius))
-        .overlay {
-            RoundedRectangle(cornerRadius: Theme.chipCornerRadius)
-                .strokeBorder(color.opacity(selected ? 0 : 0.36), lineWidth: 1)
-        }
-    }
-
-    private func roomSelectionForeground(for category: TaskCategory) -> Color {
-        switch category {
-        case .bedroom, .livingRoom, .laundry, .outdoor, .garage, .office:
-            .white
-        default:
-            Theme.adventureBlue
-        }
-    }
-
     // MARK: - Chore list
 
     private var selectedCatalogTasks: [CatalogTask] {
@@ -332,7 +254,7 @@ struct StarterHouseholdSetupView: View {
             taskSearchField
 
             if taskSearchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                roomSuggestions
+                templateSuggestions
             } else {
                 autocompleteResults
             }
@@ -417,28 +339,10 @@ struct StarterHouseholdSetupView: View {
                 }
             }
 
-            Text("\"\(taskSearchText.trimmingCharacters(in: .whitespacesAndNewlines))\" will be saved as a custom task.")
+            Text("\"\(taskSearchText.trimmingCharacters(in: .whitespacesAndNewlines))\" will be saved without a room or recurring schedule. You can configure it later.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
-
-            HStack(spacing: 10) {
-                Picker("Room", selection: $customTaskCategory) {
-                    ForEach(TaskCategory.allCases) { category in
-                        Text(category.rawValue).tag(category)
-                    }
-                }
-                .labelsHidden()
-                .accessibilityLabel("Custom chore room")
-
-                Picker("Frequency", selection: $customTaskFrequency) {
-                    ForEach(TaskFrequency.allCases) { frequency in
-                        Text(frequency.rawValue).tag(frequency)
-                    }
-                }
-                .labelsHidden()
-                .accessibilityLabel("Custom chore frequency")
-            }
 
             Toggle(isOn: $customTaskIsPersonal) {
                 Label("Personal task", systemImage: "person.fill")
@@ -467,26 +371,20 @@ struct StarterHouseholdSetupView: View {
         }
     }
 
-    private var roomSuggestions: some View {
+    private var templateSuggestions: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Browse suggestions by room")
+            Text("Suggested templates")
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(Theme.adventureBlue)
 
-            if recommendedTaskGroups.isEmpty {
-                Text("Choose a room above to see matching catalog chores.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            } else {
-                ForEach(recommendedTaskGroups, id: \.category) { group in
-                    VStack(alignment: .leading, spacing: 8) {
-                        Label(group.category.rawValue, systemImage: group.category.icon)
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(Theme.categoryColor(group.category))
+            ForEach(recommendedTaskGroups, id: \.category) { group in
+                VStack(alignment: .leading, spacing: 8) {
+                    Label(group.category.rawValue, systemImage: group.category.icon)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(Theme.categoryColor(group.category))
 
-                        ForEach(group.tasks.filter { !selectedTaskNames.contains($0.name) }) { task in
-                            questRow(task)
-                        }
+                    ForEach(group.tasks.filter { !selectedTaskNames.contains($0.name) }) { task in
+                        questRow(task)
                     }
                 }
             }
@@ -516,8 +414,8 @@ struct StarterHouseholdSetupView: View {
 
     private func customTaskRow(_ task: HouseholdTask) -> some View {
         HStack(alignment: .top, spacing: 10) {
-            Image(systemName: task.category.icon)
-                .foregroundStyle(Theme.categoryColor(task.category))
+            Image(systemName: "checklist")
+                .foregroundStyle(Theme.successGreen)
                 .frame(width: 24)
                 .accessibilityHidden(true)
 
@@ -525,8 +423,8 @@ struct StarterHouseholdSetupView: View {
                 Text(task.name)
                     .font(.subheadline.weight(.semibold))
                 Text(task.isPersonal
-                    ? "Personal · \(task.frequency.rawValue) · \(task.estimatedMinutes) min"
-                    : "Custom · \(task.frequency.rawValue) · \(task.estimatedMinutes) min")
+                    ? "Personal · No schedule · Configure later"
+                    : "No room · No schedule · Configure later")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -605,7 +503,7 @@ struct StarterHouseholdSetupView: View {
     }
 
     private func refreshRecommendations() {
-        let tasks = onboardingRecommendedCatalogTasks(for: selectedCategories)
+        let tasks = onboardingRecommendedCatalogTasks(for: Set(onboardingRooms))
         recommendedTaskGroups = Dictionary(grouping: tasks, by: \.category)
             .sorted { $0.key.rawValue < $1.key.rawValue }
             .map { (category: $0.key, tasks: $0.value) }
@@ -633,18 +531,12 @@ struct StarterHouseholdSetupView: View {
     private func addCustomTaskFromSearch() {
         guard exactTaskSearchMatch == nil,
               !customTaskNameAlreadyUsed,
-              let task = makeOnboardingCustomTask(
-                  named: taskSearchText,
-                  category: customTaskCategory,
-                  frequency: customTaskFrequency
-              ) else { return }
+              let task = makeOnboardingCustomTask(named: taskSearchText) else { return }
 
         var customTask = task
         customTask.isPersonal = customTaskIsPersonal
         selectedCustomTasks.append(customTask)
         taskSearchText = ""
-        customTaskCategory = .general
-        customTaskFrequency = .weekly
         customTaskIsPersonal = false
     }
 

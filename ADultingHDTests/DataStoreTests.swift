@@ -183,9 +183,7 @@ final class DataStoreTests: XCTestCase {
 
     func testSeedOnboardingTasksKeepsSelectedCatalogAndCustomTasks() async throws {
         let dataStore = DataStore()
-        let customTask = try XCTUnwrap(
-            makeOnboardingCustomTask(named: "Polish the moon", category: .outdoor, frequency: .weekly)
-        )
+        let customTask = try XCTUnwrap(makeOnboardingCustomTask(named: "Polish the moon"))
 
         await dataStore.seedOnboardingTasks(
             recommendedTasks: [taskCatalog[0]],
@@ -193,8 +191,21 @@ final class DataStoreTests: XCTestCase {
         )
 
         XCTAssertEqual(dataStore.tasks.map(\.name), [taskCatalog[0].name, "Polish the moon"])
-        XCTAssertEqual(dataStore.tasks.last?.category, .outdoor)
-        XCTAssertEqual(dataStore.tasks.last?.scheduledWeekdays, TaskFrequency.weekly.defaultWeekdays)
+        XCTAssertNil(dataStore.tasks.last?.room)
+        XCTAssertEqual(dataStore.tasks.last?.frequency, .unscheduled)
+        XCTAssertNil(dataStore.tasks.last?.nextOccurrence())
+    }
+
+    func testCompletingUnscheduledTaskRecordsProgressWithoutMakingItDue() async throws {
+        let dataStore = DataStore()
+        let task = try XCTUnwrap(makeOnboardingCustomTask(named: "Call the landlord"))
+        dataStore.tasks = [task]
+
+        await dataStore.completeTask(task)
+
+        XCTAssertEqual(dataStore.completions.filter { $0.taskId == task.id }.count, 1)
+        XCTAssertEqual(dataStore.tasks.first?.lastCompleted.map { Calendar.current.isDateInToday($0) }, true)
+        XCTAssertFalse(dataStore.dueTasks.contains { $0.id == task.id })
     }
 
     func testAddingPersonalTaskAssignsItToCurrentProfile() async {

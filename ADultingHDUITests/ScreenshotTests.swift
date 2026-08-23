@@ -92,7 +92,7 @@ final class ScreenshotTests: XCTestCase {
 
         let profileScroll = app.scrollViews.firstMatch
         let finalProfileRow = app.descendants(matching: .any)
-            .matching(identifier: "profile-category-General")
+            .matching(identifier: "profile-room-No Room")
             .firstMatch
         for _ in 0..<12 where !finalProfileRow.isHittable {
             profileScroll.swipeUp()
@@ -203,20 +203,8 @@ final class ScreenshotTests: XCTestCase {
             .firstMatch
         XCTAssertTrue(setupPage.waitForExistence(timeout: 5), "Optional chore setup should follow the action-first onboarding")
 
-        let room = app.buttons["Kitchen"]
-        XCTAssertTrue(room.waitForExistence(timeout: 3), "Room choices should be tappable")
-        // The setup page scrolls, and `isHittable` is true even when an
-        // element sits beneath the pinned action bar — where a center tap
-        // would land on the bar instead. Scroll it clear first.
-        scrollClearOfActionBar(room)
-        XCTAssertTrue(room.isHittable, "Room choices should be hittable")
-        room.tap()
-        XCTAssertEqual(room.value as? String, "Selected")
-        room.tap()
-        XCTAssertEqual(room.value as? String, "Not selected")
-
         let taskSearch = app.textFields["onboarding-task-search-field"]
-        XCTAssertTrue(taskSearch.waitForExistence(timeout: 3), "Setup should offer catalog search")
+        XCTAssertTrue(taskSearch.waitForExistence(timeout: 3), "Task-first setup should lead with freeform entry and catalog search")
         scrollClearOfActionBar(taskSearch)
         taskSearch.tap()
         taskSearch.typeText("Polish the moon")

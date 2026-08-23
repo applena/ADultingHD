@@ -68,6 +68,41 @@ final class CloudKitRecordTests: XCTestCase {
         XCTAssertEqual(decoded.checklist[1].instructions, "Then that")
     }
 
+    func testTaskRoundTrip_customRoomAndNoScheduleUsesAdditiveFields() throws {
+        var task = HouseholdTask(
+            id: UUID(), name: "Sort costumes", description: "",
+            category: .general, frequency: .unscheduled, estimatedMinutes: 20,
+            difficulty: .medium, supplies: [], isActive: true
+        )
+        task.room = "Costume Closet"
+
+        let record = task.toCKRecord(zone: zone)
+        let decoded = try XCTUnwrap(HouseholdTask(from: record))
+
+        XCTAssertEqual(record["room"] as? String, "Costume Closet")
+        XCTAssertEqual(record["category"] as? String, "General")
+        XCTAssertEqual(record["scheduleFrequency"] as? String, "No Schedule")
+        XCTAssertEqual(record["frequency"] as? String, "Weekly")
+        XCTAssertEqual(decoded.room, "Costume Closet")
+        XCTAssertEqual(decoded.frequency, .unscheduled)
+    }
+
+    func testTaskDecode_legacyUnknownCategoryRemainsReadable() throws {
+        let record = CKRecord(
+            recordType: RecordType.task,
+            recordID: CKRecord.ID(recordName: UUID().uuidString, zoneID: zone.zoneID)
+        )
+        record["name"] = "Sweep the conservatory" as CKRecordValue
+        record["category"] = "Conservatory" as CKRecordValue
+        record["frequency"] = "Monthly" as CKRecordValue
+        record["difficulty"] = Difficulty.easy.rawValue as CKRecordValue
+
+        let decoded = try XCTUnwrap(HouseholdTask(from: record))
+
+        XCTAssertEqual(decoded.room, "Conservatory")
+        XCTAssertEqual(decoded.frequency, .monthly)
+    }
+
     func testTaskRoundTrip_monthlyScheduledDay() {
         var task = HouseholdTask(
             id: UUID(), name: "Pay bills", description: "",

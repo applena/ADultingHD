@@ -4,7 +4,8 @@ struct ScheduleView: View {
     @Environment(DataStore.self) private var dataStore
     @State private var selectedDate = Date()
     @State private var showPowerHour = false
-    @State private var expandedCategories: Set<TaskCategory> = []
+    @State private var expandedRooms: Set<String> = []
+    @State private var groupsTodayByRoom = false
     /// The day card currently under a drag-to-reschedule hover, used to draw
     /// its drop-target highlight. `nil` when nothing is being dragged over
     /// any card. Shared by both `iOSLayout` and `macOSLayout` since they
@@ -47,17 +48,17 @@ struct ScheduleView: View {
         let allDates = dates.contains(today) ? dates : ([today] + dates)
         let tasksByDate = tasksByDate(for: allDates)
         let todayTasks = tasksByDate[today] ?? []
-        let todayByCategory = Dictionary(grouping: todayTasks, by: \.category)
-            .sorted { $0.key.rawValue < $1.key.rawValue }
+        let todayByRoom = Dictionary(grouping: todayTasks, by: \.roomDisplayName)
+            .sorted { $0.key.localizedCaseInsensitiveCompare($1.key) == .orderedAscending }
         let dueCount = dataStore.dueTasks.count
 
         return ZStack {
             ScreenBackground()
             ScrollView {
                 #if os(macOS)
-                macOSLayout(dates: dates, tasksByDate: tasksByDate, todayTasks: todayTasks, todayByCategory: todayByCategory, dueCount: dueCount)
+                macOSLayout(dates: dates, tasksByDate: tasksByDate, todayTasks: todayTasks, todayByRoom: todayByRoom, dueCount: dueCount)
                 #else
-                iOSLayout(dates: dates, tasksByDate: tasksByDate, todayTasks: todayTasks, todayByCategory: todayByCategory, dueCount: dueCount)
+                iOSLayout(dates: dates, tasksByDate: tasksByDate, todayTasks: todayTasks, todayByRoom: todayByRoom, dueCount: dueCount)
                 #endif
             }
             .rootTabScrollClearance()
@@ -88,11 +89,11 @@ struct ScheduleView: View {
         dates: [Date],
         tasksByDate: [Date: [HouseholdTask]],
         todayTasks: [HouseholdTask],
-        todayByCategory: [(TaskCategory, [HouseholdTask])],
+        todayByRoom: [(String, [HouseholdTask])],
         dueCount: Int
     ) -> some View {
         VStack(spacing: Theme.sectionSpacing) {
-            scheduleHeader(todayTasks: todayTasks, todayByCategory: todayByCategory, dueCount: dueCount)
+            scheduleHeader(todayTasks: todayTasks, dueCount: dueCount)
 
             DatePicker("Week starting", selection: $selectedDate, displayedComponents: .date)
                 .datePickerStyle(.graphical)
@@ -102,8 +103,8 @@ struct ScheduleView: View {
                 dueSummaryChip
             }
 
-            if !todayByCategory.isEmpty {
-                todayBatchesCard(todayTasks: todayTasks, todayByCategory: todayByCategory)
+            if !todayByRoom.isEmpty {
+                todayBatchesCard(todayTasks: todayTasks, todayByRoom: todayByRoom)
             }
 
             ForEach(dates, id: \.self) { date in
@@ -122,7 +123,7 @@ struct ScheduleView: View {
         dates: [Date],
         tasksByDate: [Date: [HouseholdTask]],
         todayTasks: [HouseholdTask],
-        todayByCategory: [(TaskCategory, [HouseholdTask])],
+        todayByRoom: [(String, [HouseholdTask])],
         dueCount: Int
     ) -> some View {
         HStack(alignment: .top, spacing: Theme.sectionSpacing) {
@@ -135,14 +136,14 @@ struct ScheduleView: View {
 
             // Right: summary + batches + week view
             VStack(spacing: Theme.sectionSpacing) {
-                scheduleHeader(todayTasks: todayTasks, todayByCategory: todayByCategory, dueCount: dueCount)
+                scheduleHeader(todayTasks: todayTasks, dueCount: dueCount)
 
                 if dueCount > 0 {
                     dueSummaryChip
                 }
 
-                if !todayByCategory.isEmpty {
-                    todayBatchesCard(todayTasks: todayTasks, todayByCategory: todayByCategory)
+                if !todayByRoom.isEmpty {
+                    todayBatchesCard(todayTasks: todayTasks, todayByRoom: todayByRoom)
                 }
 
                 ForEach(dates, id: \.self) { date in
@@ -161,7 +162,6 @@ struct ScheduleView: View {
 
     private func scheduleHeader(
         todayTasks: [HouseholdTask],
-        todayByCategory: [(TaskCategory, [HouseholdTask])],
         dueCount: Int
     ) -> some View {
         LandingHeader(
@@ -169,7 +169,7 @@ struct ScheduleView: View {
             title: dueCount == 0 ? "Nothing is pressing today" : "Plan today's cleaning run",
             subtitle: todayTasks.isEmpty
                 ? "Pick a date to see upcoming maintenance and recurring work."
-                : "\(todayTasks.count) tasks across \(todayByCategory.count) rooms, about \(todayTasks.totalMinutes) minutes total.",
+                : "\(todayTasks.count) scheduled tasks, about \(todayTasks.totalMinutes) minutes total.",
             icon: "calendar.badge.clock",
             color: dueCount == 0 ? Theme.successGreen : Theme.streakOrange
         )
@@ -178,7 +178,7 @@ struct ScheduleView: View {
 
     private func todayBatchesCard(
         todayTasks: [HouseholdTask],
-        todayByCategory: [(TaskCategory, [HouseholdTask])]
+        todayByRoom: [(String, [HouseholdTask])]
     ) -> some View {
         let completedCount = dataStore.todayCompletions.count
         let totalCount = todayTasks.count + completedCount
@@ -199,7 +199,7 @@ struct ScheduleView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Today's Tasks")
                         .font(.headline)
-                    Text("\(todayTasks.count) tasks across \(todayByCategory.count) rooms — about \(todayTasks.totalMinutes / 60)h \(todayTasks.totalMinutes % 60)m")
+                    Text("\(todayTasks.count) scheduled tasks — about \(todayTasks.totalMinutes / 60)h \(todayTasks.totalMinutes % 60)m")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -221,25 +221,39 @@ struct ScheduleView: View {
                 .buttonStyle(.plain)
             }
 
-            // Collapsible category batches
-            ForEach(todayByCategory, id: \.0) { category, tasks in
-                batchSection(category: category, tasks: tasks)
+            Picker("Today's layout", selection: $groupsTodayByRoom) {
+                Text("Tasks").tag(false)
+                Text("Rooms").tag(true)
+            }
+            .pickerStyle(.segmented)
+
+            if groupsTodayByRoom {
+                ForEach(todayByRoom, id: \.0) { room, tasks in
+                    batchSection(room: room, tasks: tasks)
+                }
+            } else {
+                VStack(spacing: 4) {
+                    ForEach(todayTasks) { task in
+                        todayTaskRow(task)
+                    }
+                }
             }
         }
         .card()
     }
 
-    private func batchSection(category: TaskCategory, tasks: [HouseholdTask]) -> some View {
-        let isExpanded = expandedCategories.contains(category)
+    private func batchSection(room: String, tasks: [HouseholdTask]) -> some View {
+        let isExpanded = expandedRooms.contains(room)
+        let category = TaskCategory(rawValue: room) ?? .general
         let catColor = Theme.categoryColor(category)
 
         return VStack(alignment: .leading, spacing: 0) {
             Button {
                 withAnimation(.easeInOut(duration: 0.2)) {
                     if isExpanded {
-                        expandedCategories.remove(category)
+                        expandedRooms.remove(room)
                     } else {
-                        expandedCategories.insert(category)
+                        expandedRooms.insert(room)
                     }
                 }
             } label: {
@@ -252,7 +266,7 @@ struct ScheduleView: View {
                     Image(systemName: category.icon)
                         .foregroundStyle(catColor)
 
-                    Text(category.rawValue)
+                    Text(room)
                         .font(.subheadline.weight(.medium))
 
                     Spacer()
@@ -278,27 +292,8 @@ struct ScheduleView: View {
             if isExpanded {
                 VStack(spacing: 2) {
                     ForEach(tasks) { task in
-                        HStack(spacing: 10) {
-                            Button {
-                                Task { await dataStore.completeTask(task) }
-                            } label: {
-                                Image(systemName: "circle")
-                                    .foregroundStyle(.secondary)
-                                    .imageScale(.small)
-                            }
-                            .buttonStyle(.plain)
-
-                            Text(task.name)
-                                .font(.subheadline)
-
-                            Spacer()
-
-                            Text("\(task.estimatedMinutes)m")
-                                .font(.caption)
-                                .foregroundStyle(.tertiary)
-                        }
-                        .padding(.leading, 22)
-                        .padding(.vertical, 3)
+                        todayTaskRow(task)
+                            .padding(.leading, 22)
                     }
                 }
                 .padding(.bottom, 4)
@@ -310,6 +305,34 @@ struct ScheduleView: View {
                 .fill(catColor.opacity(0.6))
                 .frame(width: 3)
         }
+    }
+
+    private func todayTaskRow(_ task: HouseholdTask) -> some View {
+        HStack(spacing: 10) {
+            Button {
+                Task { await dataStore.completeTask(task) }
+            } label: {
+                Image(systemName: "circle")
+                    .foregroundStyle(.secondary)
+                    .imageScale(.small)
+            }
+            .buttonStyle(.plain)
+
+            Text(task.name)
+                .font(.subheadline)
+
+            Spacer()
+
+            if let room = task.room {
+                Text(room)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Text("\(task.estimatedMinutes)m")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+        }
+        .padding(.vertical, 3)
     }
 
     private func weekDayCard(date: Date, tasks: [HouseholdTask]) -> some View {

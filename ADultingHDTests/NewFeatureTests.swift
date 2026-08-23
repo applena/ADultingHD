@@ -209,21 +209,22 @@ final class NewFeatureTests: XCTestCase {
 
     // MARK: - Idea 7: Smart Scheduling
 
-    func testTaskBatchingByCategory() {
-        let tasks = [
+    func testTaskBatchingByOptionalRoom() {
+        var tasks = [
             makeTask(name: "Dishes", category: .kitchen, minutes: 15),
             makeTask(name: "Counters", category: .kitchen, minutes: 5),
             makeTask(name: "Toilet", category: .bathroom, minutes: 10),
             makeTask(name: "Mirror", category: .bathroom, minutes: 5),
             makeTask(name: "Vacuum", category: .livingRoom, minutes: 15),
         ]
+        tasks[4].room = "Sunroom"
 
-        let grouped = Dictionary(grouping: tasks, by: \.category)
-        XCTAssertEqual(grouped[.kitchen]?.count, 2)
-        XCTAssertEqual(grouped[.bathroom]?.count, 2)
-        XCTAssertEqual(grouped[.livingRoom]?.count, 1)
+        let grouped = Dictionary(grouping: tasks, by: \.roomDisplayName)
+        XCTAssertEqual(grouped["Kitchen"]?.count, 2)
+        XCTAssertEqual(grouped["Bathroom"]?.count, 2)
+        XCTAssertEqual(grouped["Sunroom"]?.count, 1)
 
-        let kitchenMinutes = grouped[.kitchen]!.reduce(0) { $0 + $1.estimatedMinutes }
+        let kitchenMinutes = grouped["Kitchen"]!.reduce(0) { $0 + $1.estimatedMinutes }
         XCTAssertEqual(kitchenMinutes, 20)
 
         let totalMinutes = tasks.reduce(0) { $0 + $1.estimatedMinutes }

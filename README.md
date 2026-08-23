@@ -10,8 +10,11 @@ tracking, and cross-device household sharing via iCloud.
 
 ## Features
 
-- 50+ built-in household tasks across kitchen, laundry, bathroom,
-  bedroom, living room, yard, garage, and seasonal categories
+- Freeform household tasks that require only a name; room, personal or
+  household scope, assignee, schedule, supplies, checklist, and difficulty
+  are optional configuration
+- 50+ editable task templates spanning kitchen, laundry, bathroom,
+  bedroom, living room, yard, garage, and seasonal maintenance
 - Per-task XP with difficulty multipliers, streak bonuses, and
   period-consistency bonuses (daily / weekly / monthly)
 - Level-up and achievement celebrations
@@ -77,8 +80,8 @@ TEAM_ID=TYQ32QCF6K
 
 - **Models** (`ADultingHD/Models/`): Data types — `HouseholdTask`,
   `TaskCompletion`, `UserProfile`, `Achievement`, `Household`
-- **Data** (`ADultingHD/Data/`): Built-in catalog of tasks, categories,
-  supplies, frequencies
+- **Data** (`ADultingHD/Data/`): Built-in template library with suggested
+  rooms, supplies, schedules, and difficulty
 - **Storage** (`ADultingHD/Storage/`): JSON file persistence with
   iCloud Documents sync (`ICloudMonitor` + `TaskStore` dual-writes,
   `newerOf(cloud:local:)` merge). `CloudKitSync` handles cross-user

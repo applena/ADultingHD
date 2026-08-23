@@ -31,22 +31,42 @@ struct SeasonalSuggestion: Identifiable {
     let season: Season
     let name: String
     let description: String
-    let category: TaskCategory
+    let suggestedRoom: String?
     let estimatedMinutes: Int
     let difficulty: Difficulty
 
+    var category: TaskCategory { TaskCategory.legacyFallback(for: suggestedRoom) }
+
+    init(
+        season: Season,
+        name: String,
+        description: String,
+        category: TaskCategory? = nil,
+        estimatedMinutes: Int,
+        difficulty: Difficulty
+    ) {
+        self.season = season
+        self.name = name
+        self.description = description
+        self.suggestedRoom = category?.roomValue
+        self.estimatedMinutes = estimatedMinutes
+        self.difficulty = difficulty
+    }
+
     func toTask() -> HouseholdTask {
-        HouseholdTask(
+        var task = HouseholdTask(
             id: UUID(),
             name: name,
             description: description,
-            category: category,
+            category: .general,
             frequency: .yearly,
             estimatedMinutes: estimatedMinutes,
             difficulty: difficulty,
             supplies: [],
             isActive: true
         )
+        task.room = suggestedRoom
+        return task
     }
 }
 

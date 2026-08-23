@@ -38,6 +38,16 @@ is merged; a newly joined device falls back to CloudKit's stable system
 `creationDate` for records without local recurrence metadata. Checklist data
 keeps its original array wire format for older clients.
 
+Task planning fields migrate additively. New clients prefer the optional
+freeform `room` field and `scheduleFrequency` (which includes `No Schedule`),
+while continuing to dual-write the legacy `category` and `frequency` fields.
+Known legacy categories map to room names, legacy `General` maps to no room,
+and unknown legacy category strings remain readable as custom rooms. An
+unscheduled task writes `Weekly` only as its legacy frequency fallback; new
+clients use `scheduleFrequency` and therefore keep it out of recurring due
+calculations. Deploy the `room` and `scheduleFrequency` fields from Development
+to Production before shipping a build that writes them.
+
 ## Code map
 
 | File | Role |

@@ -169,7 +169,8 @@ final class NotificationManager {
         schedule(
             identifier: "task_\(task.id.uuidString)",
             title: "\(task.name) is due!",
-            body: "\(task.category.rawValue) task — \(task.estimatedMinutes) min, +\(task.xpReward) XP",
+            body: task.room.map { "\($0) task — \(task.estimatedMinutes) min, +\(task.xpReward) XP" }
+                ?? "\(task.estimatedMinutes) min, +\(task.xpReward) XP",
             trigger: UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
         )
     }

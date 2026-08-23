@@ -26,7 +26,7 @@ xcodebuild build -project ADultingHD.xcodeproj -scheme ADultingHD_macOS \
 ## Architecture
 
 - **Models** (`ADultingHD/Models/`): All data types — HouseholdTask, TaskCompletion, UserProfile, Achievement
-- **Data** (`ADultingHD/Data/`): Built-in task library with 50+ household tasks, categories, supplies, frequencies
+- **Data** (`ADultingHD/Data/`): Built-in task-template library with 50+ suggested rooms, supplies, schedules, and difficulty values
 - **Storage** (`ADultingHD/Storage/`): JSON file persistence with iCloud Documents sync (`ICloudMonitor` + `TaskStore` dual-writes)
 - **Views** (`ADultingHD/Views/`): Platform-adaptive — `NavigationSplitView` on macOS, `TabView` on iOS
 - **Theme** (`ADultingHD/Theme/`): Adaptive colors for light/dark mode
@@ -36,7 +36,7 @@ xcodebuild build -project ADultingHD.xcodeproj -scheme ADultingHD_macOS \
 - Engine/model functions are pure — no state mutation, no I/O
 - Platform-specific code guarded with `#if os(macOS)` / `#if os(iOS)`
 - Gamification: XP per task (difficulty-based), levels, streaks, achievements
-- Tasks have categories, frequencies, difficulty ratings, and supply lists
+- A task name is the only required planning input. Room is an optional freeform string; schedule, scope/assignment, difficulty, checklist, and supplies are optional configuration. Catalog entries are editable templates, not a required hierarchy.
 
 ## iCloud Sync Pattern
 
