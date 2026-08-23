@@ -187,13 +187,14 @@ struct WelcomeIntroductionView: View {
                 updateFlow { $0.start(routeFromStore) }
             }
         }
-        .sheet(item: sharePresentation.payloadBinding) { payload in
+        .sheet(item: sharePresentation.payloadBinding, onDismiss: handleSharePresentationDismissed) { payload in
             CloudShareSheet(
                 share: payload.share,
                 container: payload.container,
                 householdName: payload.householdName,
                 onShareSaved: { hasSentInvite = true },
-                onDismiss: handleShareDismissed
+                onShareInvalidated: { hasSentInvite = false },
+                onDismiss: sharePresentation.dismiss
             )
         }
         .onDisappear(perform: sharePresentation.dismiss)
@@ -571,7 +572,7 @@ struct WelcomeIntroductionView: View {
         updateFlow { $0.answerInvitation(shouldInvite) }
     }
 
-    private func handleShareDismissed() {
+    private func handleSharePresentationDismissed() {
         let shouldAdvance = hasSentInvite && flow.current == .invite
         hasSentInvite = false
         sharePresentation.dismiss()
