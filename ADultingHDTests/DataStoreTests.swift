@@ -118,6 +118,24 @@ final class DataStoreTests: XCTestCase {
         XCTAssertEqual(dataStore.tasks.first?.name, "Renamed")
     }
 
+    func testUpdateTaskPreservesNewOneTimeDateWhenChangingFromRecurring() async {
+        let dataStore = DataStore()
+        let dueDate = utcDate(2026, 9, 1)
+        var original = makeTask(frequency: .weekly)
+        original.scheduledOverrideDate = dueDate
+        dataStore.tasks = [original]
+
+        var edited = original
+        edited.frequency = .unscheduled
+        edited.scheduledWeekdays = []
+        edited.scheduledOverrideDate = dueDate
+        await dataStore.updateTask(edited)
+
+        XCTAssertEqual(dataStore.tasks.first?.frequency, .unscheduled)
+        XCTAssertEqual(dataStore.tasks.first?.scheduledOverrideDate, dueDate)
+        XCTAssertEqual(dataStore.tasks.first?.nextOccurrence(calendar: utc), utc.startOfDay(for: dueDate))
+    }
+
     // MARK: - rescheduleTask (the drag-to-reschedule entry point)
 
     func testRescheduleTaskSetsOverrideForDifferentDay() async {
@@ -244,6 +262,23 @@ final class DataStoreTests: XCTestCase {
             ["daily"]
         )
         XCTAssertNil(dataStore.tasks.first?.scheduledOverrideDate)
+    }
+
+    func testUndoOneTimeCompletionRestoresItsDueDate() async throws {
+        let dataStore = DataStore()
+        var task = try XCTUnwrap(makeOnboardingCustomTask(named: "Call the landlord"))
+        let dueDate = Calendar.current.startOfDay(for: Date())
+        task.scheduledOverrideDate = dueDate
+        dataStore.tasks = [task]
+
+        await dataStore.completeTask(task)
+        let completion = try XCTUnwrap(dataStore.completions.first)
+        XCTAssertEqual(completion.oneTimeDueDate, dueDate)
+
+        await dataStore.uncompleteTask(completion)
+
+        XCTAssertEqual(dataStore.tasks.first?.scheduledOverrideDate, dueDate)
+        XCTAssertTrue(dataStore.tasks.first?.isDue == true)
     }
 
     func testRoomGroupingDeduplicatesCaseAndDiacriticVariants() {

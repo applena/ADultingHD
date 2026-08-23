@@ -698,6 +698,10 @@ struct TaskCompletion: Codable, Identifiable {
     /// in-the-period gate, so no other completion in the same period carries it).
     var periodBonuses: [String: Int]?
 
+    /// The one-time due date cleared by this completion, retained so undo can
+    /// restore an unscheduled task to the exact planning state it had before.
+    var oneTimeDueDate: Date? = nil
+
     /// XP this completion contributed, including any streak bonus. Excludes
     /// `periodBonuses` (those are added straight to `profile.totalXP`, not
     /// attributed to a single task) — the canonical sum wherever a single

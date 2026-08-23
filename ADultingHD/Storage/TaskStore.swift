@@ -190,8 +190,12 @@ actor TaskStore {
         sourceFields: [StoredTaskPlanningFields],
         metadata: [TaskPlanningMetadata]
     ) -> [HouseholdTask] {
-        let sourceByID = Dictionary(uniqueKeysWithValues: sourceFields.map { ($0.id, $0) })
-        let metadataByID = Dictionary(uniqueKeysWithValues: metadata.map { ($0.id, $0) })
+        let sourceByID = sourceFields.reduce(into: [UUID: StoredTaskPlanningFields]()) { result, fields in
+            if result[fields.id] == nil { result[fields.id] = fields }
+        }
+        let metadataByID = metadata.reduce(into: [UUID: TaskPlanningMetadata]()) { result, fields in
+            if result[fields.id] == nil { result[fields.id] = fields }
+        }
 
         return tasks.map { task in
             guard let source = sourceByID[task.id], let saved = metadataByID[task.id] else {
@@ -352,6 +356,10 @@ actor TaskStore {
     func importBackup(from data: Data, householdId: UUID) -> Bool {
         guard let backup = try? decoder.decode(AppBackup.self, from: data) else {
             logger.error("Failed to decode backup")
+            return false
+        }
+        guard Set(backup.tasks.map(\.id)).count == backup.tasks.count else {
+            logger.error("Rejected backup with duplicate task IDs")
             return false
         }
         saveTasks(backup.tasks, for: householdId)

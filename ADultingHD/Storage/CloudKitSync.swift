@@ -1110,6 +1110,7 @@ extension TaskCompletion {
         r["streakBonus"] = streakBonus as CKRecordValue
         r["notes"]       = notes as CKRecordValue?
         r["profileId"]   = profileId?.uuidString as CKRecordValue?
+        r["oneTimeDueDate"] = oneTimeDueDate as CKRecordValue?
         return r
     }
 
@@ -1133,6 +1134,7 @@ extension TaskCompletion {
         self.streakBonus = streakBonus
         self.notes = record["notes"] as? String
         self.profileId = (record["profileId"] as? String).flatMap(UUID.init)
+        self.oneTimeDueDate = record["oneTimeDueDate"] as? Date
     }
 }
 

@@ -50,7 +50,8 @@ to Production before shipping a build that writes them. Also deploy
 `planningSchemaVersion`, `legacyCategorySnapshot`, and
 `legacyFrequencySnapshot`; the snapshots identify later legacy-client edits so
 the additive fields cannot shadow a room or schedule change made by an older
-build.
+build. Deploy the optional `TaskCompletion.oneTimeDueDate` field as well; it
+lets completion undo restore a one-time task's prior due date exactly.
 
 The iCloud Documents path uses the same compatibility principle for its
 whole-file `tasks.json` sync. New builds also write `task_planning.json`, a

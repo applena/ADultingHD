@@ -250,11 +250,13 @@ final class CloudKitRecordTests: XCTestCase {
 
     func testCompletionRoundTrip() {
         let profileId = UUID()
+        let oneTimeDueDate = Date(timeIntervalSince1970: 1_699_900_000)
         let completion = TaskCompletion(
             id: UUID(), taskId: UUID(), taskName: "Vacuum living room",
             completedAt: Date(timeIntervalSince1970: 1_700_000_000),
             xpEarned: 25, streakBonus: 5, notes: "Did the stairs too",
-            profileId: profileId
+            profileId: profileId,
+            oneTimeDueDate: oneTimeDueDate
         )
         let record = completion.toCKRecord(zone: zone)
         guard let decoded = TaskCompletion(from: record) else {
@@ -268,6 +270,7 @@ final class CloudKitRecordTests: XCTestCase {
         XCTAssertEqual(decoded.streakBonus, completion.streakBonus)
         XCTAssertEqual(decoded.notes, completion.notes)
         XCTAssertEqual(decoded.profileId, profileId)
+        XCTAssertEqual(decoded.oneTimeDueDate, oneTimeDueDate)
     }
 
     func testCompletionRoundTrip_nilOptionals() {

@@ -148,4 +148,30 @@ final class StorageTests: XCTestCase {
         XCTAssertEqual(loadedTasks.last?.frequency, .unscheduled)
         XCTAssertEqual(loadedProfile.totalXP, 250)
     }
+
+    func testImportRejectsDuplicateTaskIDs() async throws {
+        let store = TaskStore()
+        let householdId = UUID()
+        let task = HouseholdTask(
+            id: UUID(), name: "Duplicate", description: "",
+            category: .general, frequency: .unscheduled, estimatedMinutes: 15,
+            difficulty: .medium, supplies: [], isActive: true
+        )
+        let backup = TaskStore.AppBackup(
+            version: 1,
+            exported: ISO8601DateFormatter().string(from: Date()),
+            tasks: [task, task],
+            profile: UserProfile(),
+            completions: []
+        )
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+
+        let imported = await store.importBackup(
+            from: try encoder.encode(backup),
+            householdId: householdId
+        )
+
+        XCTAssertFalse(imported)
+    }
 }

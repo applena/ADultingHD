@@ -486,7 +486,8 @@ final class DataStore {
             // finishing someone else's assigned chore is credited to
             // themselves. This naturally equals `defaultAssigneeId` in the
             // common case where the assignee is the one completing it.
-            profileId: profile.id
+            profileId: profile.id,
+            oneTimeDueDate: task.frequency == .unscheduled ? task.scheduledOverrideDate : nil
         )
 
         completions.insert(completion, at: 0)
@@ -593,6 +594,12 @@ final class DataStore {
         if let taskIdx = tasks.firstIndex(where: { $0.id == completion.taskId }) {
             let lastRemaining = completions.filter { $0.taskId == completion.taskId }.map(\.completedAt).max()
             tasks[taskIdx].lastCompleted = lastRemaining
+            let hasLaterCompletion = completions.contains {
+                $0.taskId == completion.taskId && $0.completedAt > completion.completedAt
+            }
+            if tasks[taskIdx].frequency == .unscheduled && !hasLaterCompletion {
+                tasks[taskIdx].scheduledOverrideDate = completion.oneTimeDueDate
+            }
             syncReminder(for: tasks[taskIdx])
         }
 
@@ -801,12 +808,13 @@ final class DataStore {
                 if updated.lastCompleted == nil {
                     updated.createdAt = Date()
                 }
-                // A real schedule edit supersedes any pending manual
-                // reschedule — otherwise a stale `scheduledOverrideDate`
-                // would keep winning over the newly-edited schedule (see
-                // `Recurrence.nextOccurrence`) until the task next
-                // completes, making the edit silently appear to do nothing.
-                updated.scheduledOverrideDate = nil
+                // A recurring schedule edit supersedes any prior manual
+                // reschedule. An unscheduled target may intentionally carry
+                // an override as its one-time due date, including the same
+                // date a recurring task was already manually moved to.
+                if updated.frequency != .unscheduled {
+                    updated.scheduledOverrideDate = nil
+                }
             }
             tasks[idx] = updated
             registerPersonalTaskOwnership(

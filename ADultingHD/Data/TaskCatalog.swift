@@ -87,11 +87,7 @@ func onboardingCatalogTask(named name: String) -> CatalogTask? {
 
 /// Creates a lightweight custom task from the onboarding search composer.
 /// Users can refine its schedule and details from the task editor later.
-func makeOnboardingCustomTask(
-    named name: String,
-    category: TaskCategory = .general,
-    frequency: TaskFrequency = .unscheduled
-) -> HouseholdTask? {
+func makeOnboardingCustomTask(named name: String) -> HouseholdTask? {
     let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmedName.isEmpty else { return nil }
 
@@ -99,8 +95,8 @@ func makeOnboardingCustomTask(
         id: UUID(),
         name: trimmedName,
         description: "",
-        category: category,
-        frequency: frequency,
+        category: .general,
+        frequency: .unscheduled,
         estimatedMinutes: 15,
         difficulty: .medium,
         supplies: [],
