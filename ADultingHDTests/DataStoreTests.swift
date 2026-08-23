@@ -32,6 +32,23 @@ final class DataStoreTests: XCTestCase {
         return task
     }
 
+    func testMergeCloudTasksPreservesLocalRecurrenceMetadata() {
+        let createdAt = utcDate(2024, 3, 4)
+        var localTask = makeTask(createdAt: createdAt)
+        localTask.scheduledOverrideDate = utcDate(2024, 3, 6)
+
+        var cloudTask = localTask
+        cloudTask.name = "Cloud name"
+        cloudTask.createdAt = Date(timeIntervalSince1970: 1_800_000_000)
+        cloudTask.scheduledOverrideDate = nil
+
+        let merged = DataStore.mergeCloudTasks([cloudTask], preserving: [localTask])
+
+        XCTAssertEqual(merged.first?.name, "Cloud name")
+        XCTAssertEqual(merged.first?.createdAt, createdAt)
+        XCTAssertEqual(merged.first?.scheduledOverrideDate, localTask.scheduledOverrideDate)
+    }
+
     // `completeTask`'s daily/weekly/monthly consistency bonuses gate on
     // "already awarded" flags in the real `UserDefaults.standard` (there's
     // no injectable store), keyed by today's/this week's/this month's date —

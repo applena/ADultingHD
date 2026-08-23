@@ -50,8 +50,6 @@ final class CloudKitRecordTests: XCTestCase {
         task.defaultAssigneeId = assigneeId
         task.scheduledWeekdays = [2, 6]
         task.checklist = checklist
-        task.createdAt = Date(timeIntervalSince1970: 1_700_000_000)
-        task.scheduledOverrideDate = Date(timeIntervalSince1970: 1_700_500_000)
 
         let record = task.toCKRecord(zone: zone)
         guard let decoded = HouseholdTask(from: record) else {
@@ -65,8 +63,6 @@ final class CloudKitRecordTests: XCTestCase {
         XCTAssertEqual(decoded.checklist.count, 2)
         XCTAssertEqual(decoded.checklist[0].text, "Step 1")
         XCTAssertEqual(decoded.checklist[1].instructions, "Then that")
-        XCTAssertEqual(decoded.createdAt, task.createdAt)
-        XCTAssertEqual(decoded.scheduledOverrideDate, task.scheduledOverrideDate)
     }
 
     func testTaskRoundTrip_monthlyScheduledDay() {
@@ -94,7 +90,7 @@ final class CloudKitRecordTests: XCTestCase {
         XCTAssertEqual(decoded?.scheduledMonth, 4)
     }
 
-    func testTaskRoundTrip_scheduledOverrideDate() {
+    func testTaskRecord_omitsScheduledOverrideDate() {
         var task = HouseholdTask(
             id: UUID(), name: "Vacuum", description: "",
             category: .livingRoom, frequency: .weekly, estimatedMinutes: 15,
@@ -104,8 +100,7 @@ final class CloudKitRecordTests: XCTestCase {
         task.scheduledOverrideDate = Date(timeIntervalSince1970: 1_700_500_000)
 
         let decoded = HouseholdTask(from: task.toCKRecord(zone: zone))
-        XCTAssertEqual(decoded?.scheduledOverrideDate, task.scheduledOverrideDate)
-        // The override doesn't displace the recurring schedule it's synced alongside.
+        XCTAssertNil(decoded?.scheduledOverrideDate)
         XCTAssertEqual(decoded?.scheduledWeekdays, [Weekday.monday.rawValue])
     }
 
@@ -137,7 +132,7 @@ final class CloudKitRecordTests: XCTestCase {
         XCTAssertEqual(task.toCKRecord(zone: zone).recordID.recordName, id.uuidString)
     }
 
-    func testTaskRecord_preservesRecurrenceMetadataWithoutCustomFields() {
+    func testTaskRecord_omitsUndeployedRecurrenceFields() {
         var task = HouseholdTask(
             id: UUID(), name: "Test", description: "", category: .general,
             frequency: .weekly, estimatedMinutes: 10, difficulty: .easy,
@@ -151,8 +146,7 @@ final class CloudKitRecordTests: XCTestCase {
 
         XCTAssertNil(record["createdAt"])
         XCTAssertNil(record["scheduledOverrideDate"])
-        XCTAssertEqual(decoded?.createdAt, task.createdAt)
-        XCTAssertEqual(decoded?.scheduledOverrideDate, task.scheduledOverrideDate)
+        XCTAssertNil(decoded?.scheduledOverrideDate)
     }
 
     func testTaskDecode_readsLegacyChecklistArray() throws {

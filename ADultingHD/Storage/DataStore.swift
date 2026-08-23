@@ -1322,7 +1322,7 @@ final class DataStore {
         // Merge tasks: union by ID, keeping local custom tasks not in cloud
         let cloudTaskIds = Set(payload.tasks.map(\.id))
         let localOnly = tasks.filter { !cloudTaskIds.contains($0.id) }
-        tasks = payload.tasks + localOnly
+        tasks = Self.mergeCloudTasks(payload.tasks, preserving: tasks) + localOnly
 
         // Merge completions: union by ID
         let newCompletions = payload.completions.filter { !preCompletionIDs.contains($0.id) }
@@ -1352,6 +1352,31 @@ final class DataStore {
 
         detectHouseholdChanges(preProfiles: preProfiles, preCompletionIDs: preCompletionIDs, preRank: preRank)
         detectNameClashInJoinedHouseholds()
+    }
+
+    /// CloudKit's production schema predates the local-only recurrence fields.
+    /// Keep those values for tasks already known on this device while taking
+    /// the cloud record as the source of truth for the shared task fields.
+    /// A newly joined device has no local anchor and therefore uses the
+    /// server-managed record creation date from `HouseholdTask.init(from:)`.
+    static func mergeCloudTasks(
+        _ cloudTasks: [HouseholdTask],
+        preserving localTasks: [HouseholdTask]
+    ) -> [HouseholdTask] {
+        let localByID = localTasks.reduce(into: [UUID: HouseholdTask]()) { result, task in
+            result[task.id] = task
+        }
+        return cloudTasks.map { cloudTask in
+            guard let localTask = localByID[cloudTask.id] else { return cloudTask }
+            var merged = cloudTask
+            if cloudTask.lastCompleted == nil, localTask.lastCompleted == nil {
+                merged.createdAt = localTask.createdAt
+            }
+            if cloudTask.scheduledOverrideDate == nil {
+                merged.scheduledOverrideDate = localTask.scheduledOverrideDate
+            }
+            return merged
+        }
     }
 
     private func detectHouseholdChanges(preProfiles: [UserProfile], preCompletionIDs: Set<UUID>, preRank: Int?) {
