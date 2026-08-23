@@ -96,13 +96,17 @@ struct CloudShareSheet: View {
     /// closed" so onboarding can update its UI without waiting on a dismissal
     /// that may never trigger the same delegate callback.
     var onShareSaved: () -> Void = {}
+    /// Fired when sharing is stopped or fails before the presentation
+    /// dismissal callback, so a prior save cannot be treated as successful.
+    var onShareInvalidated: () -> Void = {}
     let onDismiss: () -> Void
 
     var body: some View {
         #if os(iOS)
         CloudShareSheetIOS(
             share: share, container: container, householdName: householdName,
-            onShareSaved: onShareSaved, onDismiss: onDismiss
+            onShareSaved: onShareSaved, onShareInvalidated: onShareInvalidated,
+            onDismiss: onDismiss
         )
         .ignoresSafeArea()
         #else
@@ -118,10 +122,16 @@ private struct CloudShareSheetIOS: UIViewControllerRepresentable {
     let container: CKContainer
     let householdName: String
     let onShareSaved: () -> Void
+    let onShareInvalidated: () -> Void
     let onDismiss: () -> Void
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(householdName: householdName, onShareSaved: onShareSaved, onDismiss: onDismiss)
+        Coordinator(
+            householdName: householdName,
+            onShareSaved: onShareSaved,
+            onShareInvalidated: onShareInvalidated,
+            onDismiss: onDismiss
+        )
     }
 
     func makeUIViewController(context: Context) -> UICloudSharingController {
@@ -135,11 +145,18 @@ private struct CloudShareSheetIOS: UIViewControllerRepresentable {
     final class Coordinator: NSObject, UICloudSharingControllerDelegate {
         let householdName: String
         let onShareSaved: () -> Void
+        let onShareInvalidated: () -> Void
         let onDismiss: () -> Void
 
-        init(householdName: String, onShareSaved: @escaping () -> Void, onDismiss: @escaping () -> Void) {
+        init(
+            householdName: String,
+            onShareSaved: @escaping () -> Void,
+            onShareInvalidated: @escaping () -> Void,
+            onDismiss: @escaping () -> Void
+        ) {
             self.householdName = householdName
             self.onShareSaved = onShareSaved
+            self.onShareInvalidated = onShareInvalidated
             self.onDismiss = onDismiss
         }
 
@@ -173,10 +190,12 @@ private struct CloudShareSheetIOS: UIViewControllerRepresentable {
         }
 
         func cloudSharingControllerDidStopSharing(_ csc: UICloudSharingController) {
+            onShareInvalidated()
             onDismiss()
         }
 
         func cloudSharingController(_ csc: UICloudSharingController, failedToSaveShareWithError error: Error) {
+            onShareInvalidated()
             onDismiss()
         }
     }

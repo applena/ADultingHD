@@ -1434,7 +1434,7 @@ final class DataStore {
 
         // Personal tasks are intentionally local-only. Keep a local personal
         // copy, while a UUID-only CloudKit marker removes any stale shared
-        // copy from this device without exposing its private details.
+        // copy from this device without exposing the task's private details.
         let localPersonalTaskIDs = Set(tasks.filter(\.isPersonal).map(\.id))
         let cloudPersonalTaskIDs = payload.personalTaskIDs
             .union(payload.tasks.filter(\.isPersonal).map(\.id))
@@ -1455,7 +1455,7 @@ final class DataStore {
                     || task.isPersonal
                     || releasedPersonalTaskIDs.contains(task.id))
         }
-        tasks = sharedCloudTasks + localOnly
+        tasks = Self.mergeCloudTasks(sharedCloudTasks, preserving: tasks) + localOnly
 
         // Merge completions: union by ID
         let personalTaskIDs = localPersonalTaskIDs.union(cloudPersonalTaskIDs)
@@ -1490,6 +1490,31 @@ final class DataStore {
 
         detectHouseholdChanges(preProfiles: preProfiles, preCompletionIDs: preCompletionIDs, preRank: preRank)
         detectNameClashInJoinedHouseholds()
+    }
+
+    /// CloudKit's production schema predates the local-only recurrence fields.
+    /// Keep those values for tasks already known on this device while taking
+    /// the cloud record as the source of truth for the shared task fields.
+    /// A newly joined device has no local anchor and therefore uses the
+    /// server-managed record creation date from `HouseholdTask.init(from:)`.
+    static func mergeCloudTasks(
+        _ cloudTasks: [HouseholdTask],
+        preserving localTasks: [HouseholdTask]
+    ) -> [HouseholdTask] {
+        let localByID = localTasks.reduce(into: [UUID: HouseholdTask]()) { result, task in
+            result[task.id] = task
+        }
+        return cloudTasks.map { cloudTask in
+            guard let localTask = localByID[cloudTask.id] else { return cloudTask }
+            var merged = cloudTask
+            if cloudTask.lastCompleted == nil, localTask.lastCompleted == nil {
+                merged.createdAt = localTask.createdAt
+            }
+            if cloudTask.scheduledOverrideDate == nil {
+                merged.scheduledOverrideDate = localTask.scheduledOverrideDate
+            }
+            return merged
+        }
     }
 
     private func detectHouseholdChanges(preProfiles: [UserProfile], preCompletionIDs: Set<UUID>, preRank: Int?) {

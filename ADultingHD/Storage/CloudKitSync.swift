@@ -365,7 +365,36 @@ final class CloudKitSync: ObservableObject {
             let saves = Array(records[saveOffset..<(saveOffset + savesInBatch)])
             let deletes = Array(recordIDs[deleteOffset..<(deleteOffset + deletesInBatch)])
             do {
-                _ = try await db.modifyRecords(saving: saves, deleting: deletes)
+                let results = try await db.modifyRecords(
+                    saving: saves,
+                    deleting: deletes,
+                    savePolicy: .changedKeys,
+                    atomically: false
+                )
+                var failures: [String] = []
+                for record in saves {
+                    guard let result = results.saveResults[record.recordID] else {
+                        failures.append("save \(record.recordID.recordName): no result returned")
+                        continue
+                    }
+                    if case .failure(let error) = result {
+                        failures.append("save \(record.recordID.recordName): \(error.localizedDescription)")
+                    }
+                }
+                for recordID in deletes {
+                    guard let result = results.deleteResults[recordID] else {
+                        failures.append("delete \(recordID.recordName): no result returned")
+                        continue
+                    }
+                    if case .failure(let error) = result {
+                        failures.append("delete \(recordID.recordName): \(error.localizedDescription)")
+                    }
+                }
+                guard failures.isEmpty else {
+                    throw CloudKitSyncError.shareCreationFailed(
+                        detail: "CloudKit task sync failed: \(failures.joined(separator: " | "))"
+                    )
+                }
             } catch {
                 logger.error("☁️ Push failed: \(error.localizedDescription)")
                 syncError = error.localizedDescription
@@ -404,6 +433,15 @@ final class CloudKitSync: ObservableObject {
                 }
                 if case .failure(let error) = result {
                     failures.append("\(record.recordID.recordName): \(error.localizedDescription)")
+                }
+            }
+            for recordID in recordIDs {
+                guard let result = results.deleteResults[recordID] else {
+                    failures.append("delete \(recordID.recordName): no result returned")
+                    continue
+                }
+                if case .failure(let error) = result {
+                    failures.append("delete \(recordID.recordName): \(error.localizedDescription)")
                 }
             }
             guard failures.isEmpty else {
@@ -882,7 +920,6 @@ extension HouseholdTask {
         r["supplies"]         = supplies as CKRecordValue
         r["isActive"]         = (isActive ? 1 : 0) as CKRecordValue
         r["lastCompleted"]    = lastCompleted as CKRecordValue?
-        r["createdAt"]        = createdAt as CKRecordValue?
         r["defaultAssigneeId"] = defaultAssigneeId?.uuidString as CKRecordValue?
         // Personal tasks are filtered before upload. Keep the field available
         // for defensive round-trips, but omit the false value so existing
@@ -894,7 +931,6 @@ extension HouseholdTask {
         r["scheduledDayOfMonth"] = scheduledDayOfMonth as CKRecordValue?
         r["scheduledMonth"] = scheduledMonth as CKRecordValue?
         r["checklist"] = checklist.isEmpty ? nil : (try? sharedJSONEncoder.encode(checklist)) as CKRecordValue?
-        r["scheduledOverrideDate"] = scheduledOverrideDate as CKRecordValue?
         return r
     }
 
@@ -921,7 +957,10 @@ extension HouseholdTask {
         self.supplies = record["supplies"] as? [String] ?? []
         self.isActive = (record["isActive"] as? Int ?? 1) == 1
         self.lastCompleted = record["lastCompleted"] as? Date
-        self.createdAt = record["createdAt"] as? Date ?? Date()
+        // `createdAt` and `scheduledOverrideDate` are local model fields that
+        // are absent from the deployed production schema. Ignore any legacy
+        // copies so stale Development values cannot resurrect cleared edits.
+        self.createdAt = record.creationDate ?? Date()
         self.defaultAssigneeId = (record["defaultAssigneeId"] as? String).flatMap(UUID.init)
         self.isPersonal = (record["isPersonal"] as? Int ?? 0) == 1
         self.scheduledWeekdays = record["scheduledWeekdays"] as? [Int] ?? []
@@ -933,7 +972,7 @@ extension HouseholdTask {
         } else {
             self.checklist = []
         }
-        self.scheduledOverrideDate = record["scheduledOverrideDate"] as? Date
+        self.scheduledOverrideDate = nil
     }
 }
 

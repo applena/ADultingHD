@@ -93,7 +93,7 @@ final class CloudKitRecordTests: XCTestCase {
         XCTAssertEqual(decoded?.scheduledMonth, 4)
     }
 
-    func testTaskRoundTrip_scheduledOverrideDate() {
+    func testTaskRecord_omitsScheduledOverrideDate() {
         var task = HouseholdTask(
             id: UUID(), name: "Vacuum", description: "",
             category: .livingRoom, frequency: .weekly, estimatedMinutes: 15,
@@ -103,8 +103,7 @@ final class CloudKitRecordTests: XCTestCase {
         task.scheduledOverrideDate = Date(timeIntervalSince1970: 1_700_500_000)
 
         let decoded = HouseholdTask(from: task.toCKRecord(zone: zone))
-        XCTAssertEqual(decoded?.scheduledOverrideDate, task.scheduledOverrideDate)
-        // The override doesn't displace the recurring schedule it's synced alongside.
+        XCTAssertNil(decoded?.scheduledOverrideDate)
         XCTAssertEqual(decoded?.scheduledWeekdays, [Weekday.monday.rawValue])
     }
 
@@ -144,6 +143,38 @@ final class CloudKitRecordTests: XCTestCase {
         XCTAssertNotEqual(record.recordID.recordName, id.uuidString)
         XCTAssertEqual(PersonalTaskTombstone.taskID(from: record), id)
         XCTAssertNil(PersonalTaskTombstone.taskID(from: CKRecord(recordType: RecordType.task)))
+    }
+
+    func testTaskRecord_omitsUndeployedRecurrenceFields() {
+        var task = HouseholdTask(
+            id: UUID(), name: "Test", description: "", category: .general,
+            frequency: .weekly, estimatedMinutes: 10, difficulty: .easy,
+            supplies: [], isActive: true
+        )
+        task.createdAt = Date(timeIntervalSince1970: 1_700_000_000)
+        task.scheduledOverrideDate = Date(timeIntervalSince1970: 1_700_500_000)
+
+        let record = task.toCKRecord(zone: zone)
+        let decoded = HouseholdTask(from: record)
+
+        XCTAssertNil(record["createdAt"])
+        XCTAssertNil(record["scheduledOverrideDate"])
+        XCTAssertNil(decoded?.scheduledOverrideDate)
+    }
+
+    func testTaskDecode_readsLegacyChecklistArray() throws {
+        let task = HouseholdTask(
+            id: UUID(), name: "Test", description: "", category: .general,
+            frequency: .weekly, estimatedMinutes: 10, difficulty: .easy,
+            supplies: [], isActive: true
+        )
+        let record = task.toCKRecord(zone: zone)
+        let checklist = [ChecklistItem(text: "Step 1")]
+        record["checklist"] = try JSONEncoder().encode(checklist) as CKRecordValue
+
+        let decoded = try XCTUnwrap(HouseholdTask(from: record))
+
+        XCTAssertEqual(decoded.checklist, checklist)
     }
 
     // MARK: - TaskCompletion

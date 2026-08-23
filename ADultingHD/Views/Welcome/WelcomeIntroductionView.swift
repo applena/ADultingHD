@@ -89,6 +89,11 @@ struct WelcomeOnboardingFlow {
         move(to: shouldInvite ? .playerName : .suggestions)
     }
 
+    mutating func markInviteSent() {
+        guard current == .invite else { return }
+        move(to: .suggestions)
+    }
+
     mutating func markInviteAccepted(_ household: Household) {
         route = .joined(
             householdID: household.id,
@@ -182,12 +187,13 @@ struct WelcomeIntroductionView: View {
                 updateFlow { $0.start(routeFromStore) }
             }
         }
-        .sheet(item: sharePresentation.payloadBinding) { payload in
+        .sheet(item: sharePresentation.payloadBinding, onDismiss: handleSharePresentationDismissed) { payload in
             CloudShareSheet(
                 share: payload.share,
                 container: payload.container,
                 householdName: payload.householdName,
                 onShareSaved: { hasSentInvite = true },
+                onShareInvalidated: { hasSentInvite = false },
                 onDismiss: sharePresentation.dismiss
             )
         }
@@ -564,6 +570,15 @@ struct WelcomeIntroductionView: View {
 
     private func answerInvitation(_ shouldInvite: Bool) {
         updateFlow { $0.answerInvitation(shouldInvite) }
+    }
+
+    private func handleSharePresentationDismissed() {
+        let shouldAdvance = hasSentInvite && flow.current == .invite
+        hasSentInvite = false
+        sharePresentation.dismiss()
+        if shouldAdvance {
+            updateFlow { $0.markInviteSent() }
+        }
     }
 
     private func handlePrimaryAction() {
