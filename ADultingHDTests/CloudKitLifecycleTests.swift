@@ -31,7 +31,9 @@ final class CloudKitLifecycleTests: XCTestCase {
         household.shareRecordName = "cloudkit.share.record"
         let personalTaskID = UUID()
         let releasedTaskID = UUID()
+        let cloudTaskID = UUID()
         household.personalTaskIDs = [personalTaskID]
+        household.cloudPersonalTaskIDs = [cloudTaskID]
         household.pendingPersonalTaskReleases = [releasedTaskID]
 
         let encoded = try JSONEncoder().encode(household)
@@ -40,6 +42,7 @@ final class CloudKitLifecycleTests: XCTestCase {
         XCTAssertEqual(decoded.shareRecordName, household.shareRecordName)
         XCTAssertEqual(decoded.zoneName, household.zoneName)
         XCTAssertEqual(decoded.personalTaskIDs, Set([personalTaskID]))
+        XCTAssertEqual(decoded.cloudPersonalTaskIDs, Set([cloudTaskID]))
         XCTAssertEqual(decoded.pendingPersonalTaskReleases, Set([releasedTaskID]))
     }
 
@@ -85,6 +88,7 @@ final class CloudKitLifecycleTests: XCTestCase {
         XCTAssertFalse(decoded.ownerIsCurrentUser)
         XCTAssertEqual(decoded.ownerUserRecordName, "owner")
         XCTAssertTrue(decoded.personalTaskIDs.isEmpty)
+        XCTAssertTrue(decoded.cloudPersonalTaskIDs.isEmpty)
         XCTAssertTrue(decoded.pendingPersonalTaskReleases.isEmpty)
     }
 }
