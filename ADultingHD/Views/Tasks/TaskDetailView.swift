@@ -85,7 +85,7 @@ struct TaskDetailView: View {
             HStack(alignment: .top) {
                 Image(systemName: task.category.icon)
                     .font(.largeTitle)
-                    .foregroundStyle(Theme.categoryColor(task.category))
+                    .foregroundStyle(Theme.roomColor(task.room))
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(task.name)
@@ -142,6 +142,7 @@ struct TaskDetailView: View {
 
     private func frequencyDisplay(for task: HouseholdTask) -> String {
         if let summary = task.scheduleSummary {
+            if task.frequency == .unscheduled { return "One time · \(summary)" }
             return "\(task.frequency.rawValue) · \(summary)"
         }
         return task.frequency.rawValue
@@ -307,6 +308,8 @@ struct FrequencyPickerSheet: View {
     @State private var weekdays: Set<Int>
     @State private var dayOfMonth: Int
     @State private var month: Int
+    @State private var hasOneTimeDueDate: Bool
+    @State private var oneTimeDueDate: Date
 
     init(task: HouseholdTask) {
         self.task = task
@@ -315,6 +318,8 @@ struct FrequencyPickerSheet: View {
         self._weekdays = State(initialValue: Set(initialWeekdays))
         self._dayOfMonth = State(initialValue: task.scheduledDayOfMonth ?? 1)
         self._month = State(initialValue: task.scheduledMonth ?? 1)
+        self._hasOneTimeDueDate = State(initialValue: task.frequency == .unscheduled && task.scheduledOverrideDate != nil)
+        self._oneTimeDueDate = State(initialValue: task.scheduledOverrideDate ?? Date())
     }
 
     var body: some View {
@@ -329,6 +334,13 @@ struct FrequencyPickerSheet: View {
                     .pickerStyle(.inline)
                     .labelsHidden()
                     .onChange(of: selected) { _, new in applyDefaults(for: new) }
+
+                    if selected == .unscheduled {
+                        Toggle("Set a one-time due date", isOn: $hasOneTimeDueDate)
+                        if hasOneTimeDueDate {
+                            DatePicker("Due", selection: $oneTimeDueDate, displayedComponents: .date)
+                        }
+                    }
                 }
 
                 SchedulePickerSection(
@@ -359,13 +371,24 @@ struct FrequencyPickerSheet: View {
     }
 
     private var isUnchanged: Bool {
-        selected == task.frequency
+        let oneTimeDateIsUnchanged = selected != .unscheduled || (
+            hasOneTimeDueDate == (task.scheduledOverrideDate != nil)
+                && (!hasOneTimeDueDate || Calendar.current.isDate(
+                    oneTimeDueDate,
+                    inSameDayAs: task.scheduledOverrideDate ?? .distantPast
+                ))
+        )
+        return selected == task.frequency
             && Array(weekdays).sorted() == task.scheduledWeekdays.sorted()
             && (!selected.usesDayOfMonth || dayOfMonth == (task.scheduledDayOfMonth ?? -1))
             && (selected != .yearly || month == (task.scheduledMonth ?? -1))
+            && oneTimeDateIsUnchanged
     }
 
     private func applyDefaults(for freq: TaskFrequency) {
+        if freq != .unscheduled {
+            hasOneTimeDueDate = false
+        }
         if freq.weekdayCount > 0 && weekdays.count != freq.weekdayCount {
             weekdays = Set(freq.defaultWeekdays)
         }
@@ -386,6 +409,11 @@ struct FrequencyPickerSheet: View {
             updated.scheduledWeekdays = []
             updated.scheduledDayOfMonth = nil
             updated.scheduledMonth = nil
+        }
+        if selected == .unscheduled {
+            updated.scheduledOverrideDate = hasOneTimeDueDate
+                ? Calendar.current.startOfDay(for: oneTimeDueDate)
+                : nil
         }
         Task { await dataStore.updateTask(updated) }
         dismiss()

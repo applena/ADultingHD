@@ -52,6 +52,15 @@ to Production before shipping a build that writes them. Also deploy
 the additive fields cannot shadow a room or schedule change made by an older
 build.
 
+The iCloud Documents path uses the same compatibility principle for its
+whole-file `tasks.json` sync. New builds also write `task_planning.json`, a
+per-household sidecar containing the additive room/schedule values and their
+legacy fallbacks. If an older build rewrites `tasks.json` without the additive
+keys, a newer build restores unchanged planning values from the sidecar while
+still honoring an intentional edit to the legacy category or frequency field.
+Older builds ignore the sidecar, so it remains available across mixed-version
+device updates.
+
 ## Code map
 
 | File | Role |

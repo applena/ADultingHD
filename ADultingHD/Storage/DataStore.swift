@@ -174,10 +174,6 @@ final class DataStore {
 
     var todayXP: Int { todayCompletions.reduce(0) { $0 + $1.xpEarned + $1.streakBonus } }
 
-    var tasksByCategory: [TaskCategory: [HouseholdTask]] {
-        Dictionary(grouping: tasks, by: \.category)
-    }
-
     /// Optional spatial organization for screens that explicitly opt into a
     /// room view. Task-first screens should use `tasks` directly.
     var tasksByRoom: [String: [HouseholdTask]] {
@@ -472,6 +468,8 @@ final class DataStore {
 
     private func completeTaskWhileSerialized(_ task: HouseholdTask, notes: String?) async {
         refreshStreakState()
+        let completedTaskWasScheduled = task.nextOccurrence() != nil
+        let completedTaskWasRecurring = task.frequency != .unscheduled
         let streakBonus = UserProfile.streakBonusXP(for: profile.currentStreak)
         let xpEarned = task.xpReward
 
@@ -505,7 +503,11 @@ final class DataStore {
             notificationManager?.scheduleTaskReminder(for: tasks[idx])
         }
 
-        let periodBonuses = applyPeriodBonusesIfEarned(at: completion.completedAt)
+        let periodBonuses = applyPeriodBonusesIfEarned(
+            at: completion.completedAt,
+            completedTaskWasScheduled: completedTaskWasScheduled,
+            completedTaskWasRecurring: completedTaskWasRecurring
+        )
         let periodBonusTotal = periodBonuses.values.reduce(0, +)
         if periodBonusTotal > 0 {
             profile.totalXP += periodBonusTotal
@@ -1086,20 +1088,24 @@ final class DataStore {
     /// (rather than just a total) lets the caller attribute it to the
     /// triggering `TaskCompletion` via `TaskCompletion.periodBonuses`, which
     /// `uncompleteTask` needs to reverse this exactly later.
-    private func applyPeriodBonusesIfEarned(at date: Date) -> [String: Int] {
+    private func applyPeriodBonusesIfEarned(
+        at date: Date,
+        completedTaskWasScheduled: Bool,
+        completedTaskWasRecurring: Bool
+    ) -> [String: Int] {
         var bonuses: [String: Int] = [:]
 
-        if dueTasks.isEmpty {
+        if completedTaskWasScheduled && dueTasks.isEmpty {
             let xp = awardIfFirst(for: "daily", at: date, xp: dailyClearBonusXP)
             if xp > 0 { bonuses["daily"] = xp }
         }
 
-        if earnedWeeklyConsistencyBonus(at: date) {
+        if completedTaskWasRecurring && earnedWeeklyConsistencyBonus(at: date) {
             let xp = awardIfFirst(for: "weekly", at: date, xp: weeklyConsistencyBonusXP)
             if xp > 0 { bonuses["weekly"] = xp }
         }
 
-        if earnedMonthlyConsistencyBonus(at: date) {
+        if completedTaskWasRecurring && earnedMonthlyConsistencyBonus(at: date) {
             let xp = awardIfFirst(for: "monthly", at: date, xp: monthlyConsistencyBonusXP)
             if xp > 0 { bonuses["monthly"] = xp }
         }

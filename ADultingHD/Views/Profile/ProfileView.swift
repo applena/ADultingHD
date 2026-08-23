@@ -242,11 +242,14 @@ struct ProfileView: View {
     // MARK: - Room Breakdown
 
     private var categoryBreakdown: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        let rooms = dataStore.tasksByRoom.keys.sorted {
+            $0.localizedCaseInsensitiveCompare($1) == .orderedAscending
+        }
+        return VStack(alignment: .leading, spacing: 8) {
             Label("Tasks by Room", systemImage: "chart.bar")
                 .font(.headline)
 
-            ForEach(dataStore.tasksByRoom.keys.sorted(), id: \.self) { room in
+            ForEach(rooms, id: \.self) { room in
                 let tasks = dataStore.tasksByRoom[room] ?? []
                 let category = TaskCategory.legacyFallback(for: room)
                 let active = tasks.filter(\.isActive).count
@@ -254,7 +257,7 @@ struct ProfileView: View {
 
                 HStack(spacing: 8) {
                     Image(systemName: category.icon)
-                        .foregroundStyle(Theme.categoryColor(category))
+                        .foregroundStyle(Theme.roomColor(room))
                         .frame(width: 20)
                     Text(room)
                         .font(.subheadline)
@@ -263,10 +266,12 @@ struct ProfileView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     ProgressView(value: total > 0 ? Double(active) / Double(total) : 0)
-                        .tint(Theme.categoryColor(category))
+                        .tint(Theme.roomColor(room))
                         .frame(width: 60)
                 }
-                .accessibilityIdentifier("profile-room-\(room)")
+                .accessibilityIdentifier(
+                    room == rooms.last ? "profile-final-room-row" : "profile-room-\(room)"
+                )
             }
         }
         .card()

@@ -284,7 +284,7 @@ struct StatsView: View {
                         innerRadius: .ratio(0.5),
                         angularInset: 1.5
                     )
-                    .foregroundStyle(Theme.categoryColor(TaskCategory.legacyFallback(for: entry.room)))
+                    .foregroundStyle(Theme.roomColor(entry.room))
                     .cornerRadius(4)
                 }
                 .frame(height: 200)
@@ -292,10 +292,9 @@ struct StatsView: View {
                 // Legend
                 LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 6) {
                     ForEach(roomData, id: \.room) { entry in
-                        let category = TaskCategory.legacyFallback(for: entry.room)
                         HStack(spacing: 4) {
                             Circle()
-                                .fill(Theme.categoryColor(category))
+                                .fill(Theme.roomColor(entry.room))
                                 .frame(width: 8, height: 8)
                             Text(entry.room)
                                 .font(.caption)

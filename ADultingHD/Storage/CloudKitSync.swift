@@ -1055,7 +1055,7 @@ extension HouseholdTask {
         let difficulty = (record["difficulty"] as? Int).flatMap(Difficulty.init(rawValue:)) ?? .medium
         let preferredRoom = HouseholdTask.normalizedRoom(record["room"] as? String)
         let legacyCategory = record["category"] as? String
-        let legacyRoom = HouseholdTask.normalizedRoom(legacyCategory)
+        let legacyRoom = HouseholdTask.roomFromLegacyCategory(legacyCategory)
         let legacyCategorySnapshot = record["legacyCategorySnapshot"] as? String
         let legacyCategoryWasEdited = planningSchemaVersion > 0
             && legacyCategorySnapshot != nil

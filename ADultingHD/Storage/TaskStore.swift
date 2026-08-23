@@ -4,6 +4,38 @@ import os
 private let logger = Logger(subsystem: "net.shadowpuppet.ADultingHD", category: "TaskStore")
 
 actor TaskStore {
+    /// Sidecar fields that an older app build cannot decode or rewrite. The
+    /// snapshots distinguish an old client's deliberate legacy-field edit
+    /// from a routine whole-file rewrite that merely dropped additive keys.
+    struct TaskPlanningMetadata: Codable, Equatable {
+        let id: UUID
+        let room: String?
+        let scheduleFrequency: TaskFrequency
+        let legacyCategorySnapshot: String
+        let legacyFrequencySnapshot: String
+    }
+
+    struct StoredTaskPlanningFields: Decodable {
+        let id: UUID
+        let hasRoom: Bool
+        let hasScheduleFrequency: Bool
+        let category: String?
+        let frequency: String?
+
+        private enum CodingKeys: String, CodingKey {
+            case id, room, scheduleFrequency, category, frequency
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            id = try container.decode(UUID.self, forKey: .id)
+            hasRoom = container.contains(.room)
+            hasScheduleFrequency = container.contains(.scheduleFrequency)
+            category = try container.decodeIfPresent(String.self, forKey: .category)
+            frequency = try container.decodeIfPresent(String.self, forKey: .frequency)
+        }
+    }
+
     private let fileManager = FileManager.default
 
     private var documentsURL: URL {
@@ -113,16 +145,69 @@ actor TaskStore {
             logger.info("No saved tasks found for household \(householdId.uuidString, privacy: .public), starting empty")
             return []
         }
-        logger.info("Loaded \(tasks.count) tasks for household \(householdId.uuidString, privacy: .public)")
-        return tasks
+        let sourceFields = (try? decoder.decode([StoredTaskPlanningFields].self, from: data)) ?? []
+        let metadataLocal = scopedLocal("task_planning.json", householdId: householdId)
+        let metadataCloud = scopedCloud("task_planning.json", householdId: householdId)
+        let metadataURL = newerOf(cloud: metadataCloud, local: metadataLocal)
+        let metadata = (try? Data(contentsOf: metadataURL))
+            .flatMap { try? decoder.decode([TaskPlanningMetadata].self, from: $0) } ?? []
+        let restoredTasks = Self.restoringPlanningMetadata(
+            tasks,
+            sourceFields: sourceFields,
+            metadata: metadata
+        )
+        logger.info("Loaded \(restoredTasks.count) tasks for household \(householdId.uuidString, privacy: .public)")
+        return restoredTasks
     }
 
     func saveTasks(_ tasks: [HouseholdTask], for householdId: UUID) {
-        guard let data = try? encoder.encode(tasks) else { return }
+        let metadata = tasks.map { task in
+            TaskPlanningMetadata(
+                id: task.id,
+                room: HouseholdTask.normalizedRoom(task.room),
+                scheduleFrequency: task.frequency,
+                legacyCategorySnapshot: task.category.rawValue,
+                legacyFrequencySnapshot: task.frequency == .unscheduled
+                    ? TaskFrequency.weekly.rawValue
+                    : task.frequency.rawValue
+            )
+        }
+        guard let data = try? encoder.encode(tasks),
+              let metadataData = try? encoder.encode(metadata) else { return }
         let local = scopedLocal("tasks.json", householdId: householdId)
         let cloud = scopedCloud("tasks.json", householdId: householdId)
         dualWriteAt(data, local: local, cloud: cloud)
+        dualWriteAt(
+            metadataData,
+            local: scopedLocal("task_planning.json", householdId: householdId),
+            cloud: scopedCloud("task_planning.json", householdId: householdId)
+        )
         logger.info("Saved \(tasks.count) tasks for household \(householdId.uuidString, privacy: .public)")
+    }
+
+    static func restoringPlanningMetadata(
+        _ tasks: [HouseholdTask],
+        sourceFields: [StoredTaskPlanningFields],
+        metadata: [TaskPlanningMetadata]
+    ) -> [HouseholdTask] {
+        let sourceByID = Dictionary(uniqueKeysWithValues: sourceFields.map { ($0.id, $0) })
+        let metadataByID = Dictionary(uniqueKeysWithValues: metadata.map { ($0.id, $0) })
+
+        return tasks.map { task in
+            guard let source = sourceByID[task.id], let saved = metadataByID[task.id] else {
+                return task
+            }
+            var restored = task
+            let legacyCategoryWasEdited = source.category != saved.legacyCategorySnapshot
+            if !source.hasRoom && !legacyCategoryWasEdited {
+                restored.room = HouseholdTask.normalizedRoom(saved.room)
+            }
+            let legacyFrequencyWasEdited = source.frequency != saved.legacyFrequencySnapshot
+            if !source.hasScheduleFrequency && !legacyFrequencyWasEdited {
+                restored.frequency = saved.scheduleFrequency
+            }
+            return restored
+        }
     }
 
     // MARK: - Profile

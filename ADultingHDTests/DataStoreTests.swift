@@ -221,6 +221,31 @@ final class DataStoreTests: XCTestCase {
         XCTAssertFalse(dataStore.completions.contains { $0.taskId == unscheduledTask.id })
     }
 
+    func testCompletingOnlyUnscheduledWorkDoesNotAwardConsistencyBonuses() async throws {
+        let dataStore = DataStore()
+        let task = try XCTUnwrap(makeOnboardingCustomTask(named: "Organize someday"))
+        dataStore.tasks = [task]
+
+        await dataStore.completeTask(task)
+
+        XCTAssertNil(dataStore.completions.first?.periodBonuses)
+    }
+
+    func testCompletingOneTimeDueWorkAwardsOnlyTheDailyClearBonus() async throws {
+        let dataStore = DataStore()
+        var task = try XCTUnwrap(makeOnboardingCustomTask(named: "Call the landlord"))
+        task.scheduledOverrideDate = Date()
+        dataStore.tasks = [task]
+
+        await dataStore.completeTask(task)
+
+        XCTAssertEqual(
+            Set(dataStore.completions.first?.periodBonuses?.keys.map { $0 } ?? []),
+            ["daily"]
+        )
+        XCTAssertNil(dataStore.tasks.first?.scheduledOverrideDate)
+    }
+
     func testRoomGroupingDeduplicatesCaseAndDiacriticVariants() {
         let dataStore = DataStore()
         var first = makeTask()

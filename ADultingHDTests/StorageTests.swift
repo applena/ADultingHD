@@ -28,6 +28,55 @@ final class StorageTests: XCTestCase {
         XCTAssertTrue(loaded.first?.isPersonal == true)
     }
 
+    func testPlanningSidecarRestoresOlderWholeFileRewriteAndHonorsLegacyEdits() throws {
+        let id = UUID()
+        let sourceData = Data("""
+        [{"id":"\(id.uuidString)","category":"General","frequency":"Weekly"}]
+        """.utf8)
+        let sourceFields = try JSONDecoder().decode(
+            [TaskStore.StoredTaskPlanningFields].self,
+            from: sourceData
+        )
+        let metadata = [TaskStore.TaskPlanningMetadata(
+            id: id,
+            room: "Costume Closet",
+            scheduleFrequency: .unscheduled,
+            legacyCategorySnapshot: "General",
+            legacyFrequencySnapshot: "Weekly"
+        )]
+        let oldRewrite = HouseholdTask(
+            id: id, name: "Sort costumes", description: "",
+            category: .general, frequency: .weekly, estimatedMinutes: 15,
+            difficulty: .medium, supplies: [], isActive: true
+        )
+
+        let restored = TaskStore.restoringPlanningMetadata(
+            [oldRewrite], sourceFields: sourceFields, metadata: metadata
+        )
+
+        XCTAssertEqual(restored.first?.room, "Costume Closet")
+        XCTAssertEqual(restored.first?.frequency, .unscheduled)
+
+        let editedSourceData = Data("""
+        [{"id":"\(id.uuidString)","category":"Kitchen","frequency":"Monthly"}]
+        """.utf8)
+        let editedFields = try JSONDecoder().decode(
+            [TaskStore.StoredTaskPlanningFields].self,
+            from: editedSourceData
+        )
+        let oldClientEdit = HouseholdTask(
+            id: id, name: "Sort costumes", description: "",
+            category: .kitchen, frequency: .monthly, estimatedMinutes: 15,
+            difficulty: .medium, supplies: [], isActive: true
+        )
+        let preservedEdit = TaskStore.restoringPlanningMetadata(
+            [oldClientEdit], sourceFields: editedFields, metadata: metadata
+        )
+
+        XCTAssertEqual(preservedEdit.first?.room, "Kitchen")
+        XCTAssertEqual(preservedEdit.first?.frequency, .monthly)
+    }
+
     func testProfileRoundTrip() async {
         let store = TaskStore()
         var profile = UserProfile()

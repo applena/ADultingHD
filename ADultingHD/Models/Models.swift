@@ -366,10 +366,19 @@ struct HouseholdTask: Codable, Identifiable, Hashable {
     static func normalizedRoom(_ value: String?) -> String? {
         guard let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines),
               !trimmed.isEmpty,
-              trimmed.caseInsensitiveCompare(TaskCategory.general.rawValue) != .orderedSame,
               trimmed.caseInsensitiveCompare("No Room") != .orderedSame
         else { return nil }
         return trimmed
+    }
+
+    /// Converts the closed legacy category field to an optional room. Legacy
+    /// `General` meant no category, while an explicitly stored new `room` of
+    /// "General" is a valid user-entered context and must remain intact.
+    static func roomFromLegacyCategory(_ value: String?) -> String? {
+        guard let room = normalizedRoom(value),
+              room.caseInsensitiveCompare(TaskCategory.general.rawValue) != .orderedSame
+        else { return nil }
+        return room
     }
 
     /// Stable comparison identity for a freeform room. The stored spelling is
@@ -378,7 +387,7 @@ struct HouseholdTask: Codable, Identifiable, Hashable {
     static func roomIdentity(_ value: String?) -> String? {
         normalizedRoom(value)?.folding(
             options: [.caseInsensitive, .diacriticInsensitive],
-            locale: .current
+            locale: nil
         )
     }
 
@@ -512,7 +521,7 @@ struct HouseholdTask: Codable, Identifiable, Hashable {
     var scheduleSummary: String? {
         switch frequency {
         case .unscheduled:
-            return nil
+            return scheduledOverrideDate?.formatted(date: .abbreviated, time: .omitted)
         case .daily:
             return nil
         case .weekly, .biweekly, .twiceWeekly:
@@ -600,7 +609,7 @@ extension HouseholdTask {
             // Legacy JSON had only the closed TaskCategory field. Preserve an
             // unknown string as a custom room instead of rejecting the task.
             let legacyRoom = try container.decodeIfPresent(String.self, forKey: .category)
-            room = Self.normalizedRoom(legacyRoom)
+            room = Self.roomFromLegacyCategory(legacyRoom)
         }
         let preferredFrequency = try container.decodeIfPresent(String.self, forKey: .scheduleFrequency)
         let legacyFrequency = try container.decodeIfPresent(String.self, forKey: .frequency)

@@ -115,10 +115,6 @@ let onboardingRooms: [TaskCategory] = TaskCategory.allCases.filter {
     onboardingRecommendationNames[$0]?.isEmpty == false
 }
 
-/// A compact template subset retained for recommendation callers and tests.
-/// It does not preselect tasks or rooms in onboarding.
-let onboardingStarterCategories: Set<TaskCategory> = [.kitchen, .bathroom, .general]
-
 private let onboardingRecommendationNames: [TaskCategory: [String]] = [
     .kitchen: ["Wash dishes", "Wipe kitchen counters", "Scrub the kitchen sink"],
     .bathroom: ["Wipe bathroom sink and mirror", "Scrub the toilet", "Swap out bathroom towels"],

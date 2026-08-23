@@ -244,7 +244,7 @@ struct ScheduleView: View {
     private func batchSection(room: String, tasks: [HouseholdTask]) -> some View {
         let isExpanded = expandedRooms.contains(room)
         let category = TaskCategory.legacyFallback(for: room)
-        let catColor = Theme.categoryColor(category)
+        let catColor = Theme.roomColor(room)
 
         return VStack(alignment: .leading, spacing: 0) {
             Button {
@@ -368,7 +368,7 @@ struct ScheduleView: View {
                 let isReschedulable = task.frequency != .daily
                 let row = HStack(spacing: 8) {
                     Image(systemName: task.category.icon)
-                        .foregroundStyle(Theme.categoryColor(task.category))
+                        .foregroundStyle(Theme.roomColor(task.room))
                         .frame(width: 20)
                     Text(task.name)
                         .font(.subheadline)
@@ -469,7 +469,7 @@ struct PowerHourView: View {
                             Image(systemName: task.category.icon)
                                 .font(.system(size: 50))
                                 .dynamicTypeSize(...DynamicTypeSize.accessibility1)
-                                .foregroundStyle(Theme.categoryColor(task.category))
+                                .foregroundStyle(Theme.roomColor(task.room))
 
                             Text(task.name)
                                 .font(.title.bold())

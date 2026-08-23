@@ -238,12 +238,12 @@ struct DashboardView: View {
                                             .background(Theme.coral.opacity(0.18), in: Capsule())
                                     }
                                 }
-                                .foregroundStyle(Theme.categoryColor(category))
+                                .foregroundStyle(Theme.roomColor(room))
                                 .padding(.horizontal, 11)
                                 .padding(.vertical, 9)
                                 .background(.background, in: Capsule())
                                 .overlay {
-                                    Capsule().strokeBorder(Theme.categoryColor(category).opacity(0.24))
+                                    Capsule().strokeBorder(Theme.roomColor(room).opacity(0.24))
                                 }
                             }
                             .buttonStyle(.plain)
@@ -414,7 +414,7 @@ struct DashboardView: View {
                     ForEach(seasonalSuggestions) { suggestion in
                         HStack(spacing: 10) {
                             Image(systemName: suggestion.category.icon)
-                                .foregroundStyle(Theme.categoryColor(suggestion.category))
+                                .foregroundStyle(Theme.roomColor(suggestion.suggestedRoom))
                                 .frame(width: 24)
 
                             VStack(alignment: .leading, spacing: 2) {
@@ -474,7 +474,7 @@ struct DueTaskRow: View {
             // recognizer, so both could fire from a single tap on the button.
             HStack(spacing: 10) {
                 Image(systemName: task.category.icon)
-                    .foregroundStyle(Theme.categoryColor(task.category))
+                    .foregroundStyle(Theme.roomColor(task.room))
                     .frame(width: 24)
 
                 VStack(alignment: .leading, spacing: 2) {
@@ -583,7 +583,7 @@ struct CompleteTaskSheet: View {
                 Section {
                     HStack {
                         Image(systemName: task.category.icon)
-                            .foregroundStyle(Theme.categoryColor(task.category))
+                            .foregroundStyle(Theme.roomColor(task.room))
                         Text(task.name)
                             .font(.headline)
                         Spacer()

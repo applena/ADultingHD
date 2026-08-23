@@ -208,6 +208,30 @@ final class ModelTests: XCTestCase {
         XCTAssertEqual(HouseholdTask.roomIdentity("Café"), HouseholdTask.roomIdentity("cafe"))
     }
 
+    func testExplicitGeneralRoomIsDistinctFromLegacyGeneralCategory() throws {
+        var task = try JSONDecoder().decode(HouseholdTask.self, from: Data("""
+        {
+          "id": "00000000-0000-0000-0000-000000000003",
+          "name": "Legacy task",
+          "description": "",
+          "category": "General",
+          "frequency": "Weekly",
+          "estimatedMinutes": 10,
+          "difficulty": 1,
+          "supplies": [],
+          "isActive": true
+        }
+        """.utf8))
+        XCTAssertNil(task.room)
+
+        task.room = "General"
+        let roundTripped = try JSONDecoder().decode(
+            HouseholdTask.self,
+            from: JSONEncoder().encode(task)
+        )
+        XCTAssertEqual(roundTripped.room, "General")
+    }
+
     // MARK: - UserProfile
 
     func testLevelCalculation() {
@@ -288,23 +312,15 @@ final class ModelTests: XCTestCase {
         }
     }
 
-    func testStarterCategoriesAreOffered() {
-        for category in onboardingStarterCategories {
-            XCTAssertTrue(
-                onboardingRooms.contains(category),
-                "\(category.rawValue) is preselected but has no room tile to deselect"
-            )
-        }
-    }
-
     func testOnboardingRecommendationsAreFocusedAndScopedToSelectedRooms() {
-        let recommendations = onboardingRecommendedCatalogTasks(for: onboardingStarterCategories)
+        let requestedRooms: Set<TaskCategory> = [.kitchen, .bathroom, .general]
+        let recommendations = onboardingRecommendedCatalogTasks(for: requestedRooms)
 
         XCTAssertFalse(recommendations.isEmpty)
-        XCTAssertTrue(recommendations.allSatisfy { onboardingStarterCategories.contains($0.category) })
+        XCTAssertTrue(recommendations.allSatisfy { requestedRooms.contains($0.category) })
         XCTAssertEqual(recommendations.count, Set(recommendations.map(\.name)).count)
 
-        for category in onboardingStarterCategories {
+        for category in requestedRooms {
             XCTAssertLessThanOrEqual(recommendations.filter { $0.category == category }.count, 3)
         }
 

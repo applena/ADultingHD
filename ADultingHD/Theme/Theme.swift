@@ -44,6 +44,30 @@ enum Theme {
         }
     }
 
+    /// Keeps the curated palette for legacy rooms and assigns every custom
+    /// room a stable hue derived from its locale-independent identity.
+    static func roomColor(_ room: String?) -> Color {
+        guard let identity = HouseholdTask.roomIdentity(room) else {
+            return categoryColor(.general)
+        }
+        if let category = TaskCategory.allCases.first(where: {
+            HouseholdTask.roomIdentity($0.rawValue) == identity
+        }) {
+            return categoryColor(category)
+        }
+
+        var hash: UInt64 = 14_695_981_039_346_656_037
+        for byte in identity.utf8 {
+            hash ^= UInt64(byte)
+            hash &*= 1_099_511_628_211
+        }
+        return Color(
+            hue: Double(hash % 360) / 360,
+            saturation: 0.58,
+            brightness: 0.72
+        )
+    }
+
     static func supplyStockColor(_ stock: SupplyStock) -> Color {
         switch stock {
         case .inStock: successGreen

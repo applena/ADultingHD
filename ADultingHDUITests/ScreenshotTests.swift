@@ -92,14 +92,17 @@ final class ScreenshotTests: XCTestCase {
 
         let profileScroll = app.scrollViews.firstMatch
         let finalProfileRow = app.descendants(matching: .any)
-            .matching(identifier: "profile-room-No Room")
+            .matching(identifier: "profile-final-room-row")
             .firstMatch
-        for _ in 0..<12 where !finalProfileRow.isHittable {
+        let tabBar = app.tabBars.firstMatch
+        for _ in 0..<12 {
+            let isClear = finalProfileRow.isHittable
+                && (!tabBar.exists || finalProfileRow.frame.maxY < tabBar.frame.minY)
+            if isClear { break }
             profileScroll.swipeUp()
         }
         XCTAssertTrue(finalProfileRow.isHittable, "The final Profile row should scroll above the tab bar")
 
-        let tabBar = app.tabBars.firstMatch
         if tabBar.exists {
             XCTAssertLessThan(
                 finalProfileRow.frame.maxY,

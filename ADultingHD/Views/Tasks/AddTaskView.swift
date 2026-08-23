@@ -43,6 +43,8 @@ private struct TaskFormView: View {
     @State private var scheduledWeekdays: Set<Int>
     @State private var scheduledDayOfMonth: Int
     @State private var scheduledMonth: Int
+    @State private var hasOneTimeDueDate: Bool
+    @State private var oneTimeDueDate: Date
     @State private var checklist: [ChecklistItem]
     @State private var expandedChecklistId: UUID?
     @State private var assigneeId: UUID?
@@ -68,6 +70,8 @@ private struct TaskFormView: View {
         _scheduledWeekdays = State(initialValue: Set(initialWeekdays.isEmpty ? initialFrequency.defaultWeekdays : initialWeekdays))
         _scheduledDayOfMonth = State(initialValue: existingTask?.scheduledDayOfMonth ?? 1)
         _scheduledMonth = State(initialValue: existingTask?.scheduledMonth ?? 1)
+        _hasOneTimeDueDate = State(initialValue: initialFrequency == .unscheduled && existingTask?.scheduledOverrideDate != nil)
+        _oneTimeDueDate = State(initialValue: existingTask?.scheduledOverrideDate ?? Date())
         _checklist = State(initialValue: existingTask?.checklist ?? [])
         _assigneeId = State(initialValue: existingTask?.defaultAssigneeId)
         _isPersonal = State(initialValue: existingTask?.isPersonal ?? false)
@@ -85,6 +89,11 @@ private struct TaskFormView: View {
                 Section("Details") {
                     TextField("Room or context (optional)", text: $room)
                         .textContentType(.location)
+                    if roomNameIsReserved {
+                        Text("“No Room” is reserved for tasks without a room. Choose another name or leave this blank.")
+                            .font(.caption)
+                            .foregroundStyle(Theme.warningRed)
+                    }
 
                     Picker("Schedule", selection: $frequency) {
                         ForEach(TaskFrequency.allCases) { freq in
@@ -93,6 +102,13 @@ private struct TaskFormView: View {
                     }
                     .onChange(of: frequency) { _, new in
                         applyScheduleDefaults(for: new)
+                    }
+
+                    if frequency == .unscheduled {
+                        Toggle("Set a one-time due date", isOn: $hasOneTimeDueDate)
+                        if hasOneTimeDueDate {
+                            DatePicker("Due", selection: $oneTimeDueDate, displayedComponents: .date)
+                        }
                     }
 
                     Picker("Difficulty", selection: $difficulty) {
@@ -161,7 +177,7 @@ private struct TaskFormView: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button(buttonLabel) { save() }
-                        .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
+                        .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty || roomNameIsReserved)
                 }
             }
         }
@@ -216,6 +232,9 @@ private struct TaskFormView: View {
     }
 
     private func applyScheduleDefaults(for freq: TaskFrequency) {
+        if freq != .unscheduled {
+            hasOneTimeDueDate = false
+        }
         if freq.weekdayCount > 0, scheduledWeekdays.count != freq.weekdayCount {
             scheduledWeekdays = Set(freq.defaultWeekdays)
         }
@@ -232,7 +251,13 @@ private struct TaskFormView: View {
         return existingTask.isPersonal || dataStore.activeHousehold.ownerIsCurrentUser
     }
 
+    private var roomNameIsReserved: Bool {
+        room.trimmingCharacters(in: .whitespacesAndNewlines)
+            .caseInsensitiveCompare("No Room") == .orderedSame
+    }
+
     private func save() {
+        guard !roomNameIsReserved else { return }
         let supplies = HouseholdTask.parseSupplies(from: suppliesText)
 
         var task = existingTask ?? HouseholdTask(
@@ -273,6 +298,11 @@ private struct TaskFormView: View {
             task.scheduledWeekdays = []
             task.scheduledDayOfMonth = nil
             task.scheduledMonth = nil
+        }
+        if frequency == .unscheduled {
+            task.scheduledOverrideDate = hasOneTimeDueDate
+                ? Calendar.current.startOfDay(for: oneTimeDueDate)
+                : nil
         }
 
         Task {

@@ -213,7 +213,7 @@ struct SuppliesView: View {
             } header: {
                 HStack {
                     Label(room, systemImage: category.icon)
-                        .foregroundStyle(Theme.categoryColor(category))
+                        .foregroundStyle(Theme.roomColor(room))
                     Spacer()
                     Text("\(supplies.count)")
                         .font(.caption2)
@@ -238,7 +238,7 @@ struct SupplyRow: View {
             ForEach(tasks) { task in
                 HStack(spacing: 8) {
                     Image(systemName: task.category.icon)
-                        .foregroundStyle(Theme.categoryColor(task.category))
+                        .foregroundStyle(Theme.roomColor(task.room))
                         .frame(width: 20)
                     Text(task.name)
                         .font(.subheadline)

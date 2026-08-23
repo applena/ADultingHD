@@ -22,9 +22,9 @@ struct TaskListView: View {
     @State private var showAddCustom = false
     @State private var showProUpgrade = false
 
-    init(initialTab: TaskTab = .myTasks, initialCategory: TaskCategory? = nil, initialRoom: String? = nil) {
+    init(initialTab: TaskTab = .myTasks, initialRoom: String? = nil) {
         _selectedTab = State(initialValue: initialTab)
-        _selectedRoom = State(initialValue: initialRoom ?? initialCategory.map { $0.roomValue ?? "" })
+        _selectedRoom = State(initialValue: initialRoom)
     }
 
     private var canCreateCustomTask: Bool {
@@ -191,9 +191,8 @@ struct TaskListView: View {
         return result
     }
 
-    private var groupedCatalog: [(TaskCategory, [CatalogTask])] {
-        Dictionary(grouping: filteredCatalog, by: \.category)
-            .sorted { $0.key.rawValue < $1.key.rawValue }
+    private var groupedCatalog: [(String, [CatalogTask])] {
+        HouseholdTask.groupedByRoom(filteredCatalog, room: \.suggestedRoom)
     }
 
     private var catalogList: some View {
@@ -241,7 +240,8 @@ struct TaskListView: View {
                 .buttonStyle(.plain)
             }
 
-            ForEach(groupedCatalog, id: \.0) { category, tasks in
+            ForEach(groupedCatalog, id: \.0) { room, tasks in
+                let category = TaskCategory.legacyFallback(for: room)
                 Section {
                     ForEach(tasks) { catalogTask in
                         CatalogRow(
@@ -251,8 +251,8 @@ struct TaskListView: View {
                     }
                 } header: {
                     HStack {
-                        Label(category.rawValue, systemImage: category.icon)
-                            .foregroundStyle(Theme.categoryColor(category))
+                        Label(room, systemImage: category.icon)
+                            .foregroundStyle(Theme.roomColor(room))
                         Spacer()
                         Text("\(tasks.count)")
                             .font(.caption2)
