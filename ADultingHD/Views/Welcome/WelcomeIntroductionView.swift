@@ -89,6 +89,11 @@ struct WelcomeOnboardingFlow {
         move(to: shouldInvite ? .playerName : .suggestions)
     }
 
+    mutating func markInviteSent() {
+        guard current == .invite else { return }
+        move(to: .suggestions)
+    }
+
     mutating func markInviteAccepted(_ household: Household) {
         route = .joined(
             householdID: household.id,
@@ -141,7 +146,6 @@ struct WelcomeIntroductionView: View {
     @State private var didConfigureFlow = false
     @State private var isSaving = false
     @State private var joinError: String?
-    @State private var hasSentInvite = false
     @State private var sharePresentation = HouseholdSharePresentation()
     @AppStorage(PrefKey.onboardingHouseholdName) private var householdName = ""
     @AppStorage(PrefKey.onboardingPlayerName) private var playerName = ""
@@ -187,7 +191,7 @@ struct WelcomeIntroductionView: View {
                 share: payload.share,
                 container: payload.container,
                 householdName: payload.householdName,
-                onShareSaved: { hasSentInvite = true },
+                onShareSaved: handleShareSaved,
                 onDismiss: sharePresentation.dismiss
             )
         }
@@ -433,10 +437,6 @@ struct WelcomeIntroductionView: View {
                 .font(.subheadline)
                 .foregroundStyle(.red)
                 .fixedSize(horizontal: false, vertical: true)
-        } else if hasSentInvite {
-            Label("Invite sent", systemImage: "checkmark.circle.fill")
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(Theme.successGreen)
         } else {
             Label("Invites use Apple's private iCloud sharing.", systemImage: "lock.shield.fill")
                 .font(.subheadline)
@@ -497,7 +497,7 @@ struct WelcomeIntroductionView: View {
                 action: handlePrimaryAction,
                 isDisabled: primaryButtonDisabled,
                 showsProgress: sharePresentation.isPreparing,
-                secondaryTitle: hasSentInvite ? "Done" : "Skip for now",
+                secondaryTitle: "Skip for now",
                 secondaryAction: advance,
                 secondaryIsDisabled: isBusy,
                 isAccessibilityHidden: !isActive
@@ -533,7 +533,6 @@ struct WelcomeIntroductionView: View {
 
     private var inviteButtonTitle: String {
         if sharePresentation.isPreparing { return "Preparing..." }
-        if hasSentInvite { return "Invite someone else" }
         return "Pick someone to invite"
     }
 
@@ -564,6 +563,11 @@ struct WelcomeIntroductionView: View {
 
     private func answerInvitation(_ shouldInvite: Bool) {
         updateFlow { $0.answerInvitation(shouldInvite) }
+    }
+
+    private func handleShareSaved() {
+        guard flow.current == .invite else { return }
+        updateFlow { $0.markInviteSent() }
     }
 
     private func handlePrimaryAction() {
