@@ -1007,7 +1007,14 @@ extension HouseholdTask {
         r["room"]             = HouseholdTask.normalizedRoom(room) as CKRecordValue?
         r["category"]         = category.rawValue as CKRecordValue
         r["scheduleFrequency"] = frequency.rawValue as CKRecordValue
-        r["frequency"]        = (frequency == .unscheduled ? TaskFrequency.weekly.rawValue : frequency.rawValue) as CKRecordValue
+        let legacyFrequency = frequency == .unscheduled ? TaskFrequency.weekly.rawValue : frequency.rawValue
+        r["frequency"]        = legacyFrequency as CKRecordValue
+        // These snapshots let a newer client detect a later `.changedKeys`
+        // update from an older client. Without them, stale additive fields
+        // would silently shadow legacy category/frequency edits.
+        r["planningSchemaVersion"] = 1 as CKRecordValue
+        r["legacyCategorySnapshot"] = category.rawValue as CKRecordValue
+        r["legacyFrequencySnapshot"] = legacyFrequency as CKRecordValue
         r["estimatedMinutes"] = estimatedMinutes as CKRecordValue
         r["difficulty"]       = difficulty.rawValue as CKRecordValue
         r["supplies"]         = supplies as CKRecordValue
@@ -1034,19 +1041,32 @@ extension HouseholdTask {
             let name = record["name"] as? String
         else { return nil }
 
+        let planningSchemaVersion = record["planningSchemaVersion"] as? Int ?? 0
         let preferredFrequency = record["scheduleFrequency"] as? String
         let legacyFrequency = record["frequency"] as? String
-        let frequency = preferredFrequency.flatMap(TaskFrequency.init(rawValue:))
+        let legacyFrequencySnapshot = record["legacyFrequencySnapshot"] as? String
+        let legacyFrequencyWasEdited = planningSchemaVersion > 0
+            && legacyFrequencySnapshot != nil
+            && legacyFrequency != legacyFrequencySnapshot
+        let frequency = (legacyFrequencyWasEdited ? legacyFrequency : preferredFrequency)
+            .flatMap(TaskFrequency.init(rawValue:))
             ?? legacyFrequency.flatMap(TaskFrequency.init(rawValue:))
             ?? .unscheduled
         let difficulty = (record["difficulty"] as? Int).flatMap(Difficulty.init(rawValue:)) ?? .medium
         let preferredRoom = HouseholdTask.normalizedRoom(record["room"] as? String)
-        let legacyRoom = HouseholdTask.normalizedRoom(record["category"] as? String)
+        let legacyCategory = record["category"] as? String
+        let legacyRoom = HouseholdTask.normalizedRoom(legacyCategory)
+        let legacyCategorySnapshot = record["legacyCategorySnapshot"] as? String
+        let legacyCategoryWasEdited = planningSchemaVersion > 0
+            && legacyCategorySnapshot != nil
+            && legacyCategory != legacyCategorySnapshot
 
         self.id = id
         self.name = name
         self.description = record["taskDescription"] as? String ?? ""
-        self.room = preferredRoom ?? legacyRoom
+        self.room = legacyCategoryWasEdited
+            ? legacyRoom
+            : (planningSchemaVersion > 0 ? preferredRoom : legacyRoom)
         self.frequency = frequency
         self.estimatedMinutes = record["estimatedMinutes"] as? Int ?? 30
         self.difficulty = difficulty

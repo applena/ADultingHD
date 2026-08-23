@@ -208,6 +208,32 @@ final class DataStoreTests: XCTestCase {
         XCTAssertFalse(dataStore.dueTasks.contains { $0.id == task.id })
     }
 
+    func testUnscheduledTaskDoesNotBlockRecurringConsistencyBonuses() async throws {
+        let dataStore = DataStore()
+        let recurringTask = makeTask(frequency: .daily)
+        let unscheduledTask = try XCTUnwrap(makeOnboardingCustomTask(named: "Organize someday"))
+        dataStore.tasks = [recurringTask, unscheduledTask]
+
+        await dataStore.completeTask(recurringTask)
+
+        let completion = try XCTUnwrap(dataStore.completions.first)
+        XCTAssertEqual(Set(completion.periodBonuses?.keys.map { $0 } ?? []), ["daily", "weekly", "monthly"])
+        XCTAssertFalse(dataStore.completions.contains { $0.taskId == unscheduledTask.id })
+    }
+
+    func testRoomGroupingDeduplicatesCaseAndDiacriticVariants() {
+        let dataStore = DataStore()
+        var first = makeTask()
+        first.room = "Café"
+        var second = makeTask()
+        second.room = "cafe"
+        dataStore.tasks = [first, second]
+
+        XCTAssertEqual(dataStore.tasksByRoom.count, 1)
+        XCTAssertEqual(dataStore.tasksByRoom.values.first?.count, 2)
+        XCTAssertEqual(HouseholdTask.distinctRooms(["Kitchen", "kitchen", nil]), ["Kitchen"])
+    }
+
     func testAddingPersonalTaskAssignsItToCurrentProfile() async {
         let dataStore = DataStore()
         var task = makeTask()

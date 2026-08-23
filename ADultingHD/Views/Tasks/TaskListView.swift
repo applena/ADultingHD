@@ -272,9 +272,7 @@ struct TaskListView: View {
     private var roomFilterOptions: [String] {
         let taskRooms = dataStore.tasks.compactMap { HouseholdTask.normalizedRoom($0.room) }
         let templateRooms = taskCatalog.compactMap(\.suggestedRoom)
-        return Array(Set(taskRooms + templateRooms)).sorted {
-            $0.localizedCaseInsensitiveCompare($1) == .orderedAscending
-        }
+        return HouseholdTask.distinctRooms((taskRooms + templateRooms).map { Optional($0) })
     }
 
     private var hasTasksWithoutRoom: Bool {
@@ -301,9 +299,9 @@ struct TaskListView: View {
                     FilterChip(
                         label: room,
                         icon: TaskCategory(rawValue: room)?.icon ?? "mappin.and.ellipse",
-                        isSelected: selectedRoom == room
+                        isSelected: HouseholdTask.roomIdentity(selectedRoom) == HouseholdTask.roomIdentity(room)
                     ) {
-                        selectedRoom = selectedRoom == room ? nil : room
+                        selectedRoom = HouseholdTask.roomIdentity(selectedRoom) == HouseholdTask.roomIdentity(room) ? nil : room
                     }
                 }
             }

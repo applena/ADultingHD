@@ -202,8 +202,7 @@ struct DashboardView: View {
 
     @ViewBuilder
     private var roomSummaryRow: some View {
-        let rooms = Array(Set(dataStore.activeTasks.compactMap { HouseholdTask.normalizedRoom($0.room) }))
-            .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+        let rooms = HouseholdTask.distinctRooms(dataStore.activeTasks.map(\.room))
 
         if !rooms.isEmpty {
             VStack(alignment: .leading, spacing: 8) {

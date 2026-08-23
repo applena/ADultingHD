@@ -162,7 +162,11 @@ final class NotificationManager {
     /// on completion, on edit, and on day rollover — without needing to
     /// cancel first.
     func scheduleTaskReminder(for task: HouseholdTask) {
-        guard isAuthorized, let dueDate = task.dueDate else { return }
+        guard let dueDate = task.dueDate else {
+            cancelTaskReminder(for: task)
+            return
+        }
+        guard isAuthorized else { return }
         var components = Calendar.current.dateComponents([.year, .month, .day], from: dueDate)
         components.hour = reminderHour
         components.minute = reminderMinute

@@ -42,12 +42,7 @@ struct SuppliesView: View {
     }
 
     private var suppliesByRoom: [(String, [SupplyEntry])] {
-        var grouped: [String: [SupplyEntry]] = [:]
-        for entry in allEntries {
-            let room = entry.tasks.first?.roomDisplayName ?? "No Room"
-            grouped[room, default: []].append(entry)
-        }
-        return grouped.sorted { $0.key.localizedCaseInsensitiveCompare($1.key) == .orderedAscending }
+        HouseholdTask.groupedByRoom(allEntries) { $0.tasks.first?.room }
     }
 
     var body: some View {

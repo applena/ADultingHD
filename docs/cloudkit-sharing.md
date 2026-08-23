@@ -46,7 +46,11 @@ and unknown legacy category strings remain readable as custom rooms. An
 unscheduled task writes `Weekly` only as its legacy frequency fallback; new
 clients use `scheduleFrequency` and therefore keep it out of recurring due
 calculations. Deploy the `room` and `scheduleFrequency` fields from Development
-to Production before shipping a build that writes them.
+to Production before shipping a build that writes them. Also deploy
+`planningSchemaVersion`, `legacyCategorySnapshot`, and
+`legacyFrequencySnapshot`; the snapshots identify later legacy-client edits so
+the additive fields cannot shadow a room or schedule change made by an older
+build.
 
 ## Code map
 

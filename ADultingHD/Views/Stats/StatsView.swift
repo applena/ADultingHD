@@ -12,7 +12,11 @@ private struct StatsAggregates {
     init(completions: [TaskCompletion], tasks: [HouseholdTask]) {
         let calendar = Calendar.current
         self.completionsByDay = Dictionary(grouping: completions) { calendar.startOfDay(for: $0.completedAt) }
-        self.taskRoomMap = Dictionary(uniqueKeysWithValues: tasks.map { ($0.id, $0.roomDisplayName) })
+        self.taskRoomMap = Dictionary(uniqueKeysWithValues:
+            HouseholdTask.groupedByRoom(tasks, room: \.room).flatMap { room, tasks in
+                tasks.map { ($0.id, room) }
+            }
+        )
     }
 }
 

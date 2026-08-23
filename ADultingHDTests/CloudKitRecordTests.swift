@@ -103,6 +103,40 @@ final class CloudKitRecordTests: XCTestCase {
         XCTAssertEqual(decoded.frequency, .monthly)
     }
 
+    func testTaskDecode_prefersLegacyPlanningFieldsWhenOlderClientEditsThem() throws {
+        var task = HouseholdTask(
+            id: UUID(), name: "Clean studio", description: "",
+            category: .office, frequency: .unscheduled, estimatedMinutes: 20,
+            difficulty: .medium, supplies: [], isActive: true
+        )
+        task.room = "Art Studio"
+        let record = task.toCKRecord(zone: zone)
+
+        // Simulate a legacy client's `.changedKeys` save. It knows only these
+        // fields, so the additive values and their snapshots remain untouched.
+        record["category"] = TaskCategory.garage.rawValue as CKRecordValue
+        record["frequency"] = TaskFrequency.monthly.rawValue as CKRecordValue
+
+        let decoded = try XCTUnwrap(HouseholdTask(from: record))
+
+        XCTAssertEqual(decoded.room, TaskCategory.garage.rawValue)
+        XCTAssertEqual(decoded.frequency, .monthly)
+    }
+
+    func testTaskDecode_keepsAdditivePlanningFieldsWhenLegacySnapshotsMatch() throws {
+        var task = HouseholdTask(
+            id: UUID(), name: "Sort costumes", description: "",
+            category: .general, frequency: .unscheduled, estimatedMinutes: 20,
+            difficulty: .medium, supplies: [], isActive: true
+        )
+        task.room = "Costume Closet"
+
+        let decoded = try XCTUnwrap(HouseholdTask(from: task.toCKRecord(zone: zone)))
+
+        XCTAssertEqual(decoded.room, "Costume Closet")
+        XCTAssertEqual(decoded.frequency, .unscheduled)
+    }
+
     func testTaskRoundTrip_monthlyScheduledDay() {
         var task = HouseholdTask(
             id: UUID(), name: "Pay bills", description: "",

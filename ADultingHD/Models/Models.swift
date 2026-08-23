@@ -365,9 +365,52 @@ struct HouseholdTask: Codable, Identifiable, Hashable {
     static func normalizedRoom(_ value: String?) -> String? {
         guard let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines),
               !trimmed.isEmpty,
-              trimmed.caseInsensitiveCompare(TaskCategory.general.rawValue) != .orderedSame
+              trimmed.caseInsensitiveCompare(TaskCategory.general.rawValue) != .orderedSame,
+              trimmed.caseInsensitiveCompare("No Room") != .orderedSame
         else { return nil }
         return trimmed
+    }
+
+    /// Stable comparison identity for a freeform room. The stored spelling is
+    /// preserved for display and persistence, while grouping and filtering
+    /// treat case/diacritic variants as the same room.
+    static func roomIdentity(_ value: String?) -> String? {
+        normalizedRoom(value)?.folding(
+            options: [.caseInsensitive, .diacriticInsensitive],
+            locale: .current
+        )
+    }
+
+    /// Deduplicates room names for filter chips while preserving the first
+    /// user-entered spelling as the display value.
+    static func distinctRooms(_ values: [String?]) -> [String] {
+        var roomsByIdentity: [String: String] = [:]
+        for value in values {
+            guard let room = normalizedRoom(value), let identity = roomIdentity(room) else { continue }
+            if roomsByIdentity[identity] == nil { roomsByIdentity[identity] = room }
+        }
+        return roomsByIdentity.values.sorted {
+            $0.localizedCaseInsensitiveCompare($1) == .orderedAscending
+        }
+    }
+
+    /// Groups values using the same room identity as filters. Missing rooms
+    /// receive the stable "No Room" label.
+    static func groupedByRoom<Value>(
+        _ values: [Value],
+        room roomForValue: (Value) -> String?
+    ) -> [(String, [Value])] {
+        var groups: [String: (displayName: String, values: [Value])] = [:]
+        for value in values {
+            let room = normalizedRoom(roomForValue(value))
+            let identity = roomIdentity(room).map { "room:\($0)" } ?? "missing-room"
+            let displayName = room ?? "No Room"
+            if groups[identity] == nil { groups[identity] = (displayName, []) }
+            groups[identity]?.values.append(value)
+        }
+        return groups.values
+            .map { ($0.displayName, $0.values) }
+            .sorted { $0.0.localizedCaseInsensitiveCompare($1.0) == .orderedAscending }
     }
 
     var roomDisplayName: String { Self.normalizedRoom(room) ?? "No Room" }

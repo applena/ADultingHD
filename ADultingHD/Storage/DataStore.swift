@@ -129,6 +129,13 @@ final class DataStore {
 
     var activeTasks: [HouseholdTask] { tasks.filter(\.isActive) }
 
+    /// Tasks that participate in weekly/monthly consistency goals. One-time
+    /// and unscheduled work still grants completion progress, but does not
+    /// become a recurring obligation in every future period.
+    private var recurringActiveTasks: [HouseholdTask] {
+        activeTasks.filter { $0.frequency != .unscheduled }
+    }
+
     /// (task, occurrence) for every active, currently-due task, sorted by
     /// occurrence ascending (longest-missed first). Computed once per
     /// task — rather than inside `dueTasks`/`overdueTasks`' own sort
@@ -174,7 +181,7 @@ final class DataStore {
     /// Optional spatial organization for screens that explicitly opt into a
     /// room view. Task-first screens should use `tasks` directly.
     var tasksByRoom: [String: [HouseholdTask]] {
-        Dictionary(grouping: tasks, by: \.roomDisplayName)
+        Dictionary(uniqueKeysWithValues: HouseholdTask.groupedByRoom(tasks, room: \.room))
     }
 
     var allSupplies: [String: [HouseholdTask]] {
@@ -1108,7 +1115,7 @@ final class DataStore {
                 .filter { interval.contains($0.completedAt) }
                 .map(\.taskId)
         )
-        let requiredTaskIDs = Set(activeTasks.map(\.id))
+        let requiredTaskIDs = Set(recurringActiveTasks.map(\.id))
         return !requiredTaskIDs.isEmpty && requiredTaskIDs.isSubset(of: completedTaskIDs)
     }
 
@@ -1120,7 +1127,7 @@ final class DataStore {
                 .filter { interval.contains($0.completedAt) }
                 .map(\.taskId)
         )
-        let requiredTaskIDs = Set(activeTasks.map(\.id))
+        let requiredTaskIDs = Set(recurringActiveTasks.map(\.id))
         return !requiredTaskIDs.isEmpty && requiredTaskIDs.isSubset(of: completedTaskIDs)
     }
 

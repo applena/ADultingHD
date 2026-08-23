@@ -48,8 +48,7 @@ struct ScheduleView: View {
         let allDates = dates.contains(today) ? dates : ([today] + dates)
         let tasksByDate = tasksByDate(for: allDates)
         let todayTasks = tasksByDate[today] ?? []
-        let todayByRoom = Dictionary(grouping: todayTasks, by: \.roomDisplayName)
-            .sorted { $0.key.localizedCaseInsensitiveCompare($1.key) == .orderedAscending }
+        let todayByRoom = HouseholdTask.groupedByRoom(todayTasks, room: \.room)
         let dueCount = dataStore.dueTasks.count
 
         return ZStack {
