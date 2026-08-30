@@ -57,15 +57,17 @@ xcodebuild build -project ADultingHD.xcodeproj -scheme ADultingHD_macOS \
 ./deploy.sh --macos      # macOS only
 ./deploy.sh --all        # both
 ./deploy.sh --skip-tests # skip unit tests before archive
+./deploy.sh --no-bump    # use the next remote build without changing Git
 ```
 
-`deploy.sh` auto-increments the build number in `project.yml`, runs the iOS
-unit-test target, and archives. UI tests remain available through the
-`ADultingHD_iOS` scheme for explicit UI validation. The script then re-signs
-with a hardcoded iOS distribution entitlements dict (necessary
-because the API key is Upload-scope only — see
+`deploy.sh` checks App Store Connect for the highest uploaded build number,
+increments from the newer of that value and `project.yml`, runs the iOS unit-test
+target, and archives. UI tests remain available through the `ADultingHD_iOS`
+scheme for explicit UI validation. The script then re-signs with a production
+iOS entitlements dict (necessary because the API key is Upload-scope only — see
 [`docs/cloudkit-sharing.md`](docs/cloudkit-sharing.md)), uploads via
-altool, and commits the build bump.
+altool, and commits the build bump. `--no-bump` is the CI path: the selected
+build number is passed to Xcode without editing or committing generated files.
 
 Requires a `.env` file at the repo root with:
 
@@ -75,6 +77,26 @@ APPSTORE_ISSUER_ID=...
 APPSTORE_API_PRIVATE_KEY_PATH=/abs/path/to/AuthKey_XXXX.p8
 TEAM_ID=TYQ32QCF6K
 ```
+
+### GitHub Actions
+
+Pull requests and pushes to `main` run the iOS and macOS unit-test targets. Once
+both pass, a current-head `main` push is serialized with any other deployment and
+uploaded to the iOS TestFlight train. A superseded push is skipped so an older
+queued workflow cannot deploy after newer code.
+
+The deployment job requires these GitHub Actions secrets:
+
+- `TEAM_ID`
+- `APPSTORE_API_KEY_ID`
+- `APPSTORE_ISSUER_ID`
+- `APPSTORE_API_PRIVATE_KEY` (the contents of the `.p8` key)
+
+The runner uses an ad-hoc signature only to seed the unsigned archive with the
+production CloudKit/App Group entitlements. App Store Connect performs the final
+Apple Distribution signing during export, so CI does not store an Apple signing
+certificate. The macOS target is tested in CI, but it is not automatically
+uploaded until a macOS prerelease train is configured in App Store Connect.
 
 ## Architecture
 

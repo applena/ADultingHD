@@ -2,8 +2,9 @@
 set -euo pipefail
 
 # ADultingHD - Local TestFlight Deploy
-# Usage: ./deploy.sh [--skip-tests] [--macos] [--ios] [--all]
+# Usage: ./deploy.sh [--skip-tests] [--no-bump] [--macos] [--ios] [--all]
 # Default (no platform flag): iOS only
+# --no-bump: use the next App Store Connect build number without changing Git
 # --macos: macOS only
 # --all: both iOS and macOS
 
@@ -112,14 +113,20 @@ TEST_DERIVED_DATA="$BUILD_DIR/test"
 
 # Parse flags
 SKIP_TESTS=false
+NO_BUMP=false
 BUILD_IOS=false
 BUILD_MACOS=false
 for arg in "$@"; do
     case "$arg" in
         --skip-tests) SKIP_TESTS=true ;;
+        --no-bump) NO_BUMP=true ;;
         --macos) BUILD_MACOS=true ;;
         --ios) BUILD_IOS=true ;;
         --all) BUILD_IOS=true; BUILD_MACOS=true ;;
+        *)
+            echo "❌ Unknown argument: $arg"
+            exit 1
+            ;;
     esac
 done
 # Default to iOS if no platform specified
@@ -127,11 +134,131 @@ if ! $BUILD_IOS && ! $BUILD_MACOS; then
     BUILD_IOS=true
 fi
 
-# Auto-increment build number
-CURRENT_BUILD=$(grep CURRENT_PROJECT_VERSION project.yml | head -1 | awk '{print $2}')
+# Query App Store Connect for the highest uploaded build number. CI uses this
+# as the source of truth so serialized main-branch deploys never reuse a build
+# number, even though CI intentionally does not write build-bump commits back to
+# the repository. ES256 signing uses only openssl + Python's standard library.
+fetch_remote_build() {
+    BUNDLE_ID="$1" KEY_ID="$APPSTORE_API_KEY_ID" \
+    ISSUER="$APPSTORE_ISSUER_ID" KEY_PATH_ENV="$KEY_PATH" \
+    python3 - <<'PYEOF'
+import base64
+import json
+import os
+import subprocess
+import sys
+import time
+import urllib.parse
+import urllib.request
+
+
+def b64url(value):
+    return base64.urlsafe_b64encode(value).rstrip(b'=')
+
+
+try:
+    now = int(time.time())
+    header = b64url(json.dumps({
+        'alg': 'ES256',
+        'kid': os.environ['KEY_ID'],
+        'typ': 'JWT',
+    }, separators=(',', ':')).encode())
+    claims = b64url(json.dumps({
+        'iss': os.environ['ISSUER'],
+        'iat': now,
+        'exp': now + 1200,
+        'aud': 'appstoreconnect-v1',
+    }, separators=(',', ':')).encode())
+    signing_input = header + b'.' + claims
+
+    der = subprocess.run(
+        ['openssl', 'dgst', '-sha256', '-sign', os.environ['KEY_PATH_ENV']],
+        input=signing_input,
+        capture_output=True,
+        check=True,
+    ).stdout
+
+    # Convert the DER ECDSA signature to the JOSE r||s representation.
+    if not der or der[0] != 0x30:
+        raise ValueError('unexpected ECDSA signature')
+    index = 2 if der[1] < 0x80 else 2 + (der[1] & 0x7F)
+    r_length = der[index + 1]
+    r = der[index + 2:index + 2 + r_length]
+    index += 2 + r_length
+    s_length = der[index + 1]
+    s = der[index + 2:index + 2 + s_length]
+    raw_signature = r.lstrip(b'\x00').rjust(32, b'\x00') + s.lstrip(b'\x00').rjust(32, b'\x00')
+    token = (signing_input + b'.' + b64url(raw_signature)).decode()
+
+    def get(path, query):
+        url = 'https://api.appstoreconnect.apple.com' + path + '?' + urllib.parse.urlencode(query, safe=',')
+        request = urllib.request.Request(url, headers={'Authorization': f'Bearer {token}'})
+        with urllib.request.urlopen(request, timeout=20) as response:
+            return json.load(response)
+
+    apps = get('/v1/apps', {'filter[bundleId]': os.environ['BUNDLE_ID']}).get('data', [])
+    if not apps:
+        raise RuntimeError('bundle ID is not registered in App Store Connect')
+
+    builds = get('/v1/builds', {
+        'filter[app]': apps[0]['id'],
+        'sort': '-uploadedDate',
+        'limit': '200',
+    }).get('data', [])
+    versions = [
+        int(build['attributes']['version'])
+        for build in builds
+        if build.get('attributes', {}).get('version', '').isdigit()
+    ]
+    print(max(versions) if versions else 0)
+except Exception as error:
+    print(f'❌ App Store Connect build lookup failed: {error}', file=sys.stderr)
+    sys.exit(1)
+PYEOF
+}
+
+LOCAL_BUILD=$(grep -m1 'CURRENT_PROJECT_VERSION:' project.yml | awk '{print $2}')
+if ! [[ "$LOCAL_BUILD" =~ ^[0-9]+$ ]]; then
+    echo "❌ Invalid CURRENT_PROJECT_VERSION in project.yml: $LOCAL_BUILD"
+    exit 1
+fi
+
+echo "🔍 Checking TestFlight for the highest existing build..."
+REMOTE_BUILD=$(fetch_remote_build "net.shadowpuppet.ADultingHD")
+if ! [[ "$REMOTE_BUILD" =~ ^[0-9]+$ ]]; then
+    echo "❌ App Store Connect returned an invalid build number: $REMOTE_BUILD"
+    exit 1
+fi
+
+CURRENT_BUILD=$LOCAL_BUILD
+if [ "$REMOTE_BUILD" -gt "$CURRENT_BUILD" ]; then
+    CURRENT_BUILD=$REMOTE_BUILD
+    echo "ℹ️  TestFlight is ahead of project.yml ($REMOTE_BUILD vs. $LOCAL_BUILD)."
+fi
 NEW_BUILD=$((CURRENT_BUILD + 1))
-echo "📦 Build number: $CURRENT_BUILD → $NEW_BUILD"
-/usr/bin/sed -i '' "s/CURRENT_PROJECT_VERSION: ${CURRENT_BUILD}/CURRENT_PROJECT_VERSION: ${NEW_BUILD}/" project.yml
+
+if $NO_BUMP; then
+    echo "📦 Build number: $CURRENT_BUILD → $NEW_BUILD (--no-bump; repository remains unchanged)"
+else
+    ORIG_PROJECT_YML=$(mktemp)
+    ORIG_PBXPROJ=$(mktemp)
+    cp project.yml "$ORIG_PROJECT_YML"
+    cp "$PROJECT/project.pbxproj" "$ORIG_PBXPROJ"
+
+    echo "📦 Build number: $CURRENT_BUILD → $NEW_BUILD"
+    /usr/bin/sed -i '' "s/CURRENT_PROJECT_VERSION: ${LOCAL_BUILD}/CURRENT_PROJECT_VERSION: ${NEW_BUILD}/" project.yml
+
+    DEPLOY_SUCCESS=false
+    rollback_build_bump() {
+        if [ "$DEPLOY_SUCCESS" = "false" ]; then
+            echo "↩️  Rolling back build number bump (deploy did not complete)..."
+            cp "$ORIG_PROJECT_YML" project.yml 2>/dev/null || true
+            cp "$ORIG_PBXPROJ" "$PROJECT/project.pbxproj" 2>/dev/null || true
+        fi
+        rm -f "$ORIG_PROJECT_YML" "$ORIG_PBXPROJ"
+    }
+    trap rollback_build_bump EXIT
+fi
 
 echo "⚙️  Regenerating Xcode project..."
 xcodegen generate
@@ -183,12 +310,11 @@ if $BUILD_IOS; then
     # outright.
     #
     # The archive stays unsigned here; the next step seeds it with the real
-    # production entitlements using whatever codesigning identity is present
-    # on this machine (normally "Apple Development" — no Apple Distribution
-    # private key required), and `-exportArchive` below then re-signs it with
-    # the Distribution authority via the authenticated App Store Connect API
-    # key. Skipping the seed step leaves the export with only a minimal
-    # entitlements dict (team-id + application-identifier +
+    # production entitlements using a local identity when available, or an
+    # ad-hoc signature on an ephemeral CI runner. `-exportArchive` below then
+    # re-signs it with the Distribution authority via the authenticated App
+    # Store Connect API key. Skipping the seed step leaves the export with only
+    # a minimal entitlements dict (team-id + application-identifier +
     # beta-reports-active + get-task-allow), which makes
     # CKContainer(identifier:) trap at runtime. See
     # docs/cloudkit-sharing.md#deploysh-re-sign-dance-ios for the full story
@@ -199,6 +325,7 @@ if $BUILD_IOS; then
         -configuration Release \
         -destination 'generic/platform=iOS' \
         -archivePath "$ARCHIVE_IOS" \
+        CURRENT_PROJECT_VERSION="$NEW_BUILD" \
         CODE_SIGNING_ALLOWED=NO \
         CODE_SIGN_IDENTITY="" \
         CODE_SIGNING_REQUIRED=NO \
@@ -224,18 +351,16 @@ if $BUILD_IOS; then
     # described above.
     #
     # Signing here uses whichever local codesigning identity is available
-    # (set DEPLOY_SEED_SIGN_IDENTITY in .env to force a specific one). That
-    # identity never reaches TestFlight — it only exists so the archive
-    # carries concrete, non-wildcarded entitlement values for
-    # `-exportArchive` to re-sign for distribution against. No local Apple
-    # Distribution private key is required anywhere in this script; a
-    # standard "Apple Development" cert (the one Xcode already uses for
-    # local device builds) is sufficient.
+    # (set DEPLOY_SEED_SIGN_IDENTITY in .env to force a specific one), falling
+    # back to an ad-hoc signature when the keychain has none. The seed signature
+    # never reaches TestFlight — it only makes the archive carry concrete,
+    # non-wildcarded entitlement values for `-exportArchive` to re-sign for
+    # distribution. No certificate or private key is required on the runner.
     # Note: every `grep` below is deliberately followed by `|| true`. With
     # `set -euo pipefail`, a `grep` that finds no match exits 1 and — because
     # it sits inside a pipeline feeding a variable assignment — that would
     # otherwise abort the whole script right here instead of falling through
-    # to the next identity type or the "none found" error below.
+    # to the next identity type or the ad-hoc fallback below.
     SEED_IDENTITY="${DEPLOY_SEED_SIGN_IDENTITY:-}"
     if [ -z "$SEED_IDENTITY" ]; then
         CODESIGN_IDENTITIES=$(security find-identity -v -p codesigning 2>/dev/null || true)
@@ -245,14 +370,12 @@ if $BUILD_IOS; then
         fi
     fi
     if [ -z "$SEED_IDENTITY" ]; then
-        echo "❌ No local codesigning identity found in the login keychain."
-        echo "   Install an 'Apple Development' certificate + private key (Xcode ->"
-        echo "   Settings -> Accounts -> Manage Certificates, or download one from"
-        echo "   developer.apple.com) and re-run. See"
-        echo "   docs/cloudkit-sharing.md#deploysh-re-sign-dance-ios for details."
-        exit 1
+        SEED_IDENTITY="-"
+        echo "🔏 No local codesigning identity found; using an ad-hoc seed signature"
+    else
+        echo "🔏 Using local seed identity: $SEED_IDENTITY"
     fi
-    echo "🔏 Seeding archive with production entitlements using local identity"
+    echo "🔏 Seeding archive with production entitlements"
 
     # Production iOS entitlements. Must match what the App ID actually
     # grants, minus any wildcards/development-only keys that App Store
@@ -434,6 +557,7 @@ if $BUILD_MACOS; then
         -configuration Release \
         -destination 'generic/platform=macOS' \
         -archivePath "$ARCHIVE_MACOS" \
+        CURRENT_PROJECT_VERSION="$NEW_BUILD" \
         -allowProvisioningUpdates \
         -authenticationKeyPath "$KEY_PATH" \
         -authenticationKeyID "$APPSTORE_API_KEY_ID" \
@@ -500,13 +624,18 @@ fi
 
 echo "✅ Build $NEW_BUILD submitted to TestFlight."
 
-git add project.yml "$PROJECT/project.pbxproj"
-git commit -m "build: bump to build $NEW_BUILD" -m "TestFlight source: $SOURCE_SHA"
-echo "📝 Committed build number bump"
+if ! $NO_BUMP; then
+    git add project.yml "$PROJECT/project.pbxproj"
+    git commit -m "build: bump to build $NEW_BUILD" -m "TestFlight source: $SOURCE_SHA"
+    DEPLOY_SUCCESS=true
+    echo "📝 Committed build number bump"
 
-echo "⬆️  Pushing build record to $DEPLOY_REMOTE/$DEPLOY_BRANCH..."
-git push "$DEPLOY_REMOTE" "$DEPLOY_BRANCH"
-echo "✅ Build record pushed"
+    echo "⬆️  Pushing build record to $DEPLOY_REMOTE/$DEPLOY_BRANCH..."
+    git push "$DEPLOY_REMOTE" "$DEPLOY_BRANCH"
+    echo "✅ Build record pushed"
+else
+    echo "📝 Skipped build-number commit (--no-bump)"
+fi
 
 rm -rf "$BUILD_DIR"
 echo "🧹 Cleaned build artifacts"

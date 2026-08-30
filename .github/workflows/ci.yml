@@ -1,0 +1,189 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: macos-26
+    name: Build & Test
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
+        with:
+          xcode-version: "26.3"
+
+      - name: Install pinned XcodeGen
+        uses: ./.github/actions/setup-xcodegen
+
+      - name: Install xcbeautify
+        run: brew install xcbeautify
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Run iOS unit tests
+        run: |
+          set -euo pipefail
+
+          device_id=$(xcrun simctl list devices available -j | python3 -c '
+          import json
+          import sys
+
+          devices = [
+              device
+              for runtime_devices in json.load(sys.stdin)["devices"].values()
+              for device in runtime_devices
+              if device.get("isAvailable") and device.get("name", "").startswith("iPhone")
+          ]
+          preferred_names = ["iPhone 17 Pro", "iPhone 17", "iPhone 16", "iPhone 15", "iPhone 14"]
+          for name in preferred_names:
+              match = next((device for device in devices if device["name"] == name), None)
+              if match:
+                  print(match["udid"])
+                  break
+          else:
+              if devices:
+                  print(devices[0]["udid"])
+          ')
+
+          if [ -z "$device_id" ]; then
+            echo "No available iPhone simulator found" >&2
+            xcrun simctl list devices available >&2
+            exit 1
+          fi
+
+          xcodebuild test \
+            -project ADultingHD.xcodeproj \
+            -scheme ADultingHD_iOS \
+            -only-testing:ADultingHDTests_iOS \
+            -destination "platform=iOS Simulator,id=$device_id" \
+            -configuration Debug \
+            -derivedDataPath build-ios \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            -skipPackagePluginValidation \
+            -skipMacroValidation \
+            | xcbeautify
+
+      - name: Run macOS unit tests
+        run: |
+          set -euo pipefail
+
+          xcodebuild test \
+            -project ADultingHD.xcodeproj \
+            -scheme ADultingHD_macOS \
+            -only-testing:ADultingHDTests_macOS \
+            -destination "platform=macOS" \
+            -configuration Debug \
+            -derivedDataPath build-macos \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            -skipPackagePluginValidation \
+            -skipMacroValidation \
+            | xcbeautify
+
+  testflight:
+    runs-on: macos-26
+    name: Deploy iOS to TestFlight
+    needs: test
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    timeout-minutes: 75
+    concurrency:
+      group: adultinghd-testflight
+      cancel-in-progress: false
+
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+
+      - name: Require the current main commit
+        id: current_head
+        env:
+          EVENT_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          git fetch --quiet origin main
+          remote_sha=$(git rev-parse origin/main)
+
+          if [ "$EVENT_SHA" != "$remote_sha" ]; then
+            echo "Skipping superseded commit $EVENT_SHA; current main is $remote_sha."
+            echo "deploy=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          git checkout -B main "$EVENT_SHA"
+          echo "deploy=true" >> "$GITHUB_OUTPUT"
+
+      - name: Setup Xcode
+        if: steps.current_head.outputs.deploy == 'true'
+        uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
+        with:
+          xcode-version: "26.3"
+
+      - name: Install pinned XcodeGen
+        if: steps.current_head.outputs.deploy == 'true'
+        uses: ./.github/actions/setup-xcodegen
+
+      - name: Verify deployment secrets
+        if: steps.current_head.outputs.deploy == 'true'
+        env:
+          TEAM_ID: ${{ secrets.TEAM_ID }}
+          APPSTORE_API_KEY_ID: ${{ secrets.APPSTORE_API_KEY_ID }}
+          APPSTORE_ISSUER_ID: ${{ secrets.APPSTORE_ISSUER_ID }}
+          APPSTORE_API_PRIVATE_KEY: ${{ secrets.APPSTORE_API_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          missing=false
+          for name in \
+            TEAM_ID \
+            APPSTORE_API_KEY_ID \
+            APPSTORE_ISSUER_ID \
+            APPSTORE_API_PRIVATE_KEY
+          do
+            if [ -z "${!name:-}" ]; then
+              echo "::error::$name is not configured as a GitHub Actions secret"
+              missing=true
+            fi
+          done
+          if $missing; then
+            exit 1
+          fi
+
+      - name: Configure App Store Connect credentials
+        if: steps.current_head.outputs.deploy == 'true'
+        env:
+          TEAM_ID: ${{ secrets.TEAM_ID }}
+          APPSTORE_API_KEY_ID: ${{ secrets.APPSTORE_API_KEY_ID }}
+          APPSTORE_ISSUER_ID: ${{ secrets.APPSTORE_ISSUER_ID }}
+          APPSTORE_API_PRIVATE_KEY: ${{ secrets.APPSTORE_API_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+
+          key_directory="$HOME/.private_keys"
+          key_path="$key_directory/AuthKey_${APPSTORE_API_KEY_ID}.p8"
+          mkdir -p "$key_directory"
+          printf '%s' "$APPSTORE_API_PRIVATE_KEY" > "$key_path"
+
+          {
+            printf 'TEAM_ID=%s\n' "$TEAM_ID"
+            printf 'APPSTORE_API_KEY_ID=%s\n' "$APPSTORE_API_KEY_ID"
+            printf 'APPSTORE_ISSUER_ID=%s\n' "$APPSTORE_ISSUER_ID"
+            printf 'APPSTORE_API_PRIVATE_KEY_PATH=%s\n' "$key_path"
+          } > .env
+
+      - name: Deploy current main to TestFlight
+        if: steps.current_head.outputs.deploy == 'true'
+        run: ./deploy.sh --ios --skip-tests --no-bump
