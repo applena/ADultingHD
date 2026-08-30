@@ -1,0 +1,31 @@
+# Xcode
+build/
+DerivedData/
+*.xcworkspace
+*.xcuserdata/
+*.xcodeproj/xcuserdata/
+*.xcodeproj/project.xcworkspace/xcuserdata/
+
+# Dependencies
+Pods/
+
+# Local secrets
+.env
+
+# OS
+.DS_Store
+
+# Generated build artifacts
+generated-avatars/
+
+# Editor/terminal themes
+.ghostty-theme
+screenshots.xcresult/
+ipad_screenshots.xcresult/
+screenshots/
+ipad_screenshots/
+asc_screenshots_uploaded.png
+
+# Claude Code local settings
+.claude/settings.local.json
+.claude/scheduled_tasks.lock
