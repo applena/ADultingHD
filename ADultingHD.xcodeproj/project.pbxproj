@@ -653,12 +653,12 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
+				9D965F565A63263F3D04366F /* ADultingHD_iOS */,
+				241DB83DB6F78743CFFD2257 /* ADultingHD_macOS */,
+				7C7A66E4541FFE13AC40E191 /* ADultingHDWidget */,
 				4067515989BF9243B8DB2EC2 /* ADultingHDTests_iOS */,
 				EDA793009F48CF9062D0A6E8 /* ADultingHDTests_macOS */,
 				C1C6A8E0BEF9D062143FD804 /* ADultingHDUITests */,
-				7C7A66E4541FFE13AC40E191 /* ADultingHDWidget */,
-				9D965F565A63263F3D04366F /* ADultingHD_iOS */,
-				241DB83DB6F78743CFFD2257 /* ADultingHD_macOS */,
 			);
 		};
 /* End PBXProject section */

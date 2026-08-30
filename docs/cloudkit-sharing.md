@@ -253,10 +253,10 @@ instead of re-signing the exported IPA after:
 
 1. `xcodebuild archive` produces the unsigned `.xcarchive` as before.
 2. `deploy.sh` locates a local codesigning identity — preferring "Apple
-   Development" (the same cert Xcode already uses for local device
-   builds), falling back to "Apple Distribution" if present, or
-   `DEPLOY_SEED_SIGN_IDENTITY` from `.env` if set. **No Apple
-   Distribution private key is required for this step.**
+   Development", falling back to "Apple Distribution" if present, or
+   `DEPLOY_SEED_SIGN_IDENTITY` from `.env` if set. When the keychain has no
+   identity (as on an ephemeral GitHub-hosted runner), it uses an ad-hoc
+   signature. The seed signature never becomes the distributed signature.
 3. It writes a **production iOS entitlements plist** (built from
    `$TEAM_ID` in `.env`, not hardcoded — see the heredoc in `deploy.sh`)
    and `codesign`s the archive's `.app` bundle in place with it. The
@@ -298,33 +298,28 @@ fix isolated and reviewable on its own.
 
 ### Prerequisites
 
-- An **Apple Development** certificate + private key in the release
-  machine's login keychain (`security find-identity -v -p codesigning`
-  should list it). This is the same cert used for everyday local
-  `xcodebuild build`/`test` runs — nothing extra to provision.
 - The App Store Connect API key in `.env`
   (`APPSTORE_API_PRIVATE_KEY_PATH` / `APPSTORE_API_KEY_ID` /
   `APPSTORE_ISSUER_ID`) still needs Upload scope, same as before.
-- An Apple Distribution certificate/key is **not** required on the
-  machine running `deploy.sh` — Distribution signing happens on Apple's
-  side during the authenticated `-exportArchive` call.
+- No Apple signing certificate/key is required on the machine running
+  `deploy.sh`. When no local identity exists, an ad-hoc signature seeds the
+  entitlements; Apple Distribution signing happens during the authenticated
+  `-exportArchive` call.
 - Nothing in the seed/verify steps prints private key material or API
-  key contents; only the resolved identity's *name* (a certificate
-  common name, not a secret) and codesign/entitlements metadata are
-  logged.
+  key contents; only the resolved identity's *name* when one is used (a
+  certificate common name, not a secret) and codesign/entitlements metadata
+  are logged.
 
 ### What's been verified by execution vs. inspection only
 
 Build 38 validated steps 1-5 above end-to-end on a real release machine:
 unsigned archive → Apple Development seed → authenticated export →
-Apple Distribution-signed IPA with full production entitlements →
-passed upload. The current `deploy.sh` code implementing that flow has
-been syntax-checked (`bash -n`) and reviewed by inspection, but has
-**not** been re-run through a live `xcodebuild archive`/`-exportArchive`
-cycle since this refactor (no Xcode/codesigning environment available
-where the change was made). Run a real `./deploy.sh --skip-tests`
-dry run on a machine with Xcode and the API key configured before
-trusting it for a release.
+Apple Distribution-signed IPA with full production entitlements → passed
+upload. The GitHub Actions adaptation was then validated with **zero local
+signing identities**: unsigned build 51 → ad-hoc entitlement seed →
+authenticated export → Apple Distribution-signed IPA with the expected
+team, production entitlements, and build number. That build was export-only
+and was not uploaded during validation.
 
 ### The validation error cheat sheet
 
