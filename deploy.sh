@@ -76,9 +76,18 @@ verify_delivery_processing() {
         exit 1
     fi
 
-    if ! grep -Eq '"build-status"[[:space:]]*:[[:space:]]*"VALID"' "$status_log" \
-        || ! grep -Eq '"is-on-app-store-connect"[[:space:]]*:[[:space:]]*true' "$status_log"; then
+    if ! grep -Eq '"build-status"[[:space:]]*:[[:space:]]*"VALID"' "$status_log"; then
         echo "❌ Apple did not report a valid App Store Connect build"
+        exit 1
+    fi
+
+    # Xcode 26.3's altool output contains only delivery-uuid + build-status;
+    # other versions also include is-on-app-store-connect. Treat an omitted
+    # optional field as compatible, but fail closed if Apple explicitly reports
+    # that the valid delivery is not on App Store Connect.
+    if grep -q '"is-on-app-store-connect"' "$status_log" \
+        && ! grep -Eq '"is-on-app-store-connect"[[:space:]]*:[[:space:]]*true' "$status_log"; then
+        echo "❌ Apple processed the delivery but did not place it on App Store Connect"
         exit 1
     fi
 
