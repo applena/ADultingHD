@@ -203,64 +203,37 @@ final class ScreenshotTests: XCTestCase {
         capture("Onboarding_03_starter_chores")
         tapOnboardingPrimaryAction()
 
-        let inviteChoice = app.descendants(matching: .any)
-            .matching(identifier: "onboarding-page-invite-choice")
-            .firstMatch
-        XCTAssertTrue(inviteChoice.waitForExistence(timeout: 5), "Invite choice should follow home space selection")
-        capture("Onboarding_04_invite_choice")
-        tapOnboardingPrimaryAction()
-
         let invitePage = app.descendants(matching: .any)
             .matching(identifier: "onboarding-page-invite")
             .firstMatch
-        XCTAssertTrue(invitePage.waitForExistence(timeout: 5), "Choosing to invite should lead to the actionable invite page")
-        capture("Onboarding_05_invite")
+        XCTAssertTrue(invitePage.waitForExistence(timeout: 5), "The collaborator invite should follow starter chores")
+        capture("Onboarding_04_share_the_load")
         let skipInvite = app.buttons["onboarding-secondary-action"]
         XCTAssertTrue(skipInvite.waitForExistence(timeout: 3))
         skipInvite.tap()
 
-        let rewardsPage = app.descendants(matching: .any)
-            .matching(identifier: "onboarding-page-rewards")
+        let tourPage = app.descendants(matching: .any)
+            .matching(identifier: "onboarding-page-home-tour")
             .firstMatch
-        XCTAssertTrue(rewardsPage.waitForExistence(timeout: 5), "Missing onboarding rewards page")
-        capture("Onboarding_06_rewards")
-        tapOnboardingPrimaryAction()
+        XCTAssertTrue(tourPage.waitForExistence(timeout: 5), "The Home walkthrough should be the final onboarding page")
 
-        let setupPage = app.descendants(matching: .any)
-            .matching(identifier: "onboarding-page-setup")
-            .firstMatch
-        XCTAssertTrue(setupPage.waitForExistence(timeout: 5), "Optional chore setup should follow the action-first onboarding")
+        let next = app.buttons["onboarding-tour-next"]
+        XCTAssertTrue(next.waitForExistence(timeout: 3))
+        XCTAssertTrue(app.descendants(matching: .any)["onboarding-tour-target-add"].exists)
+        capture("Onboarding_05_tour_add")
+        next.tap()
 
-        let taskSearch = app.textFields["onboarding-task-search-field"]
-        XCTAssertTrue(taskSearch.waitForExistence(timeout: 3), "Task-first setup should lead with freeform entry and catalog search")
-        scrollClearOfActionBar(taskSearch)
-        taskSearch.tap()
-        taskSearch.typeText("Polish the moon")
-        dismissTaskSearchKeyboard()
+        XCTAssertTrue(app.descendants(matching: .any)["onboarding-tour-coach-edit"].waitForExistence(timeout: 3))
+        capture("Onboarding_05_tour_edit")
+        next.tap()
 
-        let customTaskButton = app.buttons["onboarding-add-custom-task"]
-        XCTAssertTrue(customTaskButton.waitForExistence(timeout: 3), "Setup should offer a custom-task action")
-        scrollClearOfActionBar(customTaskButton)
-        XCTAssertTrue(customTaskButton.isHittable)
-        customTaskButton.tap()
+        XCTAssertTrue(app.descendants(matching: .any)["onboarding-tour-coach-delete"].waitForExistence(timeout: 3))
+        capture("Onboarding_05_tour_delete")
+        next.tap()
 
-        taskSearch.tap()
-        taskSearch.typeText("dishes")
-        dismissTaskSearchKeyboard()
-
-        let catalogMatch = app.buttons["onboarding-catalog-task-Wash dishes"]
-        XCTAssertTrue(catalogMatch.waitForExistence(timeout: 3), "Catalog search should show matching chores")
-        scrollClearOfActionBar(catalogMatch)
-        XCTAssertTrue(catalogMatch.isHittable)
-        catalogMatch.tap()
-        XCTAssertEqual(catalogMatch.value as? String, "Selected")
-
-        capture("Onboarding_07_setup")
-
-        let finish = app.buttons["onboarding-primary-action"]
-        XCTAssertTrue(finish.waitForExistence(timeout: 3))
-        XCTAssertTrue(finish.isHittable, "Setup action should be hittable")
-        finish.tap()
+        XCTAssertTrue(app.descendants(matching: .any)["onboarding-tour-target-filter"].waitForExistence(timeout: 3))
+        capture("Onboarding_05_tour_filter")
+        next.tap()
 
         let homeHeader = app.descendants(matching: .any)
             .matching(identifier: "home-root-header")

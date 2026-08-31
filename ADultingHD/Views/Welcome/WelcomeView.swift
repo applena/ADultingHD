@@ -1,11 +1,7 @@
 import SwiftUI
 
-/// Coordinates the short introduction and the optional deep setup without
-/// mixing either child's state or implementation details.
+/// Hosts the five-page onboarding flow and its final Home walkthrough.
 struct WelcomeView: View {
-    @Environment(DataStore.self) private var dataStore
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var isShowingSetup = false
     @State private var selectedLocations: Set<HomeLocation> = []
 
     let onComplete: () -> Void
@@ -14,51 +10,19 @@ struct WelcomeView: View {
         GeometryReader { geometry in
             ZStack {
                 ScreenBackground()
-
                 WelcomeIntroductionView(
                     width: geometry.size.width,
                     height: geometry.size.height,
-                    isActive: !isShowingSetup,
+                    isActive: true,
                     selectedLocations: $selectedLocations,
-                    onRequestSetup: { setSetupVisible(true) },
                     onComplete: onComplete
                 )
-                .opacity(isShowingSetup ? 0 : 1)
-                .allowsHitTesting(!isShowingSetup)
-                .accessibilityHidden(isShowingSetup)
-
-                StarterHouseholdSetupView(
-                    width: geometry.size.width,
-                    height: geometry.size.height,
-                    isActive: isShowingSetup,
-                    selectedLocations: $selectedLocations,
-                    onBack: { setSetupVisible(false) },
-                    onComplete: onComplete
-                )
-                .opacity(isShowingSetup ? 1 : 0)
-                .allowsHitTesting(isShowingSetup)
-                .accessibilityHidden(!isShowingSetup)
             }
-        }
-        .onChange(of: dataStore.pendingOnboardingShare?.id) { _, shareID in
-            if shareID != nil {
-                setSetupVisible(false)
-            }
-        }
-    }
-
-    private func setSetupVisible(_ isVisible: Bool) {
-        guard !reduceMotion else {
-            isShowingSetup = isVisible
-            return
-        }
-        withAnimation(.easeInOut(duration: isVisible ? 0.6 : 0.5)) {
-            isShowingSetup = isVisible
         }
     }
 }
 
-/// Shared pinned action treatment for both onboarding phases.
+/// Shared pinned action treatment for the standard onboarding pages.
 struct WelcomeActionBar: View {
     let title: String
     let action: () -> Void

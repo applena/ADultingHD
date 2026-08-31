@@ -34,21 +34,19 @@ struct WelcomeOnboardingFlow {
     enum Step: Equatable {
         case joinHousehold
         case homeSpaces
-        case inviteChoice
         case playerName
         case invite
         case suggestions
-        case rewards
+        case homeTour
 
         var accessibilityID: String {
             switch self {
             case .joinHousehold: "join-household"
             case .homeSpaces: "home-spaces"
-            case .inviteChoice: "invite-choice"
             case .playerName: "player-name"
             case .invite: "invite"
             case .suggestions: "suggestions"
-            case .rewards: "rewards"
+            case .homeTour: "home-tour"
             }
         }
     }
@@ -56,20 +54,13 @@ struct WelcomeOnboardingFlow {
     private(set) var route: Route = .creating
     private(set) var current: Step = .playerName
     private(set) var history: [Step] = []
-    private(set) var wantsToInvite: Bool?
-
     var canGoBack: Bool { !history.isEmpty }
 
     var progressSteps: [Step] {
         if route.isJoining {
-            return [.joinHousehold, .suggestions, .rewards]
+            return [.joinHousehold, .homeTour]
         }
-        var result: [Step] = [.playerName, .homeSpaces, .suggestions, .inviteChoice]
-        if wantsToInvite == true {
-            result.append(.invite)
-        }
-        result.append(.rewards)
-        return result
+        return [.playerName, .homeSpaces, .suggestions, .invite, .homeTour]
     }
 
     var progressPosition: Int {
@@ -80,13 +71,6 @@ struct WelcomeOnboardingFlow {
         self.route = route
         current = route.isJoining ? .joinHousehold : .playerName
         history = []
-        wantsToInvite = nil
-    }
-
-    mutating func answerInvitation(_ shouldInvite: Bool) {
-        guard current == .inviteChoice else { return }
-        wantsToInvite = shouldInvite
-        move(to: shouldInvite ? .invite : .rewards)
     }
 
     mutating func markInviteSent() {
@@ -103,10 +87,8 @@ struct WelcomeOnboardingFlow {
     }
 
     /// Walks the same list the progress bar shows, so a reordered route cannot
-    /// leave navigation and progress disagreeing. `inviteChoice` is the only
-    /// branch point and moves on through `answerInvitation` instead.
+    /// leave navigation and progress disagreeing.
     mutating func advance() {
-        guard current != .inviteChoice else { return }
         let steps = progressSteps
         guard let index = steps.firstIndex(of: current), index + 1 < steps.count else { return }
         move(to: steps[index + 1])
@@ -153,32 +135,42 @@ struct WelcomeIntroductionView: View {
     let height: CGFloat
     let isActive: Bool
     @Binding var selectedLocations: Set<HomeLocation>
-    let onRequestSetup: () -> Void
     let onComplete: () -> Void
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
-                header
-                if flow.current == .homeSpaces {
-                    heading
-                    artwork
-                        .id(flow.current)
-                        .transition(.opacity)
-                } else {
-                    artwork
-                        .id(flow.current)
-                        .transition(.opacity)
-                    heading
+        Group {
+            if flow.current == .homeTour {
+                HomeOnboardingTourView(
+                    playerName: playerName,
+                    onboardingPosition: flow.progressPosition,
+                    onboardingTotal: flow.progressSteps.count,
+                    onComplete: onComplete
+                )
+            } else {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 24) {
+                        header
+                        if flow.current == .homeSpaces || flow.current == .invite {
+                            heading
+                            artwork
+                                .id(flow.current)
+                                .transition(.opacity)
+                        } else {
+                            artwork
+                                .id(flow.current)
+                                .transition(.opacity)
+                            heading
+                        }
+                        pageContent
+                    }
+                    .frame(width: contentWidth)
+                    .padding(.horizontal, compactLayout ? 16 : 28)
+                    .padding(.top, 16)
+                    .padding(.bottom, 24)
+                    .frame(minHeight: max(0, height - 168), alignment: .center)
+                    .frame(maxWidth: .infinity)
                 }
-                pageContent
             }
-            .frame(width: contentWidth)
-            .padding(.horizontal, compactLayout ? 16 : 28)
-            .padding(.top, 16)
-            .padding(.bottom, 24)
-            .frame(minHeight: max(0, height - 168), alignment: .center)
-            .frame(maxWidth: .infinity)
         }
         .accessibilityIdentifier("onboarding-page-\(flow.current.accessibilityID)")
         .scrollBounceBehavior(.basedOnSize)
@@ -307,13 +299,6 @@ struct WelcomeIntroductionView: View {
                 imageName: nil,
                 imageLabel: nil
             )
-        case .inviteChoice:
-            OnboardingPagePresentation(
-                title: "Do you want to invite other people?",
-                subtitle: "You can share tasks and progress with the people you live with, or start on your own.",
-                imageName: "Onboarding/SharedHouseholdV1",
-                imageLabel: "Household members sharing dishes, laundry, and recycling from one cozy home."
-            )
         case .playerName:
             OnboardingPagePresentation(
                 title: "Welcome! What is your name?",
@@ -323,8 +308,8 @@ struct WelcomeIntroductionView: View {
             )
         case .invite:
             OnboardingPagePresentation(
-                title: "Invite your household",
-                subtitle: "Send a private iCloud invite now, or skip and invite people later from Household settings.",
+                title: "Share the load.",
+                subtitle: "Invite someone you live with to share chores, assignments, and progress. You can always invite more people later.",
                 imageName: "Onboarding/SharedHouseholdV1",
                 imageLabel: "Household members sharing dishes, laundry, and recycling from one cozy home."
             )
@@ -337,12 +322,12 @@ struct WelcomeIntroductionView: View {
                 imageName: flow.route.isJoining ? "Onboarding/ManageableSuggestionsV1" : nil,
                 imageLabel: flow.route.isJoining ? "A cozy kitchen with a few doable household suggestions." : nil
             )
-        case .rewards:
+        case .homeTour:
             OnboardingPagePresentation(
-                title: "Turn chores into XP.",
-                subtitle: "Finish tasks, build streaks, level up, and make keeping up with home feel a little more like a game.",
-                imageName: "Onboarding/XPStreaksV1",
-                imageLabel: "A completed chore creates a reward, fills progress, and keeps a streak going."
+                title: "Meet your home screen.",
+                subtitle: "A quick tour will show you the controls you’ll use most.",
+                imageName: nil,
+                imageLabel: nil
             )
         }
     }
@@ -417,10 +402,6 @@ struct WelcomeIntroductionView: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
-        case .inviteChoice:
-            Label("You can change this later in Household settings.", systemImage: "gearshape.fill")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
         case .invite:
             inviteStatus
         case .suggestions:
@@ -433,8 +414,8 @@ struct WelcomeIntroductionView: View {
                     visibleTaskCount: $visibleStarterTaskCount
                 )
             }
-        case .rewards:
-            rewardPreview
+        case .homeTour:
+            EmptyView()
         }
     }
 
@@ -483,48 +464,15 @@ struct WelcomeIntroductionView: View {
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(Theme.successGreen)
         } else {
-            Label("Invites use Apple's private iCloud sharing.", systemImage: "lock.shield.fill")
+            Label("Invites use Apple’s private iCloud sharing.", systemImage: "lock.shield.fill")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
         }
     }
 
-    private var rewardPreview: some View {
-        LazyVGrid(columns: [GridItem(.adaptive(minimum: 92), spacing: 8)], spacing: 8) {
-            rewardBadge("+25 XP", icon: "sparkles", color: Theme.hearthGold)
-            rewardBadge("Level 6", icon: "chart.bar.fill", color: Theme.adventureBlue)
-            rewardBadge("7 day streak", icon: "flame.fill", color: Theme.coral)
-        }
-        .accessibilityElement(children: .contain)
-    }
-
-    private func rewardBadge(_ title: String, icon: String, color: Color) -> some View {
-        Label(title, systemImage: icon)
-            .font(.subheadline.weight(.semibold))
-            .foregroundStyle(color)
-            .frame(maxWidth: .infinity, minHeight: 42)
-            .padding(.horizontal, 10)
-            .background(color.opacity(0.10), in: RoundedRectangle(cornerRadius: Theme.chipCornerRadius))
-            .overlay {
-                RoundedRectangle(cornerRadius: Theme.chipCornerRadius)
-                    .strokeBorder(color.opacity(0.20))
-            }
-            .accessibilityLabel(title)
-    }
-
     @ViewBuilder
     private var actions: some View {
         switch flow.current {
-        case .inviteChoice:
-            WelcomeActionBar(
-                title: "Yes, invite people",
-                action: { answerInvitation(true) },
-                isDisabled: isBusy,
-                showsProgress: false,
-                secondaryTitle: "No, I'll start on my own",
-                secondaryAction: { answerInvitation(false) },
-                isAccessibilityHidden: !isActive
-            )
         case .joinHousehold:
             WelcomeActionBar(
                 title: "Join \(joiningHouseholdName)",
@@ -542,7 +490,7 @@ struct WelcomeIntroductionView: View {
                 action: handlePrimaryAction,
                 isDisabled: primaryButtonDisabled,
                 showsProgress: sharePresentation.isPreparing,
-                secondaryTitle: hasSentInvite ? "Done" : "Skip for now",
+                secondaryTitle: hasSentInvite ? "Continue" : "I’ll do this later",
                 secondaryAction: advance,
                 secondaryIsDisabled: isBusy,
                 isAccessibilityHidden: !isActive
@@ -558,6 +506,8 @@ struct WelcomeIntroductionView: View {
                 secondaryIsDisabled: isBusy,
                 isAccessibilityHidden: !isActive
             )
+        case .homeTour:
+            EmptyView()
         default:
             WelcomeActionBar(
                 title: primaryButtonTitle,
@@ -580,17 +530,16 @@ struct WelcomeIntroductionView: View {
         case .homeSpaces: "Continue to task suggestions"
         case .playerName: "Continue"
         case .suggestions: flow.route.isJoining ? "Next" : starterChoreActionTitle
-        case .rewards: flow.route.isJoining ? "Enter \(joiningHouseholdName)" : "Choose my first chores"
+        case .homeTour: "Start using ADultingHD"
         case .joinHousehold: "Join \(joiningHouseholdName)"
         case .invite: inviteButtonTitle
-        case .inviteChoice: "Continue"
         }
     }
 
     private var inviteButtonTitle: String {
         if sharePresentation.isPreparing { return "Preparing..." }
         if hasSentInvite { return "Invite someone else" }
-        return "Pick someone to invite"
+        return "Invite someone"
     }
 
     private var primaryButtonDisabled: Bool {
@@ -658,10 +607,6 @@ struct WelcomeIntroductionView: View {
         advance()
     }
 
-    private func answerInvitation(_ shouldInvite: Bool) {
-        updateFlow { $0.answerInvitation(shouldInvite) }
-    }
-
     private func handleSharePresentationDismissed() {
         let shouldAdvance = hasSentInvite && flow.current == .invite
         hasSentInvite = false
@@ -681,14 +626,8 @@ struct WelcomeIntroductionView: View {
             Task { await sharePresentation.prepare(using: dataStore) }
         case .suggestions:
             advance()
-        case .rewards:
-            if flow.route.isJoining {
-                onComplete()
-            } else {
-                onRequestSetup()
-            }
-        case .inviteChoice:
-            break
+        case .homeTour:
+            onComplete()
         }
     }
 
