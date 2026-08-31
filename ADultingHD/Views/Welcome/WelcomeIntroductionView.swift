@@ -295,7 +295,7 @@ struct WelcomeIntroductionView: View {
         case .homeSpaces:
             OnboardingPagePresentation(
                 title: "Make \(homeDisplayName) work for you.",
-                subtitle: "Tap every room or area you want to set up tasks for. We’ll use these spaces to filter suggestions and search; you can add any task later.",
+                subtitle: "Choose the spaces that matter to you. We’ll suggest helpful tasks for each one.",
                 imageName: nil,
                 imageLabel: nil
             )

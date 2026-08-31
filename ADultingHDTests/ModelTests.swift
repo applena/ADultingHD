@@ -333,6 +333,15 @@ final class ModelTests: XCTestCase {
         }
     }
 
+    func testPrimaryAndAdditionalHomeLocationsCoverEveryOptionOnce() {
+        let primary = Set(HomeLocation.primaryCases)
+        let additional = Set(HomeLocation.additionalCases)
+
+        XCTAssertTrue(primary.isDisjoint(with: additional))
+        XCTAssertEqual(primary.union(additional), Set(HomeLocation.allCases))
+        XCTAssertEqual(HomeLocation.primaryCases.count, 9)
+    }
+
     func testOnboardingRecommendationsAreFocusedAndScopedToSelectedRooms() {
         let requestedRooms: Set<TaskCategory> = [.kitchen, .bathroom, .general]
         let recommendations = onboardingRecommendedCatalogTasks(for: requestedRooms)

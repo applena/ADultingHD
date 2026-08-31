@@ -15,7 +15,22 @@ enum HomeLocation: String, CaseIterable, Hashable, Identifiable {
     case laundryRoom = "Laundry room"
     case office = "Office"
     case garage = "Garage"
-    case outsideArea = "Outside area"
+    case outsideArea = "Outdoor space"
+    case diningRoom = "Dining room"
+    case basement = "Basement"
+    case playroom = "Playroom"
+    case nursery = "Nursery"
+    case guestRoom = "Guest room"
+    case storage = "Storage"
+
+    static let primaryCases: [HomeLocation] = [
+        .bedroom, .bathroom, .kitchen, .livingRoom, .laundryRoom,
+        .office, .entryway, .garage, .outsideArea,
+    ]
+
+    static let additionalCases: [HomeLocation] = [
+        .diningRoom, .basement, .playroom, .nursery, .guestRoom, .storage,
+    ]
 
     var id: String {
         rawValue.lowercased().replacingOccurrences(of: " ", with: "-")
@@ -49,6 +64,12 @@ enum HomeLocation: String, CaseIterable, Hashable, Identifiable {
         case .office: "desktopcomputer"
         case .garage: "car"
         case .outsideArea: "leaf"
+        case .diningRoom: "table.furniture"
+        case .basement: "stairs"
+        case .playroom: "teddybear"
+        case .nursery: "figure.and.child.holdinghands"
+        case .guestRoom: "bed.double.fill"
+        case .storage: "shippingbox"
         }
     }
 

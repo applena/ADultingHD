@@ -179,6 +179,7 @@ final class ScreenshotTests: XCTestCase {
         let bedroom = app.buttons["onboarding-location-bedroom"]
         XCTAssertTrue(kitchen.waitForExistence(timeout: 3), "The home map should include a kitchen")
         XCTAssertTrue(bedroom.waitForExistence(timeout: 3), "The home map should include a bedroom")
+        XCTAssertTrue(app.buttons["onboarding-more-spaces"].exists, "The home map should offer additional spaces")
         kitchen.tap()
         bedroom.tap()
         XCTAssertTrue(continueBeforeSelection.isEnabled, "Selecting spaces should enable the next action")

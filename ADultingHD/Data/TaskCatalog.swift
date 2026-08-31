@@ -161,6 +161,12 @@ private let onboardingRecommendationNamesByLocation: [HomeLocation: [String]] = 
     .office: onboardingRecommendationNames[.office] ?? [],
     .garage: onboardingRecommendationNames[.garage] ?? [],
     .outsideArea: onboardingRecommendationNames[.outdoor] ?? [],
+    .diningRoom: ["Wipe the dining table"],
+    .basement: ["Tidy the basement"],
+    .playroom: ["Reset the playroom"],
+    .nursery: ["Tidy the nursery"],
+    .guestRoom: ["Refresh the guest room"],
+    .storage: ["Organize one storage area"],
 ]
 
 /// Returns a small, deterministic set of catalog tasks for the spaces a user
@@ -525,6 +531,51 @@ let taskCatalog: [CatalogTask] = [
         description: "Mow grass or tidy the edges of the yard when your outdoor space needs it.",
         category: .outdoor, suggestedFrequency: .weekly, estimatedMinutes: 30, difficulty: .hard,
         supplies: ["Lawn mower", "Edger"]
+    ),
+
+    // MARK: - Additional home spaces (6)
+
+    CatalogTask(
+        name: "Wipe the dining table",
+        description: "Clear the table, wipe the surface, and return anything that belongs elsewhere.",
+        suggestedRoom: HomeLocation.diningRoom.taskRoom,
+        suggestedFrequency: .weekly, estimatedMinutes: 10, difficulty: .easy,
+        supplies: ["All-purpose cleaner", "Microfiber cloth"]
+    ),
+    CatalogTask(
+        name: "Tidy the basement",
+        description: "Return loose items to their places and clear the main walking paths.",
+        suggestedRoom: HomeLocation.basement.taskRoom,
+        suggestedFrequency: .monthly, estimatedMinutes: 20, difficulty: .medium,
+        supplies: []
+    ),
+    CatalogTask(
+        name: "Reset the playroom",
+        description: "Gather toys, books, and art supplies and return them to their homes.",
+        suggestedRoom: HomeLocation.playroom.taskRoom,
+        suggestedFrequency: .weekly, estimatedMinutes: 15, difficulty: .easy,
+        supplies: []
+    ),
+    CatalogTask(
+        name: "Tidy the nursery",
+        description: "Put away clothes and supplies, clear surfaces, and empty the diaper pail if needed.",
+        suggestedRoom: HomeLocation.nursery.taskRoom,
+        suggestedFrequency: .weekly, estimatedMinutes: 15, difficulty: .easy,
+        supplies: ["Trash bags"]
+    ),
+    CatalogTask(
+        name: "Refresh the guest room",
+        description: "Dust surfaces, straighten the bed, and make the room ready for a visitor.",
+        suggestedRoom: HomeLocation.guestRoom.taskRoom,
+        suggestedFrequency: .monthly, estimatedMinutes: 20, difficulty: .easy,
+        supplies: ["Microfiber cloth"]
+    ),
+    CatalogTask(
+        name: "Organize one storage area",
+        description: "Choose one shelf or bin, remove what no longer belongs, and group like items together.",
+        suggestedRoom: HomeLocation.storage.taskRoom,
+        suggestedFrequency: .monthly, estimatedMinutes: 20, difficulty: .medium,
+        supplies: []
     ),
 
     // MARK: - General (14)
