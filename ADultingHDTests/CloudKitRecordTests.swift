@@ -9,6 +9,27 @@ final class CloudKitRecordTests: XCTestCase {
 
     private let zone = CKRecordZone(zoneName: "TestZone")
 
+    func testHouseholdShareErrorHidesCloudKitDiagnostics() {
+        let error = CloudKitSyncError.shareCreationFailed(
+            detail: "Cannot create or modify field 'room' in production schema | recordName=private-id"
+        )
+
+        let message = householdShareErrorMessage(for: error)
+
+        XCTAssertEqual(message, "We couldn’t prepare the invite. Please try again later.")
+        XCTAssertFalse(message.contains("recordName"))
+        XCTAssertFalse(message.contains("production schema"))
+    }
+
+    func testHouseholdShareErrorExplainsUnavailableICloud() {
+        let error = CloudKitSyncError.iCloudUnavailable(status: "noAccount")
+
+        XCTAssertEqual(
+            householdShareErrorMessage(for: error),
+            "iCloud isn’t available. Check that you’re signed in and try again."
+        )
+    }
+
     // MARK: - HouseholdTask
 
     func testTaskRoundTrip_minimal() {

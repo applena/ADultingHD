@@ -13,6 +13,17 @@ struct HouseholdShareSheetPayload: Identifiable {
     let householdName: String
 }
 
+/// CloudKit's diagnostic strings can contain record IDs, schema internals,
+/// and a copy of the same failure for every task in the household. Keep those
+/// details in the sync logs and give people one short, actionable message.
+func householdShareErrorMessage(for error: Error) -> String {
+    if let syncError = error as? CloudKitSyncError,
+       case .iCloudUnavailable = syncError {
+        return "iCloud isn’t available. Check that you’re signed in and try again."
+    }
+    return "We couldn’t prepare the invite. Please try again later."
+}
+
 /// Shared preparation state for every place that presents a household invite.
 /// Keeping CloudKit loading, payload construction, and errors here prevents
 /// onboarding and Settings from implementing subtly different invite flows.
@@ -67,7 +78,7 @@ final class HouseholdSharePresentation {
             ))
         } catch {
             guard case .preparing(let activeID) = phase, activeID == preparationID else { return }
-            phase = .failed(error.localizedDescription)
+            phase = .failed(householdShareErrorMessage(for: error))
         }
     }
 

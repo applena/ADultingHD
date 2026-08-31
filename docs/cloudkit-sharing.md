@@ -202,6 +202,26 @@ to `true` without completing them will crash the app.
   `H67CLQW4PB` (personal team) but the container lives under
   `TYQ32QCF6K`. Switch via the Account Menu
 
+#### Production schema inventory
+
+Deploy the complete Development schema rather than selecting only the field
+named by the first server error. CloudKit stops validating a rejected record
+at an invalid field, so fixing fields one at a time only reveals the next
+missing field on the following attempt.
+
+| Record type | Custom fields and CloudKit types |
+|---|---|
+| `HouseholdTask` | `name` String; `taskDescription` String; `room` String; `category` String; `scheduleFrequency` String; `frequency` String; `planningSchemaVersion` Int64; `legacyCategorySnapshot` String; `legacyFrequencySnapshot` String; `estimatedMinutes` Int64; `difficulty` Int64; `supplies` String List; `isActive` Int64; `lastCompleted` Date/Time; `defaultAssigneeId` String; `isPersonal` Int64; `scheduledWeekdays` Int64 List; `scheduledDayOfMonth` Int64; `scheduledMonth` Int64; `checklist` Bytes |
+| `TaskCompletion` | `taskId` String; `taskName` String; `completedAt` Date/Time; `xpEarned` Int64; `streakBonus` Int64; `notes` String; `profileId` String; `oneTimeDueDate` Date/Time |
+| `MemberProfile` | `name` String; `avatar` String; `totalXP` Int64; `coins` Int64; `currentStreak` Int64; `longestStreak` Int64; `totalTasksCompleted` Int64; `joinDate` Date/Time; `lastActiveDate` Date/Time; `unlockedAchievements` String List; `avatarState` Bytes |
+| `HouseholdRoot` | `title` String |
+| `PersonalTaskTombstone` | No custom fields; it uses CloudKit's system record ID and parent relationship |
+
+The system-created `cloudkit.share` record type must also exist in both
+environments. Deploy all pending record types, fields, indexes, and security
+role changes together. Do not reset either environment or manually delete
+Production records while repairing a schema mismatch.
+
 ### 3. Entitlements
 
 In `ADultingHD/App/ADultingHD.entitlements` (and mirrored in `project.yml`
