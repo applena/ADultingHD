@@ -391,6 +391,10 @@ struct WelcomeIntroductionView: View {
                     text: $playerName,
                     accessibilityID: "onboarding-player-name-field"
                 )
+                .onSubmit {
+                    guard !primaryButtonDisabled else { return }
+                    handlePrimaryAction()
+                }
                 if flow.current == .joinHousehold && isPlayerNameTaken {
                     Label("Someone in this household already uses that name.", systemImage: "exclamationmark.circle.fill")
                         .font(.caption)
@@ -436,6 +440,8 @@ struct WelcomeIntroductionView: View {
                 .accessibilityIdentifier(accessibilityID)
                 #if os(iOS)
                 .autocorrectionDisabled(true)
+                .textInputAutocapitalization(.words)
+                .submitLabel(.continue)
                 #endif
         }
         .padding(.horizontal, 14)
