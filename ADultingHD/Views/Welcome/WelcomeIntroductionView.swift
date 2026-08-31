@@ -64,11 +64,11 @@ struct WelcomeOnboardingFlow {
         if route.isJoining {
             return [.joinHousehold, .suggestions, .rewards]
         }
-        var result: [Step] = [.playerName, .homeSpaces, .inviteChoice]
+        var result: [Step] = [.playerName, .homeSpaces, .suggestions, .inviteChoice]
         if wantsToInvite == true {
             result.append(.invite)
         }
-        result.append(contentsOf: [.suggestions, .rewards])
+        result.append(.rewards)
         return result
     }
 
@@ -86,7 +86,7 @@ struct WelcomeOnboardingFlow {
     mutating func answerInvitation(_ shouldInvite: Bool) {
         guard current == .inviteChoice else { return }
         wantsToInvite = shouldInvite
-        move(to: shouldInvite ? .invite : .suggestions)
+        move(to: shouldInvite ? .invite : .rewards)
     }
 
     mutating func markInviteSent() {
@@ -144,6 +144,9 @@ struct WelcomeIntroductionView: View {
     @State private var joinError: String?
     @State private var hasSentInvite = false
     @State private var sharePresentation = HouseholdSharePresentation()
+    @State private var selectedStarterTaskNames: Set<String> = []
+    @State private var visibleStarterTaskCount = 5
+    @State private var starterLocationSnapshot: Set<HomeLocation> = []
     @AppStorage(PrefKey.onboardingPlayerName) private var playerName = ""
 
     let width: CGFloat
@@ -188,6 +191,11 @@ struct WelcomeIntroductionView: View {
         .onChange(of: dataStore.pendingOnboardingShare?.id) { _, shareID in
             if shareID != nil {
                 updateFlow { $0.start(routeFromStore) }
+            }
+        }
+        .onChange(of: flow.current) { _, step in
+            if step == .suggestions && !flow.route.isJoining {
+                prepareStarterChores()
             }
         }
         .sheet(item: sharePresentation.payloadBinding, onDismiss: handleSharePresentationDismissed) { payload in
@@ -322,10 +330,12 @@ struct WelcomeIntroductionView: View {
             )
         case .suggestions:
             OnboardingPagePresentation(
-                title: "Never wonder what to do next.",
-                subtitle: "ADultingHD suggests a few doable tasks so you can just pick one and start.",
-                imageName: "Onboarding/ManageableSuggestionsV1",
-                imageLabel: "A cozy kitchen with a few doable household suggestions."
+                title: flow.route.isJoining ? "You’re ready to join in." : "Start with a few easy wins.",
+                subtitle: flow.route.isJoining
+                    ? "Your shared household’s tasks will be waiting for you."
+                    : "Based on the spaces you chose, here are a few helpful chores to get you started. Pick any you want—you can always add more tasks later.",
+                imageName: flow.route.isJoining ? "Onboarding/ManageableSuggestionsV1" : nil,
+                imageLabel: flow.route.isJoining ? "A cozy kitchen with a few doable household suggestions." : nil
             )
         case .rewards:
             OnboardingPagePresentation(
@@ -414,7 +424,15 @@ struct WelcomeIntroductionView: View {
         case .invite:
             inviteStatus
         case .suggestions:
-            EmptyView()
+            if flow.route.isJoining {
+                EmptyView()
+            } else {
+                StarterChorePickerView(
+                    tasks: starterSuggestions,
+                    selectedTaskNames: $selectedStarterTaskNames,
+                    visibleTaskCount: $visibleStarterTaskCount
+                )
+            }
         case .rewards:
             rewardPreview
         }
@@ -529,6 +547,17 @@ struct WelcomeIntroductionView: View {
                 secondaryIsDisabled: isBusy,
                 isAccessibilityHidden: !isActive
             )
+        case .suggestions where !flow.route.isJoining:
+            WelcomeActionBar(
+                title: starterChoreActionTitle,
+                action: saveStarterChoresAndAdvance,
+                isDisabled: selectedStarterTaskNames.isEmpty || isBusy,
+                showsProgress: isSaving,
+                secondaryTitle: "Skip for now",
+                secondaryAction: skipStarterChores,
+                secondaryIsDisabled: isBusy,
+                isAccessibilityHidden: !isActive
+            )
         default:
             WelcomeActionBar(
                 title: primaryButtonTitle,
@@ -550,7 +579,7 @@ struct WelcomeIntroductionView: View {
         switch flow.current {
         case .homeSpaces: "Continue to task suggestions"
         case .playerName: "Continue"
-        case .suggestions: "Next"
+        case .suggestions: flow.route.isJoining ? "Next" : starterChoreActionTitle
         case .rewards: flow.route.isJoining ? "Enter \(joiningHouseholdName)" : "Choose my first chores"
         case .joinHousehold: "Join \(joiningHouseholdName)"
         case .invite: inviteButtonTitle
@@ -587,6 +616,46 @@ struct WelcomeIntroductionView: View {
         guard !didConfigureFlow else { return }
         didConfigureFlow = true
         flow.start(routeFromStore)
+    }
+
+    private var starterSuggestions: [CatalogTask] {
+        onboardingRecommendedCatalogTasks(for: selectedLocations)
+    }
+
+    private var selectedStarterTasks: [CatalogTask] {
+        starterSuggestions.filter { selectedStarterTaskNames.contains($0.name) }
+    }
+
+    private var starterChoreActionTitle: String {
+        "Add \(selectedStarterTaskNames.count) \(selectedStarterTaskNames.count == 1 ? "chore" : "chores")"
+    }
+
+    private func prepareStarterChores() {
+        guard starterLocationSnapshot != selectedLocations else { return }
+        starterLocationSnapshot = selectedLocations
+        visibleStarterTaskCount = 5
+        selectedStarterTaskNames = Set(
+            starterSuggestions.prefix(5).enumerated().compactMap { index, task in
+                index.isMultiple(of: 2) ? task.name : nil
+            }
+        )
+    }
+
+    private func saveStarterChoresAndAdvance() {
+        guard !selectedStarterTaskNames.isEmpty, !isSaving else { return }
+        let tasks = selectedStarterTasks
+        isSaving = true
+        Task { @MainActor in
+            await dataStore.seedOnboardingTasks(recommendedTasks: tasks)
+            isSaving = false
+            advance()
+        }
+    }
+
+    private func skipStarterChores() {
+        guard !isBusy else { return }
+        selectedStarterTaskNames.removeAll()
+        advance()
     }
 
     private func answerInvitation(_ shouldInvite: Bool) {

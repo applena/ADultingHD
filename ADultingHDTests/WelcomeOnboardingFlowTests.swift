@@ -10,46 +10,53 @@ final class WelcomeOnboardingFlowTests: XCTestCase {
         flow.advance()
         XCTAssertEqual(flow.current, .homeSpaces)
         flow.advance()
+        XCTAssertEqual(flow.current, .suggestions)
+        flow.advance()
         XCTAssertEqual(flow.current, .inviteChoice)
 
         flow.answerInvitation(true)
         XCTAssertEqual(flow.current, .invite)
         XCTAssertEqual(flow.progressSteps, [
-            .playerName, .homeSpaces, .inviteChoice, .invite, .suggestions, .rewards,
+            .playerName, .homeSpaces, .suggestions, .inviteChoice, .invite, .rewards,
         ])
     }
 
-    func testCreatingWithoutInviteGoesStraightToSuggestions() {
+    func testCreatingWithoutInviteGoesFromSuggestionsToRewards() {
         var flow = WelcomeOnboardingFlow()
         flow.start(.creating)
         flow.advance()
         flow.advance()
+        XCTAssertEqual(flow.current, .suggestions)
+        flow.advance()
         flow.answerInvitation(false)
 
-        XCTAssertEqual(flow.current, .suggestions)
-        XCTAssertEqual(flow.progressSteps, [.playerName, .homeSpaces, .inviteChoice, .suggestions, .rewards])
+        XCTAssertEqual(flow.current, .rewards)
+        XCTAssertEqual(flow.progressSteps, [.playerName, .homeSpaces, .suggestions, .inviteChoice, .rewards])
 
         flow.back()
         XCTAssertEqual(flow.current, .inviteChoice)
+        flow.back()
+        XCTAssertEqual(flow.current, .suggestions)
         flow.back()
         XCTAssertEqual(flow.current, .homeSpaces)
         flow.back()
         XCTAssertEqual(flow.current, .playerName)
     }
 
-    func testSendingInviteAdvancesToSuggestionsOnlyOnce() {
+    func testSendingInviteAdvancesToRewardsOnlyOnce() {
         var flow = WelcomeOnboardingFlow()
         flow.start(.creating)
+        flow.advance()
         flow.advance()
         flow.advance()
         flow.answerInvitation(true)
 
         XCTAssertEqual(flow.current, .invite)
         flow.markInviteSent()
-        XCTAssertEqual(flow.current, .suggestions)
+        XCTAssertEqual(flow.current, .rewards)
 
         flow.markInviteSent()
-        XCTAssertEqual(flow.current, .suggestions)
+        XCTAssertEqual(flow.current, .rewards)
     }
 
     func testPendingInviteStartsWithJoinAndNameStep() {

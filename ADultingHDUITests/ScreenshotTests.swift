@@ -186,30 +186,45 @@ final class ScreenshotTests: XCTestCase {
         capture("Onboarding_02_home_spaces")
         tapOnboardingPrimaryAction()
 
+        let suggestionsPage = app.descendants(matching: .any)
+            .matching(identifier: "onboarding-page-suggestions")
+            .firstMatch
+        XCTAssertTrue(suggestionsPage.waitForExistence(timeout: 5), "Starter chores should follow home space selection")
+        let choreButtons = app.buttons.matching(
+            NSPredicate(format: "identifier BEGINSWITH %@", "onboarding-starter-chore-")
+        )
+        XCTAssertEqual(choreButtons.count, 5, "Page three should begin with five chore ideas")
+        let showMoreChores = app.buttons["onboarding-show-more-chores"]
+        XCTAssertTrue(showMoreChores.waitForExistence(timeout: 3))
+        XCTAssertTrue(app.descendants(matching: .any)["onboarding-starter-chore-count"].exists)
+        scrollClearOfActionBar(showMoreChores)
+        showMoreChores.tap()
+        XCTAssertGreaterThan(choreButtons.count, 5, "Show more should append another suggestion batch")
+        capture("Onboarding_03_starter_chores")
+        tapOnboardingPrimaryAction()
+
         let inviteChoice = app.descendants(matching: .any)
             .matching(identifier: "onboarding-page-invite-choice")
             .firstMatch
         XCTAssertTrue(inviteChoice.waitForExistence(timeout: 5), "Invite choice should follow home space selection")
-        capture("Onboarding_03_invite_choice")
+        capture("Onboarding_04_invite_choice")
         tapOnboardingPrimaryAction()
 
         let invitePage = app.descendants(matching: .any)
             .matching(identifier: "onboarding-page-invite")
             .firstMatch
         XCTAssertTrue(invitePage.waitForExistence(timeout: 5), "Choosing to invite should lead to the actionable invite page")
-        capture("Onboarding_04_invite")
+        capture("Onboarding_05_invite")
         let skipInvite = app.buttons["onboarding-secondary-action"]
         XCTAssertTrue(skipInvite.waitForExistence(timeout: 3))
         skipInvite.tap()
 
-        for (index, page) in ["suggestions", "rewards"].enumerated() {
-            let pageView = app.descendants(matching: .any)
-                .matching(identifier: "onboarding-page-\(page)")
-                .firstMatch
-            XCTAssertTrue(pageView.waitForExistence(timeout: 5), "Missing onboarding page \(page)")
-            capture(String(format: "Onboarding_%02d_%@", index + 5, page))
-            tapOnboardingPrimaryAction()
-        }
+        let rewardsPage = app.descendants(matching: .any)
+            .matching(identifier: "onboarding-page-rewards")
+            .firstMatch
+        XCTAssertTrue(rewardsPage.waitForExistence(timeout: 5), "Missing onboarding rewards page")
+        capture("Onboarding_06_rewards")
+        tapOnboardingPrimaryAction()
 
         let setupPage = app.descendants(matching: .any)
             .matching(identifier: "onboarding-page-setup")

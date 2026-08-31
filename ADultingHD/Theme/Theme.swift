@@ -113,6 +113,14 @@ enum Theme {
 
     static let onboardingContentMaxWidth: CGFloat = 760
     static let onboardingArtworkCornerRadius: CGFloat = 20
+    static let onboardingTwilightBackground = LinearGradient(
+        colors: [
+            Color(red: 0.025, green: 0.055, blue: 0.13),
+            Color(red: 0.055, green: 0.10, blue: 0.22),
+        ],
+        startPoint: .top,
+        endPoint: .bottom
+    )
 
     /// Grid column count: 4 on macOS wide layouts, 2 on iOS.
     static var gridColumns: Int {

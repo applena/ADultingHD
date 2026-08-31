@@ -16,7 +16,7 @@ struct HomeFloorPlanView: View {
             twilightSky
             house
         }
-        .background(twilightBackground)
+        .background(Theme.onboardingTwilightBackground)
         .clipShape(RoundedRectangle(cornerRadius: Theme.onboardingArtworkCornerRadius))
         .overlay {
             RoundedRectangle(cornerRadius: Theme.onboardingArtworkCornerRadius)
@@ -27,17 +27,6 @@ struct HomeFloorPlanView: View {
         .sheet(isPresented: $showsMoreSpaces) {
             moreSpacesSheet
         }
-    }
-
-    private var twilightBackground: LinearGradient {
-        LinearGradient(
-            colors: [
-                Color(red: 0.025, green: 0.055, blue: 0.13),
-                Color(red: 0.055, green: 0.10, blue: 0.22),
-            ],
-            startPoint: .top,
-            endPoint: .bottom
-        )
     }
 
     private var twilightSky: some View {
@@ -200,7 +189,7 @@ struct HomeFloorPlanView: View {
                     .padding(.horizontal)
                     .padding(.bottom)
             }
-            .background(twilightBackground.ignoresSafeArea())
+            .background(Theme.onboardingTwilightBackground.ignoresSafeArea())
             .navigationTitle("More spaces")
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
