@@ -455,10 +455,27 @@ struct WelcomeIntroductionView: View {
     @ViewBuilder
     private var inviteStatus: some View {
         if let errorMessage = sharePresentation.errorMessage {
-            Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
-                .font(.subheadline)
-                .foregroundStyle(.red)
-                .fixedSize(horizontal: false, vertical: true)
+            VStack(alignment: .leading, spacing: 8) {
+                Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
+                    .font(.subheadline)
+                    .foregroundStyle(.red)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                if let errorCode = sharePresentation.errorCode {
+                    Text("Error code: \(errorCode)")
+                        .font(.caption.monospaced().weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+
+                    Button {
+                        sharePresentation.copyErrorDetails()
+                    } label: {
+                        Label("Copy error details", systemImage: "doc.on.doc")
+                    }
+                    .font(.caption.weight(.semibold))
+                    .accessibilityIdentifier("onboarding-copy-invite-error")
+                }
+            }
         } else if hasSentInvite {
             Label("Invite sent", systemImage: "checkmark.circle.fill")
                 .font(.subheadline.weight(.semibold))

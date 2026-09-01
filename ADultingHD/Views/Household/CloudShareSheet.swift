@@ -1,5 +1,6 @@
 import SwiftUI
 import CloudKit
+import os
 #if os(iOS)
 import UIKit
 #else
@@ -13,15 +14,68 @@ struct HouseholdShareSheetPayload: Identifiable {
     let householdName: String
 }
 
-/// CloudKit's diagnostic strings can contain record IDs, schema internals,
-/// and a copy of the same failure for every task in the household. Keep those
-/// details in the sync logs and give people one short, actionable message.
-func householdShareErrorMessage(for error: Error) -> String {
+private let householdShareLogger = Logger(
+    subsystem: "net.shadowpuppet.ADultingHD",
+    category: "HouseholdShare"
+)
+
+struct HouseholdShareDiagnostic: Equatable {
+    let message: String
+    let code: String
+    let technicalDetails: String
+
+    var copyText: String {
+        "Error code: \(code)\n\(technicalDetails)"
+    }
+}
+
+/// Keeps the visible message short while producing a useful identifier for
+/// support. Schema errors name the rejected field; everything else receives
+/// a stable code derived from the diagnostic text.
+func householdShareDiagnostic(for error: Error) -> HouseholdShareDiagnostic {
+    let details = error.localizedDescription
     if let syncError = error as? CloudKitSyncError,
        case .iCloudUnavailable = syncError {
-        return "iCloud isn’t available. Check that you’re signed in and try again."
+        return HouseholdShareDiagnostic(
+            message: "iCloud isn’t available. Check that you’re signed in and try again.",
+            code: "INV-ICLOUD",
+            technicalDetails: details
+        )
     }
-    return "We couldn’t prepare the invite. Please try again later."
+
+    let code: String
+    if let field = rejectedCloudKitField(in: details) {
+        let token = field.uppercased().map { $0.isLetter || $0.isNumber ? $0 : "-" }
+        code = "INV-SCHEMA-\(String(token.prefix(28)))"
+    } else if let cloudKitError = error as? CKError {
+        code = "INV-CK-\(cloudKitError.code.rawValue)"
+    } else {
+        code = "INV-\(stableDiagnosticSuffix(for: details))"
+    }
+
+    return HouseholdShareDiagnostic(
+        message: "We couldn’t prepare the invite. Please try again later.",
+        code: code,
+        technicalDetails: details
+    )
+}
+
+private func rejectedCloudKitField(in details: String) -> String? {
+    let marker = "Cannot create or modify field '"
+    guard let markerRange = details.range(of: marker) else { return nil }
+    let remainder = details[markerRange.upperBound...]
+    guard let closingQuote = remainder.firstIndex(of: "'") else { return nil }
+    let field = remainder[..<closingQuote]
+    return field.isEmpty ? nil : String(field)
+}
+
+private func stableDiagnosticSuffix(for details: String) -> String {
+    var hash: UInt32 = 2_166_136_261
+    for byte in details.utf8 {
+        hash ^= UInt32(byte)
+        hash &*= 16_777_619
+    }
+    return String(format: "%08X", hash)
 }
 
 /// Shared preparation state for every place that presents a household invite.
@@ -34,7 +88,7 @@ final class HouseholdSharePresentation {
         case idle
         case preparing(UUID)
         case ready(HouseholdShareSheetPayload)
-        case failed(String)
+        case failed(HouseholdShareDiagnostic)
     }
 
     private(set) var phase: Phase = .idle
@@ -45,8 +99,16 @@ final class HouseholdSharePresentation {
     }
 
     var errorMessage: String? {
-        guard case .failed(let message) = phase else { return nil }
-        return message
+        diagnostic?.message
+    }
+
+    var errorCode: String? {
+        diagnostic?.code
+    }
+
+    private var diagnostic: HouseholdShareDiagnostic? {
+        guard case .failed(let diagnostic) = phase else { return nil }
+        return diagnostic
     }
 
     var payloadBinding: Binding<HouseholdShareSheetPayload?> {
@@ -78,8 +140,22 @@ final class HouseholdSharePresentation {
             ))
         } catch {
             guard case .preparing(let activeID) = phase, activeID == preparationID else { return }
-            phase = .failed(householdShareErrorMessage(for: error))
+            let diagnostic = householdShareDiagnostic(for: error)
+            householdShareLogger.error(
+                "Invite preparation failed [\(diagnostic.code, privacy: .public)]: \(diagnostic.technicalDetails, privacy: .private)"
+            )
+            phase = .failed(diagnostic)
         }
+    }
+
+    func copyErrorDetails() {
+        guard let diagnostic else { return }
+        #if os(iOS)
+        UIPasteboard.general.string = diagnostic.copyText
+        #else
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(diagnostic.copyText, forType: .string)
+        #endif
     }
 
     func dismiss() {

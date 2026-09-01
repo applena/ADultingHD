@@ -50,10 +50,24 @@ struct HouseholdListView: View {
                     }
                     .disabled(sharePresentation.isPreparing)
                     if let errorMessage = sharePresentation.errorMessage {
-                        Text(errorMessage)
-                            .font(.caption)
-                            .foregroundStyle(.red)
-                            .fixedSize(horizontal: false, vertical: true)
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(errorMessage)
+                                .font(.caption)
+                                .foregroundStyle(.red)
+                                .fixedSize(horizontal: false, vertical: true)
+                            if let errorCode = sharePresentation.errorCode {
+                                Text("Error code: \(errorCode)")
+                                    .font(.caption2.monospaced().weight(.semibold))
+                                    .foregroundStyle(.secondary)
+                                    .textSelection(.enabled)
+                                Button {
+                                    sharePresentation.copyErrorDetails()
+                                } label: {
+                                    Label("Copy error details", systemImage: "doc.on.doc")
+                                }
+                                .font(.caption.weight(.semibold))
+                            }
+                        }
                     }
                     Text("Pick contacts by email or phone, or send via Messages, Mail, or AirDrop. They'll tap the invite and land straight in your household.")
                         .font(.caption)

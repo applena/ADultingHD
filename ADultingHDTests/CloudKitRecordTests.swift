@@ -9,25 +9,37 @@ final class CloudKitRecordTests: XCTestCase {
 
     private let zone = CKRecordZone(zoneName: "TestZone")
 
-    func testHouseholdShareErrorHidesCloudKitDiagnostics() {
+    func testHouseholdShareDiagnosticNamesRejectedSchemaField() {
         let error = CloudKitSyncError.shareCreationFailed(
             detail: "Cannot create or modify field 'room' in production schema | recordName=private-id"
         )
 
-        let message = householdShareErrorMessage(for: error)
+        let diagnostic = householdShareDiagnostic(for: error)
 
-        XCTAssertEqual(message, "We couldn’t prepare the invite. Please try again later.")
-        XCTAssertFalse(message.contains("recordName"))
-        XCTAssertFalse(message.contains("production schema"))
+        XCTAssertEqual(diagnostic.message, "We couldn’t prepare the invite. Please try again later.")
+        XCTAssertEqual(diagnostic.code, "INV-SCHEMA-ROOM")
+        XCTAssertTrue(diagnostic.copyText.contains("recordName=private-id"))
+        XCTAssertFalse(diagnostic.message.contains("recordName"))
     }
 
-    func testHouseholdShareErrorExplainsUnavailableICloud() {
+    func testHouseholdShareDiagnosticExplainsUnavailableICloud() {
         let error = CloudKitSyncError.iCloudUnavailable(status: "noAccount")
 
-        XCTAssertEqual(
-            householdShareErrorMessage(for: error),
-            "iCloud isn’t available. Check that you’re signed in and try again."
-        )
+        let diagnostic = householdShareDiagnostic(for: error)
+
+        XCTAssertEqual(diagnostic.message, "iCloud isn’t available. Check that you’re signed in and try again.")
+        XCTAssertEqual(diagnostic.code, "INV-ICLOUD")
+    }
+
+    func testHouseholdShareDiagnosticFallbackCodeIsStable() {
+        let error = CloudKitSyncError.shareCreationFailed(detail: "Unexpected server response")
+
+        let first = householdShareDiagnostic(for: error)
+        let second = householdShareDiagnostic(for: error)
+
+        XCTAssertEqual(first.code, second.code)
+        XCTAssertTrue(first.code.hasPrefix("INV-"))
+        XCTAssertEqual(first.code.count, 12)
     }
 
     // MARK: - HouseholdTask
