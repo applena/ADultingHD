@@ -78,6 +78,11 @@ struct WelcomeOnboardingFlow {
         advance()
     }
 
+    mutating func finishInvitePresentation(wasInvalidated: Bool) {
+        guard !wasInvalidated else { return }
+        markInviteSent()
+    }
+
     mutating func markInviteAccepted(_ household: Household) {
         route = .joined(
             householdID: household.id,
@@ -125,6 +130,7 @@ struct WelcomeIntroductionView: View {
     @State private var isSaving = false
     @State private var joinError: String?
     @State private var hasSentInvite = false
+    @State private var invitePresentationWasInvalidated = false
     @State private var sharePresentation = HouseholdSharePresentation()
     @State private var selectedStarterTaskNames: Set<String> = []
     @State private var visibleStarterTaskCount = 5
@@ -196,7 +202,7 @@ struct WelcomeIntroductionView: View {
                 container: payload.container,
                 householdName: payload.householdName,
                 onShareSaved: handleInviteSent,
-                onShareInvalidated: { hasSentInvite = false },
+                onShareInvalidated: handleInviteInvalidated,
                 onDismiss: sharePresentation.dismiss
             )
         }
@@ -625,14 +631,22 @@ struct WelcomeIntroductionView: View {
     }
 
     private func handleSharePresentationDismissed() {
+        let wasInvalidated = invitePresentationWasInvalidated
         hasSentInvite = false
+        invitePresentationWasInvalidated = false
         sharePresentation.dismiss()
+        updateFlow { $0.finishInvitePresentation(wasInvalidated: wasInvalidated) }
     }
 
     private func handleInviteSent() {
         guard flow.current == .invite else { return }
         hasSentInvite = true
         updateFlow { $0.markInviteSent() }
+    }
+
+    private func handleInviteInvalidated() {
+        invitePresentationWasInvalidated = true
+        hasSentInvite = false
     }
 
     private func handlePrimaryAction() {
@@ -642,6 +656,7 @@ struct WelcomeIntroductionView: View {
         case .joinHousehold, .playerName:
             persistPlayerNameAndAdvance()
         case .invite:
+            invitePresentationWasInvalidated = false
             Task { await sharePresentation.prepare(using: dataStore) }
         case .suggestions:
             advance()

@@ -38,6 +38,30 @@ final class WelcomeOnboardingFlowTests: XCTestCase {
         XCTAssertEqual(flow.current, .homeTour)
     }
 
+    func testClosingCompletedInvitePresentationAdvancesToHomeTour() {
+        var flow = WelcomeOnboardingFlow()
+        flow.start(.creating)
+        flow.advance()
+        flow.advance()
+        flow.advance()
+
+        flow.finishInvitePresentation(wasInvalidated: false)
+
+        XCTAssertEqual(flow.current, .homeTour)
+    }
+
+    func testInvalidatedInvitePresentationStaysOnInvitePage() {
+        var flow = WelcomeOnboardingFlow()
+        flow.start(.creating)
+        flow.advance()
+        flow.advance()
+        flow.advance()
+
+        flow.finishInvitePresentation(wasInvalidated: true)
+
+        XCTAssertEqual(flow.current, .invite)
+    }
+
     func testPendingInviteStartsWithJoinAndNameStep() {
         var flow = WelcomeOnboardingFlow()
         flow.start(.pendingInvite(id: "invite-1", householdName: "Maple House", inviterName: "Alex"))
