@@ -215,7 +215,7 @@ missing field on the following attempt.
 | `TaskCompletion` | `taskId` String; `taskName` String; `completedAt` Date/Time; `xpEarned` Int64; `streakBonus` Int64; `notes` String; `profileId` String; `oneTimeDueDate` Date/Time |
 | `MemberProfile` | `name` String; `avatar` String; `totalXP` Int64; `coins` Int64; `currentStreak` Int64; `longestStreak` Int64; `totalTasksCompleted` Int64; `joinDate` Date/Time; `lastActiveDate` Date/Time; `unlockedAchievements` String List; `avatarState` Bytes |
 | `HouseholdRoot` | `title` String |
-| `PersonalTaskTombstone` | No custom fields; it uses CloudKit's system record ID and parent relationship |
+| `PersonalTaskTombstone` | `taskId` String; the UUID-only marker also remains encoded in CloudKit's system record ID and parent relationship |
 
 The system-created `cloudkit.share` record type must also exist in both
 environments. Deploy all pending record types, fields, indexes, and security

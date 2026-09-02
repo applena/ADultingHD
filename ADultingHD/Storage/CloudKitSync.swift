@@ -406,6 +406,7 @@ final class CloudKitSync: ObservableObject {
             )
             let saves = Array(records[saveOffset..<(saveOffset + savesInBatch)])
             let deletes = Array(recordIDs[deleteOffset..<(deleteOffset + deletesInBatch)])
+            var failures: [String] = []
             do {
                 let results = try await db.modifyRecords(
                     saving: saves,
@@ -413,33 +414,44 @@ final class CloudKitSync: ObservableObject {
                     savePolicy: .changedKeys,
                     atomically: false
                 )
-                var failures: [String] = []
-                for record in saves {
-                    guard let result = results.saveResults[record.recordID] else {
-                        failures.append("save \(record.recordID.recordName): no result returned")
-                        continue
-                    }
-                    if case .failure(let error) = result {
-                        failures.append("save \(record.recordID.recordName): \(error.localizedDescription)")
-                    }
-                }
-                for recordID in deletes {
-                    guard let result = results.deleteResults[recordID] else {
-                        failures.append("delete \(recordID.recordName): no result returned")
-                        continue
-                    }
-                    if case .failure(let error) = result {
-                        failures.append("delete \(recordID.recordName): \(error.localizedDescription)")
-                    }
-                }
-                guard failures.isEmpty else {
-                    throw CloudKitSyncError.shareCreationFailed(
-                        detail: "CloudKit task sync failed: \(failures.joined(separator: " | "))"
+                let batchFailures = recordFailureDetails(
+                    saving: saves,
+                    deleting: deletes,
+                    saveResults: results.saveResults,
+                    deleteResults: results.deleteResults
+                )
+                if batchFailures.contains(where: containsAtomicFailure) {
+                    failures = await retryRecordsIndividually(
+                        saving: saves,
+                        deleting: deletes,
+                        savePolicy: .changedKeys,
+                        in: db
                     )
+                } else {
+                    failures = batchFailures
                 }
             } catch {
-                logger.error("☁️ Push failed: \(error.localizedDescription)")
-                syncError = error.localizedDescription
+                if isAtomicCloudKitFailure(error) {
+                    logger.error(
+                        "☁️ Atomic batch failure; retrying \(saves.count) saves and \(deletes.count) deletes individually"
+                    )
+                    failures = await retryRecordsIndividually(
+                        saving: saves,
+                        deleting: deletes,
+                        savePolicy: .changedKeys,
+                        in: db
+                    )
+                } else {
+                    let details = cloudKitErrorDetails(error)
+                    logger.error("☁️ Push failed: \(details)")
+                    syncError = details
+                    return false
+                }
+            }
+            guard failures.isEmpty else {
+                let detail = "CloudKit task sync failed: \(failures.joined(separator: " | "))"
+                logger.error("☁️ Push failed: \(detail)")
+                syncError = detail
                 return false
             }
             saveOffset += savesInBatch
@@ -460,6 +472,7 @@ final class CloudKitSync: ObservableObject {
         in db: CKDatabase
     ) async throws {
         guard !records.isEmpty || !recordIDs.isEmpty else { return }
+        var failures: [String] = []
         do {
             let results = try await db.modifyRecords(
                 saving: records,
@@ -467,74 +480,173 @@ final class CloudKitSync: ObservableObject {
                 savePolicy: .allKeys,
                 atomically: false
             )
-            var failures: [(label: String, error: Error)] = []
-            for record in records {
-                guard let result = results.saveResults[record.recordID] else {
-                    throw CloudKitSyncError.shareCreationFailed(
-                        detail: "initial household upload failed: \(record.recordType) \(record.recordID.recordName): no result returned"
-                    )
-                }
-                if case .failure(let error) = result {
-                    failures.append((
-                        label: "\(record.recordType) \(record.recordID.recordName)",
-                        error: error
-                    ))
-                }
-            }
-            for recordID in recordIDs {
-                guard let result = results.deleteResults[recordID] else {
-                    throw CloudKitSyncError.shareCreationFailed(
-                        detail: "initial household upload failed: delete \(recordID.recordName): no result returned"
-                    )
-                }
-                if case .failure(let error) = result {
-                    failures.append((label: "delete \(recordID.recordName)", error: error))
-                }
-            }
-
-            guard !failures.isEmpty else {
-                logger.info("☁️ Pushed required batch of \(records.count) records")
-                return
-            }
-
-            // CloudKit reports every other item in a rejected batch as
-            // `batchRequestFailed` (localized as "Atomic failure"). When that
-            // is all it gives us, split the batch and retry each half. This
-            // isolates the actual invalid record instead of showing support a
-            // list of secondary errors with no actionable field or error code.
-            let itemCount = records.count + recordIDs.count
-            if itemCount > 1 && failures.allSatisfy({ isCloudKitBatchRequestFailure($0.error) }) {
-                let splitIndex = itemCount / 2
-                let firstSaveCount = min(splitIndex, records.count)
-                let firstDeleteCount = splitIndex - firstSaveCount
-
-                logger.info("☁️ Retrying atomic-failure batch as \(splitIndex) + \(itemCount - splitIndex) items")
-                try await saveRequiredRecords(
-                    Array(records.prefix(firstSaveCount)),
-                    deleting: Array(recordIDs.prefix(firstDeleteCount)),
-                    in: db
-                )
-                try await saveRequiredRecords(
-                    Array(records.dropFirst(firstSaveCount)),
-                    deleting: Array(recordIDs.dropFirst(firstDeleteCount)),
-                    in: db
-                )
-                return
-            }
-
-            let details = failures.map {
-                "\($0.label): \(cloudKitFailureDetails($0.error))"
-            }
-            throw CloudKitSyncError.shareCreationFailed(
-                detail: "initial household upload failed: \(details.joined(separator: " | "))"
+            let batchFailures = recordFailureDetails(
+                saving: records,
+                deleting: recordIDs,
+                saveResults: results.saveResults,
+                deleteResults: results.deleteResults
             )
+            if batchFailures.contains(where: containsAtomicFailure) {
+                logger.error(
+                    "☁️ Atomic initial-upload failure; retrying \(records.count) saves and \(recordIDs.count) deletes individually"
+                )
+                failures = await retryRecordsIndividually(
+                    saving: records,
+                    deleting: recordIDs,
+                    savePolicy: .allKeys,
+                    in: db
+                )
+            } else {
+                failures = batchFailures
+            }
         } catch {
-            syncError = error.localizedDescription
-            if let cloudKitError = error as? CloudKitSyncError { throw cloudKitError }
-            throw CloudKitSyncError.shareCreationFailed(
-                detail: "initial household upload failed: \(error.localizedDescription)"
-            )
+            if isAtomicCloudKitFailure(error) {
+                logger.error(
+                    "☁️ Atomic initial-upload failure; retrying \(records.count) saves and \(recordIDs.count) deletes individually"
+                )
+                failures = await retryRecordsIndividually(
+                    saving: records,
+                    deleting: recordIDs,
+                    savePolicy: .allKeys,
+                    in: db
+                )
+            } else {
+                let details = cloudKitErrorDetails(error)
+                syncError = details
+                throw CloudKitSyncError.shareCreationFailed(
+                    detail: "initial household upload failed: \(details)"
+                )
+            }
         }
+        guard failures.isEmpty else {
+            let detail = "initial household upload failed: \(failures.joined(separator: " | "))"
+            syncError = detail
+            throw CloudKitSyncError.shareCreationFailed(detail: detail)
+        }
+        logger.info("☁️ Pushed required batch of \(records.count) records")
+    }
+
+    /// CloudKit custom-zone writes are atomic even when `atomically` is false.
+    /// A single invalid record therefore makes the other records report only
+    /// `batchRequestFailed` (localized as "Atomic failure"). Retry each item
+    /// on its own so the server returns the actual rejected field.
+    private func retryRecordsIndividually(
+        saving records: [CKRecord],
+        deleting recordIDs: [CKRecord.ID],
+        savePolicy: CKModifyRecordsOperation.RecordSavePolicy,
+        in db: CKDatabase
+    ) async -> [String] {
+        var failures: [String] = []
+        for record in records {
+            do {
+                let results = try await db.modifyRecords(
+                    saving: [record],
+                    deleting: [],
+                    savePolicy: savePolicy,
+                    atomically: false
+                )
+                failures.append(contentsOf: recordFailureDetails(
+                    saving: [record],
+                    deleting: [],
+                    saveResults: results.saveResults,
+                    deleteResults: results.deleteResults
+                ))
+            } catch {
+                failures.append("save \(record.recordID.recordName): \(cloudKitErrorDetails(error))")
+            }
+        }
+        for recordID in recordIDs {
+            do {
+                let results = try await db.modifyRecords(
+                    saving: [],
+                    deleting: [recordID],
+                    savePolicy: savePolicy,
+                    atomically: false
+                )
+                failures.append(contentsOf: recordFailureDetails(
+                    saving: [],
+                    deleting: [recordID],
+                    saveResults: results.saveResults,
+                    deleteResults: results.deleteResults
+                ))
+            } catch {
+                failures.append("delete \(recordID.recordName): \(cloudKitErrorDetails(error))")
+            }
+        }
+        return failures
+    }
+
+    private func recordFailureDetails(
+        saving records: [CKRecord],
+        deleting recordIDs: [CKRecord.ID],
+        saveResults: [CKRecord.ID: Result<CKRecord, Error>],
+        deleteResults: [CKRecord.ID: Result<Void, Error>]
+    ) -> [String] {
+        var failures: [String] = []
+        for record in records {
+            guard let result = saveResults[record.recordID] else {
+                failures.append("save \(record.recordID.recordName): no result returned")
+                continue
+            }
+            if case .failure(let error) = result {
+                failures.append("save \(record.recordID.recordName): \(cloudKitErrorDetails(error))")
+            }
+        }
+        for recordID in recordIDs {
+            guard let result = deleteResults[recordID] else {
+                failures.append("delete \(recordID.recordName): no result returned")
+                continue
+            }
+            if case .failure(let error) = result {
+                failures.append("delete \(recordID.recordName): \(cloudKitErrorDetails(error))")
+            }
+        }
+        return failures
+    }
+
+    /// `CKError.batchRequestFailed` is the per-item representation of an
+    /// atomic custom-zone failure. Keep the localized-string check as a
+    /// compatibility fallback for older OS releases that surface only the
+    /// server's "Atomic failure" text.
+    private func isAtomicCloudKitFailure(_ error: Error) -> Bool {
+        if let cloudKitError = error as? CKError {
+            if cloudKitError.code == .partialFailure || cloudKitError.code == .batchRequestFailed {
+                return true
+            }
+            if cloudKitError.partialErrorsByItemID?.values.contains(where: { nestedError in
+                if let nestedCloudKitError = nestedError as? CKError {
+                    return nestedCloudKitError.code == .partialFailure
+                        || nestedCloudKitError.code == .batchRequestFailed
+                }
+                return containsAtomicFailure(nestedError.localizedDescription)
+            }) == true {
+                return true
+            }
+        }
+        return containsAtomicFailure(error.localizedDescription)
+    }
+
+    private func containsAtomicFailure(_ details: String) -> Bool {
+        details.localizedCaseInsensitiveContains("atomic failure")
+            || details.localizedCaseInsensitiveContains("batch request failed")
+    }
+
+    /// Preserve CloudKit's nested per-item errors instead of reducing a
+    /// partial failure to its unhelpful top-level "Atomic failure" text.
+    private func cloudKitErrorDetails(_ error: Error) -> String {
+        guard let cloudKitError = error as? CKError,
+              let partialErrors = cloudKitError.partialErrorsByItemID,
+              !partialErrors.isEmpty else {
+            return error.localizedDescription
+        }
+
+        let itemDetails = partialErrors.map { key, itemError in
+            let recordName = (key as? CKRecord.ID)?.recordName ?? String(describing: key)
+            return "\(recordName): \(itemError.localizedDescription)"
+        }
+        .sorted()
+        .joined(separator: " | ")
+        return "\(error.localizedDescription) [\(itemDetails)]"
     }
 
     // MARK: - Pull (CloudKit → local)
@@ -747,9 +859,10 @@ final class CloudKitSync: ObservableObject {
             )
             saveResults = results.saveResults
         } catch {
-            logger.error("☁️ modifyRecords top-level threw: \(error.localizedDescription, privacy: .public)")
+            let details = cloudKitErrorDetails(error)
+            logger.error("☁️ modifyRecords top-level threw: \(details, privacy: .public)")
             logger.error("☁️ underlying: \(String(describing: error), privacy: .public)")
-            throw CloudKitSyncError.shareCreationFailed(underlying: error)
+            throw CloudKitSyncError.shareCreationFailed(detail: details)
         }
 
         // Log every per-record result so we can see which one failed and why.
@@ -761,7 +874,7 @@ final class CloudKitSync: ObservableObject {
                 savedRecords.append(record)
                 logger.info("☁️ saved \(record.recordType, privacy: .public) id=\(recordID.recordName, privacy: .public)")
             case .failure(let error):
-                let msg = "\(recordID.recordName): \(error.localizedDescription)"
+                let msg = "\(recordID.recordName): \(cloudKitErrorDetails(error))"
                 failures.append(msg)
                 logger.error("☁️ save failed for \(msg, privacy: .public) — \(String(describing: error), privacy: .public)")
             }
@@ -1035,6 +1148,11 @@ struct PersonalTaskTombstone {
         if let parentRecordID {
             record.parent = CKRecord.Reference(recordID: parentRecordID, action: .none)
         }
+        // CloudKit does not allow an empty custom record type to be promoted
+        // from Development to Production. Keep the marker privacy-preserving
+        // by storing only the task UUID (the same value already encoded in
+        // the record ID); no task content crosses the household boundary.
+        record["taskId"] = taskID.uuidString as CKRecordValue
         return record
     }
 

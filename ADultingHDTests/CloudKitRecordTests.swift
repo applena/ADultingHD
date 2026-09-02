@@ -271,6 +271,7 @@ final class CloudKitRecordTests: XCTestCase {
 
         XCTAssertEqual(record.recordType, RecordType.personalTaskTombstone)
         XCTAssertNotEqual(record.recordID.recordName, id.uuidString)
+        XCTAssertEqual(record["taskId"] as? String, id.uuidString)
         XCTAssertEqual(PersonalTaskTombstone.taskID(from: record), id)
         XCTAssertNil(PersonalTaskTombstone.taskID(from: CKRecord(recordType: RecordType.task)))
     }
