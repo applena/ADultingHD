@@ -467,31 +467,67 @@ final class CloudKitSync: ObservableObject {
                 savePolicy: .allKeys,
                 atomically: false
             )
-            var failures: [String] = []
+            var failures: [(label: String, error: Error)] = []
             for record in records {
                 guard let result = results.saveResults[record.recordID] else {
-                    failures.append("\(record.recordID.recordName): no result returned")
-                    continue
+                    throw CloudKitSyncError.shareCreationFailed(
+                        detail: "initial household upload failed: \(record.recordType) \(record.recordID.recordName): no result returned"
+                    )
                 }
                 if case .failure(let error) = result {
-                    failures.append("\(record.recordID.recordName): \(error.localizedDescription)")
+                    failures.append((
+                        label: "\(record.recordType) \(record.recordID.recordName)",
+                        error: error
+                    ))
                 }
             }
             for recordID in recordIDs {
                 guard let result = results.deleteResults[recordID] else {
-                    failures.append("delete \(recordID.recordName): no result returned")
-                    continue
+                    throw CloudKitSyncError.shareCreationFailed(
+                        detail: "initial household upload failed: delete \(recordID.recordName): no result returned"
+                    )
                 }
                 if case .failure(let error) = result {
-                    failures.append("delete \(recordID.recordName): \(error.localizedDescription)")
+                    failures.append((label: "delete \(recordID.recordName)", error: error))
                 }
             }
-            guard failures.isEmpty else {
-                throw CloudKitSyncError.shareCreationFailed(
-                    detail: "initial household upload failed: \(failures.joined(separator: " | "))"
-                )
+
+            guard !failures.isEmpty else {
+                logger.info("☁️ Pushed required batch of \(records.count) records")
+                return
             }
-            logger.info("☁️ Pushed required batch of \(records.count) records")
+
+            // CloudKit reports every other item in a rejected batch as
+            // `batchRequestFailed` (localized as "Atomic failure"). When that
+            // is all it gives us, split the batch and retry each half. This
+            // isolates the actual invalid record instead of showing support a
+            // list of secondary errors with no actionable field or error code.
+            let itemCount = records.count + recordIDs.count
+            if itemCount > 1 && failures.allSatisfy({ isCloudKitBatchRequestFailure($0.error) }) {
+                let splitIndex = itemCount / 2
+                let firstSaveCount = min(splitIndex, records.count)
+                let firstDeleteCount = splitIndex - firstSaveCount
+
+                logger.info("☁️ Retrying atomic-failure batch as \(splitIndex) + \(itemCount - splitIndex) items")
+                try await saveRequiredRecords(
+                    Array(records.prefix(firstSaveCount)),
+                    deleting: Array(recordIDs.prefix(firstDeleteCount)),
+                    in: db
+                )
+                try await saveRequiredRecords(
+                    Array(records.dropFirst(firstSaveCount)),
+                    deleting: Array(recordIDs.dropFirst(firstDeleteCount)),
+                    in: db
+                )
+                return
+            }
+
+            let details = failures.map {
+                "\($0.label): \(cloudKitFailureDetails($0.error))"
+            }
+            throw CloudKitSyncError.shareCreationFailed(
+                detail: "initial household upload failed: \(details.joined(separator: " | "))"
+            )
         } catch {
             syncError = error.localizedDescription
             if let cloudKitError = error as? CloudKitSyncError { throw cloudKitError }
@@ -859,6 +895,24 @@ enum CloudKitSyncError: Error, LocalizedError {
             return "iCloud not available (status: \(status))"
         }
     }
+}
+
+/// CloudKit uses `batchRequestFailed` for records that were rejected only
+/// because a different item in the same request failed. Its localized text is
+/// usually just "Atomic failure", which is not the underlying cause.
+func isCloudKitBatchRequestFailure(_ error: Error) -> Bool {
+    let nsError = error as NSError
+    return nsError.domain == CKErrorDomain
+        && nsError.code == CKError.Code.batchRequestFailed.rawValue
+}
+
+/// Preserve the readable server message while also including the numeric
+/// CloudKit code. The latter remains useful when CloudKit supplies a vague or
+/// localized description that does not name the rejected field.
+func cloudKitFailureDetails(_ error: Error) -> String {
+    let nsError = error as NSError
+    guard nsError.domain == CKErrorDomain else { return error.localizedDescription }
+    return "\(error.localizedDescription) [CKError \(nsError.code)]"
 }
 
 // MARK: - CKDatabase convenience

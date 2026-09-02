@@ -42,6 +42,34 @@ final class CloudKitRecordTests: XCTestCase {
         XCTAssertEqual(first.code.count, 12)
     }
 
+    func testCloudKitBatchRequestFailureRecognizesAtomicFailureCode() {
+        let error = NSError(
+            domain: CKErrorDomain,
+            code: CKError.Code.batchRequestFailed.rawValue,
+            userInfo: [NSLocalizedDescriptionKey: "Atomic failure"]
+        )
+
+        XCTAssertTrue(isCloudKitBatchRequestFailure(error))
+        XCTAssertEqual(
+            cloudKitFailureDetails(error),
+            "Atomic failure [CKError \(CKError.Code.batchRequestFailed.rawValue)]"
+        )
+    }
+
+    func testCloudKitBatchRequestFailureRejectsActionableCloudKitError() {
+        let error = NSError(
+            domain: CKErrorDomain,
+            code: CKError.Code.invalidArguments.rawValue,
+            userInfo: [NSLocalizedDescriptionKey: "Cannot create or modify field 'room'"]
+        )
+
+        XCTAssertFalse(isCloudKitBatchRequestFailure(error))
+        XCTAssertEqual(
+            cloudKitFailureDetails(error),
+            "Cannot create or modify field 'room' [CKError \(CKError.Code.invalidArguments.rawValue)]"
+        )
+    }
+
     // MARK: - HouseholdTask
 
     func testTaskRoundTrip_minimal() {
