@@ -195,7 +195,7 @@ struct WelcomeIntroductionView: View {
                 share: payload.share,
                 container: payload.container,
                 householdName: payload.householdName,
-                onShareSaved: { hasSentInvite = true },
+                onShareSaved: handleInviteSent,
                 onShareInvalidated: { hasSentInvite = false },
                 onDismiss: sharePresentation.dismiss
             )
@@ -507,7 +507,7 @@ struct WelcomeIntroductionView: View {
                 action: handlePrimaryAction,
                 isDisabled: primaryButtonDisabled,
                 showsProgress: sharePresentation.isPreparing,
-                secondaryTitle: hasSentInvite ? "Continue" : "I’ll do this later",
+                secondaryTitle: "Skip for now",
                 secondaryAction: advance,
                 secondaryIsDisabled: isBusy,
                 isAccessibilityHidden: !isActive
@@ -625,12 +625,14 @@ struct WelcomeIntroductionView: View {
     }
 
     private func handleSharePresentationDismissed() {
-        let shouldAdvance = hasSentInvite && flow.current == .invite
         hasSentInvite = false
         sharePresentation.dismiss()
-        if shouldAdvance {
-            updateFlow { $0.markInviteSent() }
-        }
+    }
+
+    private func handleInviteSent() {
+        guard flow.current == .invite else { return }
+        hasSentInvite = true
+        updateFlow { $0.markInviteSent() }
     }
 
     private func handlePrimaryAction() {
