@@ -45,6 +45,58 @@ final class IncomingShareInbox: ObservableObject {
 
 #if os(iOS)
 import UIKit
+import SwiftUI
+
+/// SwiftUI owns the app's UIWindowSceneDelegate, so CloudKit share acceptance
+/// is delivered there instead of to UIApplicationDelegate. This forwarding
+/// proxy captures that callback and leaves SwiftUI's other scene behavior intact.
+final class CloudKitShareSceneDelegateProxy: NSObject, UIWindowSceneDelegate {
+    static let shared = CloudKitShareSceneDelegateProxy()
+
+    private var originalDelegate: UISceneDelegate?
+
+    @MainActor
+    static func install(on scene: UIWindowScene) {
+        let proxy = CloudKitShareSceneDelegateProxy.shared
+        guard (scene.delegate as AnyObject?) !== proxy else { return }
+        proxy.originalDelegate = scene.delegate
+        scene.delegate = proxy
+    }
+
+    func windowScene(
+        _ windowScene: UIWindowScene,
+        userDidAcceptCloudKitShareWith metadata: CKShare.Metadata
+    ) {
+        Task { @MainActor in
+            IncomingShareInbox.shared.enqueue(metadata)
+        }
+    }
+
+    override func responds(to selector: Selector!) -> Bool {
+        super.responds(to: selector) || originalDelegate?.responds(to: selector) == true
+    }
+
+    override func forwardingTarget(for selector: Selector!) -> Any? {
+        if originalDelegate?.responds(to: selector) == true {
+            return originalDelegate
+        }
+        return super.forwardingTarget(for: selector)
+    }
+}
+
+/// Finds SwiftUI's hosting window as soon as it attaches to a UIWindowScene.
+struct CloudKitShareSceneBridge: UIViewRepresentable {
+    func makeUIView(context: Context) -> SceneBridgeView { SceneBridgeView() }
+    func updateUIView(_ uiView: SceneBridgeView, context: Context) {}
+
+    final class SceneBridgeView: UIView {
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            guard let windowScene = window?.windowScene else { return }
+            CloudKitShareSceneDelegateProxy.install(on: windowScene)
+        }
+    }
+}
 
 @MainActor
 class AppDelegate: NSObject, UIApplicationDelegate {

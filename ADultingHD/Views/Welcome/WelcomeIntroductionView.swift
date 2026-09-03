@@ -58,7 +58,7 @@ struct WelcomeOnboardingFlow {
 
     var progressSteps: [Step] {
         if route.isJoining {
-            return [.joinHousehold, .homeTour]
+            return [.playerName, .joinHousehold, .homeTour]
         }
         return [.playerName, .homeSpaces, .suggestions, .invite, .homeTour]
     }
@@ -69,7 +69,7 @@ struct WelcomeOnboardingFlow {
 
     mutating func start(_ route: Route) {
         self.route = route
-        current = route.isJoining ? .joinHousehold : .playerName
+        current = .playerName
         history = []
     }
 
@@ -293,8 +293,8 @@ struct WelcomeIntroductionView: View {
         switch flow.current {
         case .joinHousehold:
             OnboardingPagePresentation(
-                title: "You are joining \(joiningHouseholdName), with \(inviterDisplayName).",
-                subtitle: "What's your name? Add the name you want everyone in this household to see.",
+                title: "Join \(joiningHouseholdName).",
+                subtitle: "\(inviterDisplayName) invited you to share chores, assignments, and progress in one household.",
                 imageName: "Onboarding/SharedHouseholdV1",
                 imageLabel: "Household members sharing dishes, laundry, and recycling from one cozy home."
             )
@@ -384,7 +384,7 @@ struct WelcomeIntroductionView: View {
             )
             .font(.subheadline.weight(.semibold))
             .foregroundStyle(selectedLocations.isEmpty ? .secondary : Theme.successGreen)
-        case .joinHousehold, .playerName:
+        case .playerName:
             VStack(alignment: .leading, spacing: 8) {
                 inputField(
                     "What's your name?",
@@ -396,17 +396,20 @@ struct WelcomeIntroductionView: View {
                     guard !primaryButtonDisabled else { return }
                     handlePrimaryAction()
                 }
-                if flow.current == .joinHousehold && isPlayerNameTaken {
-                    Label("Someone in this household already uses that name.", systemImage: "exclamationmark.circle.fill")
-                        .font(.caption)
-                        .foregroundStyle(.red)
-                }
-                if flow.current == .joinHousehold, let joinError {
-                    Label(joinError, systemImage: "exclamationmark.triangle.fill")
-                        .font(.caption)
-                        .foregroundStyle(.red)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
+            }
+        case .joinHousehold:
+            if let joinError {
+                Label(joinError, systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption)
+                    .foregroundStyle(.red)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                Label(
+                    "Your name will appear as \(playerName.trimmingCharacters(in: .whitespacesAndNewlines)).",
+                    systemImage: "person.crop.circle.badge.checkmark"
+                )
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.secondary)
             }
         case .invite:
             inviteStatus
@@ -571,7 +574,7 @@ struct WelcomeIntroductionView: View {
         case .homeSpaces:
             selectedLocations.isEmpty
         case .joinHousehold:
-            playerName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isPlayerNameTaken
+            false
         case .playerName:
             playerName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         default:
@@ -653,8 +656,10 @@ struct WelcomeIntroductionView: View {
         switch flow.current {
         case .homeSpaces:
             advance()
-        case .joinHousehold, .playerName:
+        case .playerName:
             persistPlayerNameAndAdvance()
+        case .joinHousehold:
+            acceptInvitedHousehold()
         case .invite:
             invitePresentationWasInvalidated = false
             Task { await sharePresentation.prepare(using: dataStore) }
@@ -667,18 +672,34 @@ struct WelcomeIntroductionView: View {
 
     private func persistPlayerNameAndAdvance() {
         let name = playerName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !name.isEmpty, !isPlayerNameTaken, !isSaving else { return }
-        let pendingInviteID = flow.route.pendingInviteID
+        guard !name.isEmpty, !isSaving else { return }
+        if flow.route.isJoining {
+            advance()
+            return
+        }
         let activeHouseholdID = dataStore.activeHouseholdId
+        isSaving = true
+        joinError = nil
+        Task { @MainActor in
+            await dataStore.renameActiveProfile(to: name)
+            // The owner's display name is also the home name used in later
+            // invites. The selected spaces remain temporary task filters.
+            await dataStore.renameHousehold(activeHouseholdID, to: name)
+            isSaving = false
+            advance()
+        }
+    }
+
+    private func acceptInvitedHousehold() {
+        guard flow.route.isJoining, !isSaving else { return }
+        let name = playerName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let pendingInviteID = flow.route.pendingInviteID
         isSaving = true
         joinError = nil
         Task { @MainActor in
             do {
                 if let pendingInviteID {
-                    try await dataStore.acceptPendingOnboardingShare(
-                        id: pendingInviteID,
-                        displayName: name
-                    )
+                    try await dataStore.acceptPendingOnboardingShare(id: pendingInviteID, displayName: name)
                     guard flow.route.pendingInviteID == pendingInviteID else {
                         isSaving = false
                         return
@@ -686,18 +707,12 @@ struct WelcomeIntroductionView: View {
                     flow.markInviteAccepted(dataStore.activeHousehold)
                 } else {
                     await dataStore.renameActiveProfile(to: name)
-                    // The owner's display name is also the home name used in
-                    // later invites. The selected spaces remain temporary
-                    // filters; they never become a task hierarchy.
-                    await dataStore.renameHousehold(activeHouseholdID, to: name)
                 }
                 isSaving = false
-                if !isPlayerNameTaken {
-                    advance()
-                }
+                advance()
             } catch {
                 isSaving = false
-                if pendingInviteID == nil || flow.route.pendingInviteID == pendingInviteID {
+                if flow.route.pendingInviteID == pendingInviteID {
                     joinError = error.localizedDescription
                 }
             }

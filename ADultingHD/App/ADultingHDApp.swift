@@ -18,6 +18,9 @@ struct ADultingHDApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
+                #if os(iOS)
+                .background(CloudKitShareSceneBridge())
+                #endif
                 .environment(dataStore)
                 .environment(notificationManager)
                 .environment(storeManager)

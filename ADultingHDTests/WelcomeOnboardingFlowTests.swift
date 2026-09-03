@@ -66,11 +66,13 @@ final class WelcomeOnboardingFlowTests: XCTestCase {
         var flow = WelcomeOnboardingFlow()
         flow.start(.pendingInvite(id: "invite-1", householdName: "Maple House", inviterName: "Alex"))
 
-        XCTAssertEqual(flow.current, .joinHousehold)
-        XCTAssertEqual(flow.progressSteps, [.joinHousehold, .homeTour])
+        XCTAssertEqual(flow.current, .playerName)
+        XCTAssertEqual(flow.progressSteps, [.playerName, .joinHousehold, .homeTour])
         XCTAssertEqual(flow.route.householdName, "Maple House")
         XCTAssertEqual(flow.route.inviterName, "Alex")
 
+        flow.advance()
+        XCTAssertEqual(flow.current, .joinHousehold)
         flow.advance()
         XCTAssertEqual(flow.current, .homeTour)
     }
