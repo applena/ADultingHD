@@ -209,6 +209,11 @@ final class DataStoreTests: XCTestCase {
         )
 
         XCTAssertEqual(dataStore.tasks.map(\.name), [taskCatalog[0].name, "Polish the moon"])
+        XCTAssertTrue(dataStore.tasks[0].isDue)
+        XCTAssertEqual(
+            dataStore.tasks[0].scheduledOverrideDate.map { Calendar.current.isDateInToday($0) },
+            true
+        )
         XCTAssertNil(dataStore.tasks.last?.room)
         XCTAssertEqual(dataStore.tasks.last?.frequency, .unscheduled)
         XCTAssertNil(dataStore.tasks.last?.nextOccurrence())

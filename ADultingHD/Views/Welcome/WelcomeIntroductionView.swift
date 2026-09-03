@@ -148,6 +148,7 @@ struct WelcomeIntroductionView: View {
             if flow.current == .homeTour {
                 HomeOnboardingTourView(
                     playerName: playerName,
+                    tasks: dataStore.activeTasks,
                     onboardingPosition: flow.progressPosition,
                     onboardingTotal: flow.progressSteps.count,
                     onComplete: onComplete

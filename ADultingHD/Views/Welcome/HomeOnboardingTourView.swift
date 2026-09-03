@@ -7,6 +7,7 @@ struct HomeOnboardingTourView: View {
     @State private var step = TourStep.add
 
     let playerName: String
+    let tasks: [HouseholdTask]
     let onboardingPosition: Int
     let onboardingTotal: Int
     let onComplete: () -> Void
@@ -114,7 +115,7 @@ struct HomeOnboardingTourView: View {
                 .foregroundStyle(Theme.hearthGold)
             Text("Good morning!")
                 .font(.system(.largeTitle, design: .rounded).weight(.bold))
-            Text("You’ve got 3 tasks to tackle. You got this!")
+            Text("You’ve got \(tourTasks.count) tasks to tackle. You got this!")
                 .font(.subheadline)
                 .foregroundStyle(Theme.cream.opacity(0.68))
         }
@@ -133,11 +134,11 @@ struct HomeOnboardingTourView: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text("Today’s progress")
                     .font(.headline)
-                ProgressView(value: 1, total: 4)
+                ProgressView(value: 0, total: Double(max(tourTasks.count, 1)))
                     .tint(Theme.hearthGold)
             }
             Spacer()
-            Text("1 / 4")
+            Text("0 / \(tourTasks.count)")
                 .font(.subheadline.weight(.bold))
         }
         .padding(14)
@@ -180,11 +181,42 @@ struct HomeOnboardingTourView: View {
 
     private var taskList: some View {
         VStack(spacing: 9) {
-            taskRow("Load the dishwasher", room: "Kitchen", icon: "fork.knife", color: Theme.hearthGold, showsMenu: step == .edit || step == .delete)
-            taskRow("Reset the living room", room: "Living room", icon: "sofa.fill", color: Theme.leafGreen, showsMenu: false)
-            taskRow("Start a load of laundry", room: "Laundry", icon: "washer.fill", color: Theme.sky, showsMenu: false)
+            ForEach(Array(tourTasks.prefix(5).enumerated()), id: \.element.id) { index, task in
+                taskRow(
+                    task.name,
+                    room: task.room ?? "Whole home",
+                    icon: task.category.icon,
+                    color: Theme.roomColor(task.room),
+                    showsMenu: index == 0 && (step == .edit || step == .delete)
+                )
+            }
         }
         .opacity(step == .add || step == .filter ? 0.42 : 1)
+    }
+
+    private var tourTasks: [HouseholdTask] {
+        if !tasks.isEmpty { return tasks }
+        return [
+            previewTask("Load the dishwasher", room: "Kitchen"),
+            previewTask("Reset the living room", room: "Living room"),
+            previewTask("Start a load of laundry", room: "Laundry"),
+        ]
+    }
+
+    private func previewTask(_ name: String, room: String) -> HouseholdTask {
+        var task = HouseholdTask(
+            id: UUID(),
+            name: name,
+            description: "",
+            category: .general,
+            frequency: .daily,
+            estimatedMinutes: 10,
+            difficulty: .easy,
+            supplies: [],
+            isActive: true
+        )
+        task.room = room
+        return task
     }
 
     private func taskRow(_ title: String, room: String, icon: String, color: Color, showsMenu: Bool) -> some View {

@@ -32,6 +32,7 @@ struct DashboardView: View {
     @State private var showAddTask = false
     @State private var showProUpgrade = false
     @State private var selectedTask: HouseholdTask?
+    @State private var selectedRoom: String?
 
     private var seasonalSectionVisible: Bool { storeManager.isPro && showSeasonalSection }
 
@@ -63,7 +64,8 @@ struct DashboardView: View {
 
     var body: some View {
         ZStack {
-            ScreenBackground()
+            Theme.onboardingTwilightBackground
+                .ignoresSafeArea()
             ScrollView {
                 #if os(macOS)
                 macOSLayout
@@ -73,6 +75,7 @@ struct DashboardView: View {
             }
             .rootTabScrollClearance()
         }
+        .foregroundStyle(Theme.cream)
         .rootTabNavigation("")
         #if os(iOS)
         .toolbar {
@@ -96,11 +99,12 @@ struct DashboardView: View {
 
     #if os(iOS)
     private var iOSLayout: some View {
-        VStack(spacing: Theme.sectionSpacing) {
-            heroSection
-            roomSummaryRow
-            statsRow
-            todaysTasksSection
+        VStack(alignment: .leading, spacing: 14) {
+            homeHeader
+            progressCard
+            questFilterRow
+            homeQuestList
+            addTaskButton
             completedTasksSection
             tipBanner
             if seasonalSectionVisible { seasonalSection }
@@ -111,36 +115,136 @@ struct DashboardView: View {
 
     #if os(macOS)
     private var macOSLayout: some View {
-        VStack(spacing: Theme.sectionSpacing) {
-            // Full-width top strip: hero + stats/tip side by side
-            HStack(alignment: .top, spacing: Theme.sectionSpacing) {
-                heroSection
-                    .frame(maxWidth: .infinity)
-                VStack(spacing: Theme.sectionSpacing) {
-                    statsRow
-                    tipBanner
-                }
-                .frame(maxWidth: 320)
-            }
-
-            roomSummaryRow
-
-            // Main body: today's tasks left, completed (+ seasonal) right
-            HStack(alignment: .top, spacing: Theme.sectionSpacing) {
-                todaysTasksSection
-                    .frame(maxWidth: .infinity)
-                VStack(spacing: Theme.sectionSpacing) {
-                    completedTasksSection
-                    if seasonalSectionVisible { seasonalSection }
-                }
-                .frame(maxWidth: 320)
-            }
+        VStack(alignment: .leading, spacing: 14) {
+            homeHeader
+            progressCard
+            questFilterRow
+            homeQuestList
+            addTaskButton
+            completedTasksSection
+            tipBanner
+            if seasonalSectionVisible { seasonalSection }
         }
-        .padding(.horizontal, 20)
-        .padding(.bottom, 20)
-        .padding(.top, 8)
+        .frame(maxWidth: 680)
+        .padding(20)
     }
     #endif
+
+    private var homeHeader: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(dataStore.activeHousehold.name.uppercased())
+                .font(.caption.weight(.bold))
+                .tracking(1.2)
+                .foregroundStyle(Theme.hearthGold)
+            Text(greeting)
+                .font(.system(.largeTitle, design: .rounded).weight(.bold))
+            Text(subtitle)
+                .font(.subheadline)
+                .foregroundStyle(Theme.cream.opacity(0.68))
+        }
+        .accessibilityIdentifier("home-root-header")
+    }
+
+    private var todayTaskTotal: Int {
+        dataStore.dueTasks.count + dataStore.todayCompletions.count
+    }
+
+    private var progressCard: some View {
+        HStack(spacing: 14) {
+            ZStack {
+                Circle().fill(Theme.hearthGold.opacity(0.18))
+                Image(systemName: "flame.fill").foregroundStyle(Theme.hearthGold)
+            }
+            .frame(width: 42, height: 42)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Today’s progress").font(.headline)
+                ProgressView(value: Double(dataStore.todayCompletions.count), total: Double(max(todayTaskTotal, 1)))
+                    .tint(Theme.hearthGold)
+            }
+            Spacer()
+            Text("\(dataStore.todayCompletions.count) / \(todayTaskTotal)")
+                .font(.subheadline.weight(.bold))
+        }
+        .padding(14)
+        .background(Theme.adventureBlue.opacity(0.72), in: RoundedRectangle(cornerRadius: 16))
+    }
+
+    private var availableRooms: [String] {
+        HouseholdTask.distinctRooms(dataStore.activeTasks.map(\.room))
+    }
+
+    private var filteredDueTasks: [HouseholdTask] {
+        guard let selectedRoom else { return dataStore.dueTasks }
+        return dataStore.dueTasks.filter {
+            HouseholdTask.roomIdentity($0.room) == HouseholdTask.roomIdentity(selectedRoom)
+        }
+    }
+
+    private var questFilterRow: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Today’s quests").font(.title3.weight(.bold))
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    roomFilterChip("All", room: nil, icon: "square.grid.2x2.fill")
+                    ForEach(availableRooms, id: \.self) { room in
+                        roomFilterChip(room, room: room, icon: TaskCategory.legacyFallback(for: room).icon)
+                    }
+                }
+            }
+        }
+    }
+
+    private func roomFilterChip(_ title: String, room: String?, icon: String) -> some View {
+        let selected = selectedRoom == room
+        return Button {
+            withAnimation(.easeInOut(duration: 0.18)) { selectedRoom = room }
+        } label: {
+            Label(title, systemImage: icon)
+                .font(.caption.weight(.semibold))
+                .padding(.horizontal, 11)
+                .padding(.vertical, 8)
+                .foregroundStyle(selected ? Theme.adventureBlue : Theme.cream.opacity(0.86))
+                .background(selected ? Theme.cream : Theme.adventureBlue.opacity(0.72), in: Capsule())
+        }
+        .buttonStyle(.plain)
+    }
+
+    @ViewBuilder
+    private var homeQuestList: some View {
+        if dataStore.tasks.isEmpty {
+            emptyTasksContent
+                .padding(14)
+                .background(Theme.adventureBlue.opacity(0.72), in: RoundedRectangle(cornerRadius: 14))
+        } else if filteredDueTasks.isEmpty {
+            caughtUpContent
+                .padding(14)
+                .background(Theme.adventureBlue.opacity(0.72), in: RoundedRectangle(cornerRadius: 14))
+        } else {
+            VStack(spacing: 9) {
+                ForEach(filteredDueTasks.prefix(10)) { task in
+                    HomeQuestRow(task: task) { selectedTask = task }
+                }
+            }
+        }
+    }
+
+    private var addTaskButton: some View {
+        HStack {
+            Spacer()
+            Button {
+                if canCreateCustomTask { showAddTask = true } else { showProUpgrade = true }
+            } label: {
+                Label("Add task", systemImage: "plus")
+                    .font(.headline)
+                    .padding(.horizontal, 17)
+                    .frame(minHeight: 48)
+                    .foregroundStyle(Theme.adventureBlue)
+                    .background(Theme.hearthGold, in: Capsule())
+            }
+            .buttonStyle(.plain)
+        }
+    }
 
     // MARK: - Hero Section
 
@@ -173,12 +277,12 @@ struct DashboardView: View {
 
             Text(currentTip)
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Theme.cream.opacity(0.72))
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(12)
-        .background(Theme.xpGold.opacity(0.08), in: RoundedRectangle(cornerRadius: Theme.chipCornerRadius))
+        .background(Theme.adventureBlue.opacity(0.72), in: RoundedRectangle(cornerRadius: Theme.chipCornerRadius))
     }
 
     // MARK: - Stats Row
@@ -383,7 +487,12 @@ struct DashboardView: View {
                 }
             }
         }
-        .card()
+        .padding(Theme.cardPadding)
+        .background(Theme.adventureBlue.opacity(0.72), in: RoundedRectangle(cornerRadius: Theme.cornerRadius))
+        .overlay {
+            RoundedRectangle(cornerRadius: Theme.cornerRadius)
+                .strokeBorder(Theme.cream.opacity(0.08))
+        }
     }
 
     // MARK: - Seasonal Suggestions
@@ -440,6 +549,75 @@ struct DashboardView: View {
                 }
                 .card()
             }
+        }
+    }
+}
+
+// MARK: - Home Quest Row
+
+/// The live counterpart to the rows demonstrated on onboarding page five.
+/// It deliberately keeps the same room icon, navy card, and ellipsis menu so
+/// the screen users land on behaves exactly like the screen they just learned.
+private struct HomeQuestRow: View {
+    @Environment(DataStore.self) private var dataStore
+    let task: HouseholdTask
+    let onEdit: () -> Void
+    @State private var isCompleting = false
+
+    var body: some View {
+        let color = Theme.roomColor(task.room)
+        HStack(spacing: 12) {
+            Image(systemName: task.category.icon)
+                .font(.body.weight(.semibold))
+                .foregroundStyle(color)
+                .frame(width: 34, height: 34)
+                .background(color.opacity(0.15), in: RoundedRectangle(cornerRadius: 9))
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(task.name).font(.subheadline.weight(.semibold))
+                Text(task.room ?? "Whole home")
+                    .font(.caption)
+                    .foregroundStyle(Theme.cream.opacity(0.58))
+            }
+
+            Spacer()
+
+            Button {
+                guard !isCompleting else { return }
+                isCompleting = true
+                Task {
+                    await dataStore.completeTask(task)
+                    isCompleting = false
+                }
+            } label: {
+                Image(systemName: "checkmark.circle")
+                    .font(.title3)
+                    .foregroundStyle(Theme.successGreen)
+                    .frame(width: 36, height: 36)
+            }
+            .buttonStyle(.plain)
+            .disabled(isCompleting)
+            .accessibilityLabel("Mark complete")
+
+            Menu {
+                Button("Edit task", systemImage: "pencil", action: onEdit)
+                Button("Delete task", systemImage: "trash", role: .destructive) {
+                    Task { await dataStore.deleteTask(task) }
+                }
+            } label: {
+                Image(systemName: "ellipsis")
+                    .font(.body.weight(.bold))
+                    .frame(width: 36, height: 36)
+                    .contentShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Task options")
+        }
+        .padding(12)
+        .background(Theme.adventureBlue.opacity(0.78), in: RoundedRectangle(cornerRadius: 14))
+        .overlay {
+            RoundedRectangle(cornerRadius: 14)
+                .strokeBorder(Theme.cream.opacity(0.08))
         }
     }
 }
