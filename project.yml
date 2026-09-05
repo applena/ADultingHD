@@ -10,12 +10,13 @@ options:
 settings:
   base:
     DEVELOPMENT_TEAM: TYQ32QCF6K
-    MARKETING_VERSION: "1.2.0"
-    CURRENT_PROJECT_VERSION: 50
+    MARKETING_VERSION: "1.3.0"
+    CURRENT_PROJECT_VERSION: 51
     SWIFT_VERSION: "6.0"
     DEAD_CODE_STRIPPING: YES
     ENABLE_USER_SCRIPT_SANDBOXING: YES
     SWIFT_EMIT_LOC_STRINGS: YES
+    CLOUDKIT_SIGNING_EXPECTED: $(CODE_SIGNING_ALLOWED)
 
 schemes:
   ADultingHD_iOS:
@@ -77,6 +78,7 @@ targets:
       properties:
         CFBundleDisplayName: ADultingHD
         CKSharingSupported: true
+        CloudKitSigningExpected: $(CLOUDKIT_SIGNING_EXPECTED)
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         LSApplicationCategoryType: public.app-category.lifestyle
@@ -124,8 +126,8 @@ targets:
         INFOPLIST_KEY_NSExtension_NSExtensionPointIdentifier: com.apple.widgetkit-extension
         SWIFT_EMIT_LOC_STRINGS: YES
         GENERATE_INFOPLIST_FILE: YES
-        MARKETING_VERSION: "1.2.0"
-        CURRENT_PROJECT_VERSION: 50
+        MARKETING_VERSION: "1.3.0"
+        CURRENT_PROJECT_VERSION: 51
     entitlements:
       path: ADultingHDWidget/ADultingHDWidget.entitlements
       properties:

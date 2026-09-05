@@ -11,6 +11,7 @@ struct HouseholdListView: View {
     @State private var renameText: String = ""
     @State private var deleteTarget: Household?
     @State private var deleteError: String?
+    @State private var deletionWasLeave = false
     @State private var showCreateSheet = false
     @State private var sharePresentation = HouseholdSharePresentation()
 
@@ -69,7 +70,7 @@ struct HouseholdListView: View {
                             }
                         }
                     }
-                    Text("Pick contacts by email or phone, or send via Messages, Mail, or AirDrop. They'll tap the invite and land straight in your household.")
+                    Text("Send an invitation to \(dataStore.activeHousehold.name). The recipient can review the household, then choose to add it or bring chores from a household they own.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -101,7 +102,7 @@ struct HouseholdListView: View {
             Button("Cancel", role: .cancel) { renameTarget = nil }
         }
         .confirmationDialog(
-            deleteTarget.map { "Delete \"\($0.name)\"?" } ?? "Delete household?",
+            deleteTarget.map { "\($0.ownerIsCurrentUser ? "Delete" : "Leave") \"\($0.name)\"?" } ?? "Remove household?",
             isPresented: Binding(
                 get: { deleteTarget != nil },
                 set: { if !$0 { deleteTarget = nil } }
@@ -109,7 +110,8 @@ struct HouseholdListView: View {
             titleVisibility: .visible,
             presenting: deleteTarget
         ) { target in
-            Button("Delete", role: .destructive) {
+            Button(target.ownerIsCurrentUser ? "Delete Household" : "Leave Household", role: .destructive) {
+                deletionWasLeave = !target.ownerIsCurrentUser
                 Task {
                     do {
                         try await dataStore.deleteHousehold(target.id)
@@ -127,7 +129,7 @@ struct HouseholdListView: View {
                 Text("This removes your access to the shared household and deletes its local data on this device. The owner's household is unchanged.")
             }
         }
-        .alert("Couldn't delete household", isPresented: Binding(
+        .alert(deletionWasLeave ? "Couldn't leave household" : "Couldn't delete household", isPresented: Binding(
             get: { deleteError != nil },
             set: { if !$0 { deleteError = nil } }
         )) {
@@ -198,7 +200,10 @@ struct HouseholdListView: View {
                     Button(role: .destructive) {
                         deleteTarget = household
                     } label: {
-                        Label("Delete", systemImage: "trash")
+                        Label(
+                            household.ownerIsCurrentUser ? "Delete Household" : "Leave Household",
+                            systemImage: household.ownerIsCurrentUser ? "trash" : "rectangle.portrait.and.arrow.right"
+                        )
                     }
                 }
             } label: {
@@ -206,6 +211,7 @@ struct HouseholdListView: View {
                     .font(.body)
                     .foregroundStyle(.secondary)
             }
+            .accessibilityLabel("Options for \(household.name)")
         }
         .padding(.vertical, 4)
     }

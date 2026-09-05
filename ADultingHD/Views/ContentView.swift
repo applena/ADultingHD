@@ -5,7 +5,6 @@ struct ContentView: View {
     @AppStorage(PrefKey.hasCompletedOnboarding) private var hasCompletedOnboarding = false
 
     var body: some View {
-        @Bindable var bindable = dataStore
         Group {
             if !dataStore.isLoaded {
                 VStack(spacing: 12) {
@@ -15,7 +14,37 @@ struct ContentView: View {
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
-            } else if !hasCompletedOnboarding {
+            } else if let error = dataStore.invitationLinkError {
+                ContentUnavailableView {
+                    Label("Couldn't open invite", systemImage: "envelope.badge")
+                } description: {
+                    Text(error)
+                } actions: {
+                    Button("Back to households") { dataStore.invitationLinkError = nil }
+                }
+                .accessibilityIdentifier("household-invitation-link-error")
+            } else if let invitation = dataStore.pendingHouseholdInvitation {
+                HouseholdInvitationView(invitation: invitation)
+                    .id(invitation.id)
+            } else {
+                regularContent
+            }
+        }
+        .alert("Couldn't open household invite", isPresented: Binding(
+            get: { dataStore.invitationLinkError != nil },
+            set: { if !$0 { dataStore.invitationLinkError = nil } }
+        )) {
+            Button("OK", role: .cancel) { dataStore.invitationLinkError = nil }
+        } message: {
+            Text(dataStore.invitationLinkError ?? "Open the invitation link again to try joining.")
+        }
+    }
+
+    /// Replacing this subtree with the invitation page also removes sheets
+    /// presented by its screens, so an open editor cannot cover an invite.
+    private var regularContent: some View {
+        Group {
+            if !hasCompletedOnboarding {
                 WelcomeView {
                     withAnimation(.spring(response: 0.5)) {
                         hasCompletedOnboarding = true
@@ -35,8 +64,8 @@ struct ContentView: View {
             }
         }
         .sheet(item: Binding(
-            get: { hasCompletedOnboarding ? bindable.pendingNameClash : nil },
-            set: { bindable.pendingNameClash = $0 }
+            get: { hasCompletedOnboarding ? dataStore.pendingNameClash : nil },
+            set: { if dataStore.pendingHouseholdInvitation == nil { dataStore.pendingNameClash = $0 } }
         )) { clash in
             NameClashSheet(clash: clash)
         }

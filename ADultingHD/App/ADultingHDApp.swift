@@ -9,17 +9,29 @@ struct ADultingHDApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     #endif
 
+    #if DEBUG
+    @State private var dataStore = HouseholdInvitationPreview.makeDataStore()
+    #else
     @State private var dataStore = DataStore()
+    #endif
     @State private var notificationManager = NotificationManager()
     @State private var storeManager = StoreManager()
     @StateObject private var incomingShareInbox = IncomingShareInbox.shared
     @Environment(\.scenePhase) private var scenePhase
 
+    private var runsInvitationPreview: Bool {
+        #if DEBUG
+        HouseholdInvitationPreview.isEnabled
+        #else
+        false
+        #endif
+    }
+
     var body: some Scene {
         WindowGroup {
             ContentView()
-                #if os(iOS)
-                .background(CloudKitShareSceneBridge())
+                #if DEBUG
+                .modifier(HouseholdInvitationPreviewAppearance())
                 #endif
                 .environment(dataStore)
                 .environment(notificationManager)
@@ -39,10 +51,16 @@ struct ADultingHDApp: App {
                     #endif
                     dataStore.configure(notificationManager: notificationManager)
                     await dataStore.load()
-                    ICloudMonitor.shared.start()
-                    dataStore.startSyncObserver()
+                    #if DEBUG
+                    HouseholdInvitationPreview.stageIfRequested(in: dataStore)
+                    #endif
+                    if !runsInvitationPreview {
+                        ICloudMonitor.shared.start()
+                        dataStore.startSyncObserver()
+                        await processIncomingHouseholdShares()
+                        await dataStore.resumeHouseholdSharing()
+                    }
                     dataStore.startDayRolloverObserver()
-                    await processIncomingHouseholdShares()
                     await notificationManager.checkAuthorizationStatus()
                     await storeManager.loadProducts()
                 }
@@ -56,10 +74,13 @@ struct ADultingHDApp: App {
                     }
                 }
                 .onContinueUserActivity(ShareAcceptance.activityType) { activity in
-                    guard let metadata = ShareAcceptance.metadata(from: activity) else { return }
-                    Task { @MainActor in
-                        await handleIncomingHouseholdShare(metadata)
-                    }
+                    incomingShareInbox.enqueue(activity)
+                }
+                .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { activity in
+                    incomingShareInbox.enqueue(activity)
+                }
+                .onOpenURL { url in
+                    incomingShareInbox.enqueue(url)
                 }
                 // Catches a calendar-day rollover that happened while the
                 // app was backgrounded/suspended — the NSCalendarDayChanged
@@ -68,6 +89,10 @@ struct ADultingHDApp: App {
                 .onChange(of: scenePhase) { _, newPhase in
                     if newPhase == .active {
                         Task { await dataStore.refreshForCurrentDay() }
+                        Task {
+                            guard dataStore.isLoaded, !runsInvitationPreview else { return }
+                            await dataStore.resumeHouseholdSharing()
+                        }
                         // Notification permission may have been granted or
                         // revoked in system Settings while backgrounded;
                         // an actual flip re-plans reminders via the
@@ -85,18 +110,15 @@ struct ADultingHDApp: App {
     private func processIncomingHouseholdShares() async {
         // A delivery that arrives while DataStore.load() is running stays in
         // the inbox. The startup task drains it once loading completes.
-        guard dataStore.isLoaded else { return }
-        for metadata in incomingShareInbox.drain() {
-            await handleIncomingHouseholdShare(metadata)
-        }
-    }
-
-    @MainActor
-    private func handleIncomingHouseholdShare(_ metadata: CKShare.Metadata) async {
-        if UserDefaults.standard.bool(forKey: PrefKey.hasCompletedOnboarding) {
-            try? await dataStore.registerJoinedHousehold(from: metadata)
-        } else {
-            dataStore.stagePendingOnboardingShare(metadata)
+        guard !runsInvitationPreview, dataStore.isLoaded, incomingShareInbox.beginProcessing() else { return }
+        defer { incomingShareInbox.endProcessing() }
+        while let invitation = incomingShareInbox.next() {
+            switch invitation {
+            case .metadata(let metadata):
+                dataStore.stageIncomingHouseholdShare(metadata)
+            case .url(let url):
+                await dataStore.stageIncomingHouseholdShare(url: url)
+            }
         }
     }
 }

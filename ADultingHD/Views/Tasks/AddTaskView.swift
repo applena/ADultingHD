@@ -49,6 +49,7 @@ private struct TaskFormView: View {
     @State private var expandedChecklistId: UUID?
     @State private var assigneeId: UUID?
     @State private var isPersonal: Bool
+    @State private var isSaving = false
 
     private let existingTask: HouseholdTask?
 
@@ -82,6 +83,7 @@ private struct TaskFormView: View {
             Form {
                 Section("Task Info") {
                     TextField("Task Name", text: $name)
+                        .accessibilityIdentifier("task-form-name")
                     TextField("Description", text: $description, axis: .vertical)
                         .lineLimit(2...4)
                 }
@@ -100,6 +102,7 @@ private struct TaskFormView: View {
                             Text(freq.rawValue).tag(freq)
                         }
                     }
+                    .accessibilityIdentifier("task-form-schedule")
                     .onChange(of: frequency) { _, new in
                         applyScheduleDefaults(for: new)
                     }
@@ -177,7 +180,8 @@ private struct TaskFormView: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button(buttonLabel) { save() }
-                        .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty || roomNameIsReserved)
+                        .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || roomNameIsReserved || !scheduleIsValid || isSaving)
+                        .accessibilityIdentifier("task-form-save")
                 }
             }
         }
@@ -256,8 +260,19 @@ private struct TaskFormView: View {
             .caseInsensitiveCompare("No Room") == .orderedSame
     }
 
+    private var scheduleIsValid: Bool {
+        TaskScheduleValidation.isValid(
+            frequency: frequency,
+            weekdays: scheduledWeekdays,
+            dayOfMonth: scheduledDayOfMonth,
+            month: scheduledMonth
+        )
+    }
+
     private func save() {
-        guard !roomNameIsReserved else { return }
+        guard !roomNameIsReserved, scheduleIsValid, !isSaving,
+              !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        isSaving = true
         let supplies = HouseholdTask.parseSupplies(from: suppliesText)
 
         var task = existingTask ?? HouseholdTask(
@@ -286,8 +301,7 @@ private struct TaskFormView: View {
         }
 
         if frequency.weekdayCount > 0 {
-            let selectedWeekdays = scheduledWeekdays.isEmpty ? Set(frequency.defaultWeekdays) : scheduledWeekdays
-            task.scheduledWeekdays = selectedWeekdays.sorted()
+            task.scheduledWeekdays = scheduledWeekdays.sorted()
             task.scheduledDayOfMonth = nil
             task.scheduledMonth = nil
         } else if frequency.usesDayOfMonth {
@@ -333,6 +347,17 @@ struct AssigneePicker: View {
 
 // MARK: - Shared Schedule Picker
 
+/// Both schedule editors validate the same selection before saving it.
+enum TaskScheduleValidation {
+    static func isValid(frequency: TaskFrequency, weekdays: Set<Int>, dayOfMonth: Int, month: Int) -> Bool {
+        if frequency.weekdayCount > 0 {
+            return weekdays.count == frequency.weekdayCount && weekdays.allSatisfy { (1...7).contains($0) }
+        }
+        if frequency.usesDayOfMonth && !(1...28).contains(dayOfMonth) { return false }
+        return frequency != .yearly || (1...12).contains(month)
+    }
+}
+
 struct SchedulePickerSection: View {
     let frequency: TaskFrequency
     @Binding var weekdays: Set<Int>
@@ -343,10 +368,10 @@ struct SchedulePickerSection: View {
         if frequency.weekdayCount > 0 {
             Section(frequency.weekdayCount == 1 ? "Day of Week" : "Days of Week") {
                 weekdayChips
-                if frequency.weekdayCount == 2 {
-                    Text("Pick 2 days.")
+                if weekdays.count != frequency.weekdayCount {
+                    Text(frequency.weekdayCount == 1 ? "Pick one day to continue." : "Pick two days to continue.")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.red)
                 }
             }
         } else if frequency == .yearly {
@@ -374,6 +399,7 @@ struct SchedulePickerSection: View {
                 ) {
                     toggleWeekday(day.rawValue)
                 }
+                .accessibilityIdentifier("schedule-weekday-\(day.rawValue)")
             }
         }
         .padding(.vertical, 4)

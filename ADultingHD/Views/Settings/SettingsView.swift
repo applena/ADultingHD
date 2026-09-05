@@ -15,12 +15,17 @@ struct SettingsView: View {
     @State private var resetError: String?
     @State private var showImportPicker = false
     @State private var importMessage: String?
+    @State private var exportError: String?
+    @State private var isExporting = false
     @State private var showProUpgrade = false
     @State private var showWelcomeTour = false
     @State private var showRedeemCode = false
     @State private var editingPlayerName: String = ""
     #if os(iOS)
     @State private var showingMailComposer = false
+    @State private var exportFile: BackupExportFile?
+    @State private var exportDirectory: URL?
+    @State private var exportCompletionError: String?
     #endif
 
     private static let feedbackEmail = "adultinghd@shadowpuppet.net"
@@ -118,6 +123,14 @@ struct SettingsView: View {
         .fileImporter(isPresented: $showImportPicker, allowedContentTypes: [.json]) { result in
             handleImport(result)
         }
+        .alert("Couldn't export backup", isPresented: Binding(
+            get: { exportError != nil },
+            set: { if !$0 { exportError = nil } }
+        )) {
+            Button("OK", role: .cancel) { exportError = nil }
+        } message: {
+            Text(exportError ?? "Please try exporting your backup again.")
+        }
         .sheet(isPresented: $showProUpgrade) { ProUpgradeView() }
         #if os(iOS)
         .offerCodeRedemption(isPresented: $showRedeemCode) { result in
@@ -136,6 +149,12 @@ struct SettingsView: View {
                 onDismiss: { showingMailComposer = false }
             )
             .ignoresSafeArea()
+        }
+        .sheet(item: $exportFile, onDismiss: cleanupExport) { file in
+            BackupShareSheet(url: file.url) { error in
+                exportCompletionError = error
+                exportFile = nil
+            }
         }
         #else
         .sheet(isPresented: $showWelcomeTour) {
@@ -290,8 +309,10 @@ struct SettingsView: View {
 
                 Section("Backup") {
                     Button { exportData() } label: {
-                        Label("Export Backup", systemImage: "square.and.arrow.up")
+                        Label(isExporting ? "Preparing Backup…" : "Export Backup", systemImage: "square.and.arrow.up")
                     }
+                    .disabled(isExporting)
+                    .accessibilityIdentifier("export-backup")
                     Button { showImportPicker = true } label: {
                         Label("Import Backup", systemImage: "square.and.arrow.down")
                     }
@@ -462,22 +483,53 @@ struct SettingsView: View {
     // MARK: - Helpers
 
     private func exportData() {
+        guard !isExporting else { return }
+        isExporting = true
+        exportError = nil
         Task {
-            guard let data = await dataStore.exportData() else { return }
-            let filename = "ADultingHD-backup-\(ISO8601DateFormatter().string(from: Date())).json"
-            #if os(macOS)
-            let panel = NSSavePanel()
-            panel.nameFieldStringValue = filename
-            panel.allowedContentTypes = [.json]
-            if panel.runModal() == .OK, let url = panel.url {
-                try? data.write(to: url)
+            defer { isExporting = false }
+            guard let data = await dataStore.exportData() else {
+                exportError = "Your backup could not be prepared. Try again."
+                return
             }
-            #else
-            let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent(filename)
-            try? data.write(to: tempURL)
-            #endif
+            let timestamp = ISO8601DateFormatter().string(from: Date()).replacingOccurrences(of: ":", with: "-")
+            let filename = "ADultingHD-backup-\(timestamp).json"
+            do {
+                #if os(macOS)
+                let panel = NSSavePanel()
+                panel.nameFieldStringValue = filename
+                panel.allowedContentTypes = [.json]
+                if panel.runModal() == .OK, let url = panel.url {
+                    try data.write(to: url, options: .atomic)
+                }
+                #else
+                cleanupExport()
+                let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+                exportDirectory = directory
+                try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+                let url = directory.appendingPathComponent(filename)
+                try data.write(to: url, options: .atomic)
+                exportFile = BackupExportFile(url: url)
+                #endif
+            } catch {
+                #if os(iOS)
+                cleanupExport()
+                #endif
+                exportError = error.localizedDescription
+            }
         }
     }
+
+    #if os(iOS)
+    private func cleanupExport() {
+        if let exportDirectory { try? FileManager.default.removeItem(at: exportDirectory) }
+        exportDirectory = nil
+        if let exportCompletionError {
+            exportError = exportCompletionError
+            self.exportCompletionError = nil
+        }
+    }
+    #endif
 
     private func handleImport(_ result: Result<URL, Error>) {
         switch result {
@@ -500,6 +552,29 @@ struct SettingsView: View {
         }
     }
 }
+
+#if os(iOS)
+private struct BackupExportFile: Identifiable {
+    let id = UUID()
+    let url: URL
+}
+
+private struct BackupShareSheet: UIViewControllerRepresentable {
+    let url: URL
+    let onComplete: @MainActor (String?) -> Void
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        let controller = UIActivityViewController(activityItems: [url], applicationActivities: nil)
+        controller.completionWithItemsHandler = { _, _, _, error in
+            let message = error?.localizedDescription
+            Task { @MainActor in onComplete(message) }
+        }
+        return controller
+    }
+
+    func updateUIViewController(_ controller: UIActivityViewController, context: Context) {}
+}
+#endif
 
 // MARK: - Manage Tasks View
 

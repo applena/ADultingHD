@@ -18,6 +18,8 @@
 	<string>APPL</string>
 	<key>CKSharingSupported</key>
 	<true/>
+	<key>CloudKitSigningExpected</key>
+	<string>$(CLOUDKIT_SIGNING_EXPECTED)</string>
 	<key>CFBundleShortVersionString</key>
 	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleVersion</key>

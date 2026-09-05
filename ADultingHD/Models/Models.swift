@@ -689,6 +689,11 @@ struct TaskCompletion: Codable, Identifiable {
     let notes: String?
     var profileId: UUID?  // nil = legacy data; set to completing member's profile id
 
+    /// Local workspace provenance, assigned at completion or when reading its
+    /// CloudKit zone. Never infer membership from a catalog task UUID: the same
+    /// chore can exist in several homes. This field does not need a CK schema change.
+    var householdId: UUID? = nil
+
     /// Daily/weekly/monthly consistency bonus XP this completion happened to
     /// trigger, keyed by period name ("daily"/"weekly"/"monthly") — see
     /// `DataStore.applyPeriodBonusesIfEarned`. nil for legacy data or a

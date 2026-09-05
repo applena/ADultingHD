@@ -729,16 +729,24 @@ struct CompletedTaskRow: View {
 
             // Tapping the checkmark undoes the completion — the "easily
             // uncheck an accidental tap" affordance from issue #16.
-            Button {
-                Task { await dataStore.uncompleteTask(completion) }
-            } label: {
+            if dataStore.canUndoCompletion(completion) {
+                Button {
+                    Task { await dataStore.uncompleteTask(completion) }
+                } label: {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.title3)
+                        .foregroundStyle(Theme.successGreen)
+                        .frame(width: 44, height: 44)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Undo completion of \(completion.taskName)")
+                .accessibilityIdentifier("undo-completion-\(completion.id)")
+            } else {
                 Image(systemName: "checkmark.circle.fill")
-                    .font(.title3)
                     .foregroundStyle(Theme.successGreen)
                     .frame(width: 44, height: 44)
+                    .accessibilityLabel("Completed")
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Undo complete")
         }
         .padding(.vertical, 4)
     }
@@ -858,18 +866,24 @@ struct CompleteTaskSheet: View {
                 Button {
                     toggleChecked(step.id)
                 } label: {
-                    Image(systemName: checked ? "checkmark.circle.fill" : "circle")
-                        .font(.title3)
-                        .foregroundStyle(checked ? Theme.successGreen : .secondary)
+                    HStack(spacing: 10) {
+                        Image(systemName: checked ? "checkmark.circle.fill" : "circle")
+                            .font(.title3)
+                            .foregroundStyle(checked ? Theme.successGreen : .secondary)
+                        Text(step.text)
+                            .font(.subheadline)
+                            .strikethrough(checked, color: .secondary)
+                            .foregroundStyle(checked ? .secondary : .primary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-
-                Text(step.text)
-                    .font(.subheadline)
-                    .strikethrough(checked, color: .secondary)
-                    .foregroundStyle(checked ? .secondary : .primary)
-
-                Spacer()
+                .accessibilityLabel(step.text)
+                .accessibilityValue(checked ? "Checked" : "Not checked")
+                .accessibilityHint("Double tap to \(checked ? "uncheck" : "check") this step")
+                .accessibilityIdentifier("checklist-step-\(step.id)")
 
                 if hasInstructions {
                     Button {
@@ -877,8 +891,11 @@ struct CompleteTaskSheet: View {
                     } label: {
                         Image(systemName: expanded ? "chevron.up" : "info.circle")
                             .foregroundStyle(.secondary)
+                            .frame(width: 44, height: 44)
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel("\(expanded ? "Hide" : "Show") instructions for \(step.text)")
+                    .accessibilityIdentifier("checklist-instructions-\(step.id)")
                 }
             }
             if expanded && hasInstructions {
@@ -888,8 +905,6 @@ struct CompleteTaskSheet: View {
                     .padding(.leading, 32)
             }
         }
-        .contentShape(Rectangle())
-        .onTapGesture { toggleChecked(step.id) }
     }
 
     private func toggleChecked(_ id: UUID) {

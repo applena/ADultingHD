@@ -10,20 +10,35 @@ someone**. The app creates a
 `CKShare` over a root record in the user's private CloudKit container,
 then presents Apple's native `UICloudSharingController` sheet. The
 owner picks one or more contacts by name/email/phone or sends via
-Messages/Mail/AirDrop. The recipient taps the invite and the app either
-joins immediately (for an existing user) or stages the metadata for its
-first onboarding page. A first-time recipient sees the household and
-inviter, enters a display name, and can either accept or create a separate
-household without accepting the CloudKit share.
+Messages/Mail/AirDrop. Every recipient reviews the invited household before
+joining. Existing users see a dedicated invitation page with **Add this
+household** and **Merge chores into this household** choices. A first-time
+recipient sees the household and inviter, enters a display name, and can
+either accept or create a separate household without accepting the share.
+
+Adding keeps all existing homes separate. Merging copies missing shared
+chores from a selected owned home, retaining destination edits and clearing
+assignees who are not members of the invited home. Personal chores and their
+supplies remain private. The original home stays available as a backup;
+membership and completion history are not copied, and XP is not duplicated.
+Supply stock is copied only for shared chore supplies and remains local to
+this Apple ID, because stock has no CloudKit record contract yet.
+
+A join finishes only after the invited snapshot has loaded and the local
+workspace/index have been written successfully. Failed acceptance, loading,
+upload, or persistence leaves the invitation available for retry and preserves
+the original home. Duplicate deliveries are queued by stable share identity.
 
 Every `Household` row maps to a single custom CKRecordZone. Owned
 households live in `privateCloudDatabase`; joined households live in
 `sharedCloudDatabase` and carry `ownerUserRecordName` so the zone
 ID resolves correctly across app restarts. Records in the zone
 (`HouseholdTask`, `PersonalTaskTombstone`, `TaskCompletion`, `MemberProfile`, `HouseholdRoot`)
-sync cross-device via CloudKit zone subscriptions plus our
-`userDidAcceptCloudKitShareWith` AppDelegate hook and the
-`onContinueUserActivity` SwiftUI modifier.
+sync cross-device via private-zone subscriptions for owners and one shared-
+database subscription for joined homes. The supported scene delegate captures
+cold-launch `connectionOptions.cloudKitShareMetadata` and warm acceptance
+callbacks. App delegate, user-activity and validated HTTPS iCloud URL paths
+feed the same inbox. CloudKit resumes after loading, foregrounding, and switches.
 
 Tasks marked **Personal** remain in the owner's local workspace and are never
 shared with household members. When an existing shared task changes scope, the
@@ -69,12 +84,12 @@ device updates.
 | `ADultingHD/App/Features.swift` | `Features.cloudKitSharing` compile-time flag that gates every CloudKit code path. Never call `CKContainer(identifier:)` when this is off — the init traps if the container entitlement isn't in the signed profile |
 | `ADultingHD/Storage/CloudKitSync.swift` | `CloudKitSync` singleton: per-household zone+database routing, record push/pull, privacy-preserving `PersonalTaskTombstone` markers, `createOrFetchShare(for:)` that saves the root + CKShare atomically, and `removeHouseholdCloudData(for:)` for owner revocation or participant leave. `uploadInitialShareSnapshot(...)` validates every required record before invite presentation. `acceptShare(from:)` returns `HouseholdShareInfo` including owner and inviter identity |
 | `ADultingHD/Storage/DataStore.swift` | `prepareHouseholdShare()` creates the share and awaits a fail-closed initial snapshot upload before returning `PreparedHouseholdShare`. `stagePendingOnboardingShare(...)` previews first-launch metadata without accepting it; `acceptPendingOnboardingShare(...)` commits the chosen invite and display name |
-| `ADultingHD/Models/Household.swift` | `Household` value type with explicit `.owned` / `.joined(ownerUserRecordName:inviterName:)` ownership. `HouseholdIndex.currentSchemaVersion = 4` |
-| `ADultingHD/Views/Household/CloudShareSheet.swift` | SwiftUI wrapper around `UICloudSharingController` (iOS) with a simple URL-and-copy fallback for macOS |
+| `ADultingHD/Models/Household.swift` | `Household` value type with explicit `.owned` / `.joined(ownerUserRecordName:inviterName:)` ownership. `HouseholdIndex.currentSchemaVersion = 5` |
+| `ADultingHD/Views/Household/CloudShareSheet.swift` | Native participant management using `UICloudSharingController` on iOS and `NSSharingService.cloudSharing` on macOS; invite-only read/write access |
 | `ADultingHD/Views/Household/HouseholdListView.swift` | Settings path: "Invite someone" button → presents `CloudShareSheet` |
 | `ADultingHD/Views/Welcome/WelcomeView.swift` | Coordinates action-first create and join onboarding. Invite recipients enter their name on page one and can decline into the default house-creation route |
 | `ADultingHD/App/AppDelegate.swift` | Implements `userDidAcceptCloudKitShareWith` on iOS and macOS. Enqueues into `IncomingShareInbox` so cold-launch invites aren't lost before SwiftUI's `.task` runs. Also defines `ShareAcceptance.activityType` for the warm-launch `onContinueUserActivity` path |
-| `ADultingHD/App/ADultingHDApp.swift` | Drains `IncomingShareInbox`, handles warm-launch user activities, and chooses staged onboarding versus immediate existing-user registration |
+| `ADultingHD/App/ADultingHDApp.swift` | Drains the deduplicated metadata/URL inbox after load, stages invitations, and resumes sharing |
 
 ## Reset and deletion lifecycle
 
@@ -148,9 +163,8 @@ iOS cloud-share service decodes metadata
   ↓
 Looks up container → App ID mapping in Apple's routing DB
   ├── App installed + routing registered → open app, deliver via
-  │   either AppDelegate.userDidAcceptCloudKitShareWith (cold-launch)
-  │   or NSUserActivity activityType=com.apple.CloudKit.ShareMetadata
-  │   (warm-launch)
+  │   scene connectionOptions.cloudKitShareMetadata (cold-launch)
+  │   or windowScene.userDidAcceptCloudKitShareWith (warm-launch)
   └── Otherwise → "Get the latest app from the App Store"
      (see App Store Connect Gate section below)
   ↓
@@ -160,7 +174,7 @@ OR
 onContinueUserActivity(ShareAcceptance.activityType)
   ↓
 ADultingHDApp.handleIncomingHouseholdShare(metadata)
-  ├── Existing user → DataStore.registerJoinedHousehold(from:)
+  ├── Existing user → stageHouseholdInvitation → review Add / Merge → explicit acceptance
   └── First launch → DataStore.stagePendingOnboardingShare(metadata)
        ├── Welcome shows household + inviter and asks for display name
        ├── "Create my own household instead" clears the staged metadata
@@ -443,3 +457,37 @@ skills in `~/.claude/skills/`:
 - [`scripts/test-sharing.sh`](../scripts/test-sharing.sh) — two-simulator cross-account test runner
 - [`docs/test-accounts.md`](test-accounts.md) — setting up test Apple IDs for the two-simulator test
 - `ADultingHDTests/CloudKitIntegrationTests.swift` — automated one-simulator tests
+
+## Completion privacy and test isolation
+
+Completion history is kept globally for personal progress, but each completion
+now carries local `householdId` provenance. New completions use the current
+household; records fetched from CloudKit use the receiving zone's local home.
+Legacy history is attributed only when its task belongs to exactly one known
+home. Ambiguous history stays local. Both normal uploads and initial invitation
+snapshots filter by household provenance and exclude private task IDs.
+
+Shared task IDs are not a household boundary: catalog chores may have the same
+UUID in several homes. Pulls reject completions unrelated to the fetched tasks.
+Other members' completions cannot be undone on this device, and personal XP/
+streak calculations exclude their activity. Remote member snapshots update
+names and avatars even when XP has not increased.
+
+Unsigned tests never initialize CKContainer. `project.yml` generates
+`CloudKitSigningExpected` from the signing build setting; the unsigned archive
+phase in `deploy.sh` explicitly overrides it because that archive is signed
+later. The export gate verifies the final flag and actual CloudKit container
+entitlements. macOS additionally checks runtime entitlements with SecTask.
+Signed simulator integration tests still require `CLOUDKIT_INTEGRATION_TESTS=1`.
+
+TaskStore defaults to an isolated temporary directory with no system iCloud
+when XCTest is loaded. Storage recovery and invitation transaction tests also
+inject explicit temporary directories. Destructive storage tests must never use
+the user's Documents or iCloud container.
+
+Required device checks: tap a Messages invitation while the recipient app is
+terminated and while already running; exercise Add, Merge, cancel, an expired
+invite, a network failure and retry, then relaunch both accounts and complete a
+shared chore. Simulator tests verify local lifecycle/transaction behavior;
+actual Apple invitation routing and Production access require two signed-in
+Apple IDs on signed builds.

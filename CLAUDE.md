@@ -40,7 +40,7 @@ xcodebuild build -project ADultingHD.xcodeproj -scheme ADultingHD_macOS \
 
 ## iCloud Sync Pattern
 
-All files in `TaskStore` are dual-written: once to the local Documents directory (`~/Documents/ADultingHD/`), once to the iCloud ubiquity container (`iCloud.net.shadowpuppet.ADultingHD/Documents/ADultingHD/`). Loads use a `newerOf(cloud:local:)` comparison of modification dates to prefer the most-recently-updated copy.
+All files in `TaskStore` are dual-written: once to the local Documents directory (`~/Documents/ADultingHD/`), once to the iCloud ubiquity container (`iCloud.net.shadowpuppet.ADultingHD/Documents/ADultingHD/`). Loads prefer the newest valid copy, falling back when a newer copy is unreadable. Unreadable bytes are retained before a later save replaces them. Unit tests use isolated temporary directories with no system iCloud access.
 
 `ICloudMonitor` (Storage/ICloudMonitor.swift) watches the iCloud container via `NSMetadataQuery` for `*.json` changes from other devices. On detection it debounces 2s, checks a 5s write-suppression window (to ignore our own iCloud writes), then posts `.dataDidSync` which `DataStore.startSyncObserver()` handles by calling `load()`.
 

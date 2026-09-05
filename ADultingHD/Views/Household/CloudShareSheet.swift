@@ -169,9 +169,7 @@ final class HouseholdSharePresentation {
 /// with contact picking (email/phone), Messages/Mail integration, and
 /// automatic handling of accept-on-receiving-device.
 ///
-/// On macOS falls back to an inline URL view with a Copy button — the
-/// macOS NSSharingService CloudKit path requires a lot of AppKit plumbing
-/// that's not worth the complexity for the current usage pattern.
+/// On macOS uses NSSharingService to select and grant access to participants.
 struct CloudShareSheet: View {
     let share: CKShare
     let container: CKContainer
@@ -197,7 +195,11 @@ struct CloudShareSheet: View {
         )
         .ignoresSafeArea()
         #else
-        MacInviteFallback(share: share, householdName: householdName, onShareSaved: onShareSaved, onDismiss: onDismiss)
+        MacInviteSheet(
+            share: share, container: container, householdName: householdName,
+            onShareSaved: onShareSaved, onShareInvalidated: onShareInvalidated,
+            onDismiss: onDismiss
+        )
         #endif
     }
 }
@@ -224,6 +226,7 @@ private struct CloudShareSheetIOS: UIViewControllerRepresentable {
     func makeUIViewController(context: Context) -> UICloudSharingController {
         let controller = UICloudSharingController(share: share, container: container)
         controller.delegate = context.coordinator
+        controller.availablePermissions = [.allowPrivate, .allowReadWrite]
         return controller
     }
 
@@ -290,45 +293,114 @@ private struct CloudShareSheetIOS: UIViewControllerRepresentable {
 
 #else
 
-/// Minimal macOS fallback — shows the CKShare URL with a Copy button.
-/// Good enough until someone needs the full NSSharingService contact picker.
-private struct MacInviteFallback: View {
+private struct MacInviteSheet: View {
     let share: CKShare
+    let container: CKContainer
     let householdName: String
     let onShareSaved: () -> Void
+    let onShareInvalidated: () -> Void
     let onDismiss: () -> Void
+    @State private var errorMessage: String?
 
     var body: some View {
         VStack(spacing: 16) {
             Label("Invite to \(householdName)", systemImage: "person.crop.circle.badge.plus")
                 .font(.headline)
-            if let url = share.url {
-                Text(url.absoluteString)
-                    .font(.caption.monospaced())
-                    .textSelection(.enabled)
+                .multilineTextAlignment(.center)
+            Text("Choose who can join and manage your household together.")
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+            MacCloudShareButton(
+                share: share, container: container,
+                onShareSaved: onShareSaved,
+                onShareInvalidated: onShareInvalidated,
+                onError: { errorMessage = $0 }
+            )
+            .frame(height: 44)
+            if let errorMessage {
+                Text(errorMessage)
+                    .foregroundStyle(.red)
                     .multilineTextAlignment(.center)
-                    .padding()
-                    .background(Color.secondary.opacity(0.1), in: RoundedRectangle(cornerRadius: Theme.chipCornerRadius))
-                Button {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(url.absoluteString, forType: .string)
-                    // macOS has no Messages/Mail hand-off to confirm a send,
-                    // so treat "copied the link" as the closest equivalent to
-                    // iOS's cloudSharingControllerDidSaveShare — it's the
-                    // point the user has actually taken action to share it,
-                    // not just the point the sheet happened to render.
-                    onShareSaved()
-                } label: {
-                    Label("Copy Link", systemImage: "doc.on.doc")
-                }
-            } else {
-                Text("Share URL unavailable").foregroundStyle(.secondary)
             }
-            Button("Done") { onDismiss() }
-                .keyboardShortcut(.defaultAction)
+            Button("Done", action: onDismiss)
+                .keyboardShortcut(.cancelAction)
         }
-        .padding()
-        .frame(minWidth: 420, minHeight: 240)
+        .padding(24)
+        .frame(minWidth: 340, idealWidth: 420)
+    }
+}
+
+/// The coordinator retains the service while AppKit presents its participant
+/// picker, and provides the actual presenting window (including SwiftUI sheets).
+private struct MacCloudShareButton: NSViewRepresentable {
+    let share: CKShare
+    let container: CKContainer
+    let onShareSaved: () -> Void
+    let onShareInvalidated: () -> Void
+    let onError: (String?) -> Void
+
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+    func makeNSView(context: Context) -> NSButton {
+        let button = NSButton(title: "Choose People…", target: context.coordinator, action: #selector(Coordinator.presentShare))
+        button.bezelStyle = .rounded
+        context.coordinator.button = button
+        return button
+    }
+
+    func updateNSView(_ nsView: NSButton, context: Context) {
+        context.coordinator.parent = self
+    }
+
+    @MainActor
+    final class Coordinator: NSObject, @preconcurrency NSCloudSharingServiceDelegate {
+        var parent: MacCloudShareButton
+        weak var button: NSButton?
+        private var service: NSSharingService?
+
+        init(_ parent: MacCloudShareButton) { self.parent = parent }
+
+        @objc func presentShare() {
+            guard service == nil else { return }
+            parent.onError(nil)
+            let provider = NSItemProvider()
+            provider.registerCloudKitShare(parent.share, container: parent.container)
+            guard let service = NSSharingService(named: .cloudSharing),
+                  service.canPerform(withItems: [provider]) else {
+                parent.onError("Household invitations are unavailable. Please try again.")
+                return
+            }
+            self.service = service
+            service.delegate = self
+            button?.isEnabled = false
+            service.perform(withItems: [provider])
+        }
+
+        func sharingService(_ sharingService: NSSharingService, sourceWindowForShareItems items: [Any], sharingContentScope: UnsafeMutablePointer<NSSharingService.SharingContentScope>) -> NSWindow? {
+            button?.window
+        }
+
+        func options(for sharingService: NSSharingService, share provider: NSItemProvider) -> NSSharingService.CloudKitOptions {
+            [.allowPrivate, .allowReadWrite]
+        }
+
+        func sharingService(_ sharingService: NSSharingService, didSave share: CKShare) {
+            parent.onShareSaved()
+        }
+
+        func sharingService(_ sharingService: NSSharingService, didStopSharing share: CKShare) {
+            parent.onShareInvalidated()
+        }
+
+        func sharingService(_ sharingService: NSSharingService, didCompleteForItems items: [Any], error: Error?) {
+            if let error {
+                parent.onShareInvalidated()
+                parent.onError("The invitation couldn’t be sent. Please try again.")
+                householdShareLogger.error("Cloud sharing failed: \(error.localizedDescription, privacy: .private)")
+            }
+            service = nil
+            button?.isEnabled = true
+        }
     }
 }
 

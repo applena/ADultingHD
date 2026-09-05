@@ -336,6 +336,7 @@ if $BUILD_IOS; then
         -archivePath "$ARCHIVE_IOS" \
         CURRENT_PROJECT_VERSION="$NEW_BUILD" \
         CODE_SIGNING_ALLOWED=NO \
+        CLOUDKIT_SIGNING_EXPECTED=YES \
         CODE_SIGN_IDENTITY="" \
         CODE_SIGNING_REQUIRED=NO \
         -quiet
@@ -500,6 +501,24 @@ EOF
     fi
 
     APP_ENTITLEMENTS=$(codesign -d --entitlements :- "$APP_BUNDLE" 2>/dev/null)
+    SIGNING_EXPECTED=$(/usr/libexec/PlistBuddy -c 'Print :CloudKitSigningExpected' "$APP_BUNDLE/Info.plist")
+    if [ "$SIGNING_EXPECTED" != "YES" ]; then
+        echo "❌ Exported IPA disables CloudKit at runtime — aborting upload"
+        exit 1
+    fi
+    if ! echo "$APP_ENTITLEMENTS" | /usr/bin/python3 -c '
+import plistlib, sys
+entitlements = plistlib.load(sys.stdin.buffer)
+valid = (
+    "CloudKit" in entitlements.get("com.apple.developer.icloud-services", [])
+    and "iCloud.net.shadowpuppet.ADultingHD" in entitlements.get("com.apple.developer.icloud-container-identifiers", [])
+    and entitlements.get("aps-environment") == "production"
+)
+sys.exit(0 if valid else 1)
+'; then
+        echo "❌ Exported IPA lacks the required CloudKit container, service, or production push entitlement — aborting upload"
+        exit 1
+    fi
     for key in \
         "com.apple.developer.icloud-container-identifiers" \
         "com.apple.developer.icloud-services" \

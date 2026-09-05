@@ -367,7 +367,12 @@ struct FrequencyPickerSheet: View {
     }
 
     private var isValid: Bool {
-        selected.weekdayCount == 0 || weekdays.count == selected.weekdayCount
+        TaskScheduleValidation.isValid(
+            frequency: selected,
+            weekdays: weekdays,
+            dayOfMonth: dayOfMonth,
+            month: month
+        )
     }
 
     private var isUnchanged: Bool {
@@ -395,6 +400,7 @@ struct FrequencyPickerSheet: View {
     }
 
     private func saveAndDismiss() {
+        guard isValid else { return }
         var updated = task
         updated.frequency = selected
         if selected.weekdayCount > 0 {

@@ -1,113 +1,144 @@
 import Foundation
 import CloudKit
+import Combine
 
 extension Notification.Name {
     static let cloudKitRemoteChange = Notification.Name("ADHDCloudKitRemoteChange")
 }
 
-/// Magic strings for handling CKShare invites delivered via NSUserActivity
-/// (the SwiftUI `onContinueUserActivity` path). These are NOT exposed by
-/// Apple's SDK headers — `CKShare.Metadata.activityType` referenced by older
-/// sample code does not exist as a public symbol. Hardcoded.
 enum ShareAcceptance {
+    // Compatibility for metadata activities; scene callbacks are the primary path.
     static let activityType = "com.apple.CloudKit.ShareMetadata"
     static let metadataKey = "CKShareMetadata"
 
     static func metadata(from activity: NSUserActivity) -> CKShare.Metadata? {
         activity.userInfo?[metadataKey] as? CKShare.Metadata
     }
+
+    static func validatedURL(_ url: URL) -> URL? {
+        guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+              components.scheme?.lowercased() == "https",
+              let host = components.host?.lowercased(),
+              ["icloud.com", "www.icloud.com"].contains(host),
+              components.user == nil, components.password == nil,
+              components.port == nil || components.port == 443 else { return nil }
+        let parts = components.path.split(separator: "/", omittingEmptySubsequences: true)
+        guard parts.count == 2, parts[0] == "share", !parts[1].isEmpty else { return nil }
+        components.scheme = "https"
+        components.host = "www.icloud.com"
+        components.port = nil
+        components.fragment = nil
+        return components.url
+    }
 }
 
-/// Buffers CKShare metadata that arrived via the AppDelegate before the
-/// SwiftUI scene is ready to handle it. SwiftUI's `.task` drains it on the
-/// first frame so cold-launch invites aren't lost.
-///
-/// On a warm-launch the `.onContinueUserActivity` modifier handles delivery
-/// directly without going through this buffer.
+/// Buffers early deliveries and deduplicates scene, activity, and URL callbacks.
 @MainActor
 final class IncomingShareInbox: ObservableObject {
     static let shared = IncomingShareInbox()
 
-    @Published private(set) var pending: [CKShare.Metadata] = []
+    enum Invitation {
+        case metadata(CKShare.Metadata)
+        case url(URL)
 
-    private init() {}
-
-    func enqueue(_ metadata: CKShare.Metadata) {
-        pending.append(metadata)
+        var id: String {
+            switch self {
+            case .metadata(let metadata):
+                if let url = metadata.share.url.flatMap(ShareAcceptance.validatedURL) {
+                    return url.absoluteString
+                }
+                let recordID = metadata.share.recordID
+                return "\(metadata.containerIdentifier)|\(recordID.zoneID.ownerName)|\(recordID.zoneID.zoneName)|\(recordID.recordName)"
+            case .url(let url): return url.absoluteString
+            }
+        }
     }
 
-    func drain() -> [CKShare.Metadata] {
-        let snapshot = pending
-        pending.removeAll()
-        return snapshot
+    @Published private(set) var pending: [Invitation] = []
+    private var processing = false
+    private var inFlightID: String?
+
+    func enqueue(_ metadata: CKShare.Metadata) { enqueue(.metadata(metadata)) }
+
+    func enqueue(_ url: URL) {
+        guard let url = ShareAcceptance.validatedURL(url) else { return }
+        enqueue(.url(url))
+    }
+
+    func enqueue(_ activity: NSUserActivity) {
+        if let metadata = ShareAcceptance.metadata(from: activity) {
+            enqueue(metadata)
+        } else if activity.activityType == NSUserActivityTypeBrowsingWeb,
+                  let url = activity.webpageURL {
+            enqueue(url)
+        }
+    }
+
+    private func enqueue(_ invitation: Invitation) {
+        guard invitation.id != inFlightID,
+              !pending.contains(where: { $0.id == invitation.id }) else { return }
+        pending.append(invitation)
+    }
+
+    func beginProcessing() -> Bool {
+        guard !processing else { return false }
+        processing = true
+        return true
+    }
+
+    func next() -> Invitation? {
+        guard !pending.isEmpty else { return nil }
+        let invitation = pending.removeFirst()
+        inFlightID = invitation.id
+        return invitation
+    }
+
+    func endProcessing() {
+        inFlightID = nil
+        processing = false
     }
 }
 
 #if os(iOS)
 import UIKit
-import SwiftUI
 
-/// SwiftUI owns the app's UIWindowSceneDelegate, so CloudKit share acceptance
-/// is delivered there instead of to UIApplicationDelegate. This forwarding
-/// proxy captures that callback and leaves SwiftUI's other scene behavior intact.
-final class CloudKitShareSceneDelegateProxy: NSObject, UIWindowSceneDelegate {
-    static let shared = CloudKitShareSceneDelegateProxy()
-
-    private var originalDelegate: UISceneDelegate?
-
-    @MainActor
-    static func install(on scene: UIWindowScene) {
-        let proxy = CloudKitShareSceneDelegateProxy.shared
-        guard (scene.delegate as AnyObject?) !== proxy else { return }
-        proxy.originalDelegate = scene.delegate
-        scene.delegate = proxy
-    }
-
-    func windowScene(
-        _ windowScene: UIWindowScene,
-        userDidAcceptCloudKitShareWith metadata: CKShare.Metadata
-    ) {
-        Task { @MainActor in
+/// SwiftUI creates this delegate from the app delegate's scene configuration;
+/// SwiftUI continues owning the window and its hosting controller.
+@MainActor
+final class CloudKitShareSceneDelegate: NSObject, UIWindowSceneDelegate {
+    func scene(_ scene: UIScene, willConnectTo session: UISceneSession, options connectionOptions: UIScene.ConnectionOptions) {
+        if let metadata = connectionOptions.cloudKitShareMetadata {
             IncomingShareInbox.shared.enqueue(metadata)
         }
-    }
-
-    override func responds(to selector: Selector!) -> Bool {
-        super.responds(to: selector) || originalDelegate?.responds(to: selector) == true
-    }
-
-    override func forwardingTarget(for selector: Selector!) -> Any? {
-        if originalDelegate?.responds(to: selector) == true {
-            return originalDelegate
+        for activity in connectionOptions.userActivities {
+            IncomingShareInbox.shared.enqueue(activity)
         }
-        return super.forwardingTarget(for: selector)
-    }
-}
-
-/// Finds SwiftUI's hosting window as soon as it attaches to a UIWindowScene.
-struct CloudKitShareSceneBridge: UIViewRepresentable {
-    func makeUIView(context: Context) -> SceneBridgeView { SceneBridgeView() }
-    func updateUIView(_ uiView: SceneBridgeView, context: Context) {}
-
-    final class SceneBridgeView: UIView {
-        override func didMoveToWindow() {
-            super.didMoveToWindow()
-            guard let windowScene = window?.windowScene else { return }
-            CloudKitShareSceneDelegateProxy.install(on: windowScene)
+        for context in connectionOptions.urlContexts {
+            IncomingShareInbox.shared.enqueue(context.url)
         }
+    }
+
+    func windowScene(_ windowScene: UIWindowScene, userDidAcceptCloudKitShareWith metadata: CKShare.Metadata) {
+        IncomingShareInbox.shared.enqueue(metadata)
+    }
+
+    func scene(_ scene: UIScene, continue userActivity: NSUserActivity) {
+        IncomingShareInbox.shared.enqueue(userActivity)
+    }
+
+    func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
+        for context in URLContexts { IncomingShareInbox.shared.enqueue(context.url) }
     }
 }
 
 @MainActor
 class AppDelegate: NSObject, UIApplicationDelegate {
-    func application(
-        _ application: UIApplication,
-        didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
-    ) -> Bool {
-        if UserDefaults.standard.bool(forKey: PrefKey.householdSharingEnabled) {
-            application.registerForRemoteNotifications()
+    func application(_ application: UIApplication, configurationForConnecting connectingSceneSession: UISceneSession, options: UIScene.ConnectionOptions) -> UISceneConfiguration {
+        let configuration = UISceneConfiguration(name: nil, sessionRole: connectingSceneSession.role)
+        if connectingSceneSession.role == .windowApplication {
+            configuration.delegateClass = CloudKitShareSceneDelegate.self
         }
-        return true
+        return configuration
     }
 
     /// Call after flipping `householdSharingEnabled` to true so CloudKit silent
@@ -142,12 +173,6 @@ import AppKit
 
 @MainActor
 class AppDelegate: NSObject, NSApplicationDelegate {
-    func applicationDidFinishLaunching(_ notification: Notification) {
-        if UserDefaults.standard.bool(forKey: PrefKey.householdSharingEnabled) {
-            NSApplication.shared.registerForRemoteNotifications()
-        }
-    }
-
     /// Call after flipping `householdSharingEnabled` to true so CloudKit silent
     /// pushes start flowing without waiting for the next launch.
     static func registerForRemoteNotifications() {
@@ -171,5 +196,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             IncomingShareInbox.shared.enqueue(metadata)
         }
     }
+    func application(_ application: NSApplication, open urls: [URL]) {
+        for url in urls { IncomingShareInbox.shared.enqueue(url) }
+    }
+
 }
 #endif

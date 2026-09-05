@@ -2,9 +2,16 @@ import XCTest
 @testable import ADultingHD
 
 final class StorageTests: XCTestCase {
+    private func makeStore() throws -> TaskStore {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        addTeardownBlock { try? FileManager.default.removeItem(at: directory) }
+        return TaskStore(directory: directory)
+    }
 
-    func testTaskRoundTrip() async {
-        let store = TaskStore()
+    func testTaskRoundTrip() async throws {
+        let store = try makeStore()
         let householdId = UUID()
         var task = HouseholdTask(
             id: UUID(), name: "Test Task", description: "A test",
@@ -77,8 +84,8 @@ final class StorageTests: XCTestCase {
         XCTAssertEqual(preservedEdit.first?.frequency, .monthly)
     }
 
-    func testProfileRoundTrip() async {
-        let store = TaskStore()
+    func testProfileRoundTrip() async throws {
+        let store = try makeStore()
         var profile = UserProfile()
         profile.totalXP = 500
         profile.currentStreak = 7
@@ -96,8 +103,8 @@ final class StorageTests: XCTestCase {
         XCTAssertEqual(loaded.unlockedAchievements, ["first_task", "streak_7"])
     }
 
-    func testCompletionsRoundTrip() async {
-        let store = TaskStore()
+    func testCompletionsRoundTrip() async throws {
+        let store = try makeStore()
         let completions = [
             TaskCompletion(
                 id: UUID(), taskId: UUID(), taskName: "Test",
@@ -114,8 +121,8 @@ final class StorageTests: XCTestCase {
         XCTAssertEqual(loaded.first?.streakBonus, 4)
     }
 
-    func testBackupRoundTrip() async {
-        let store = TaskStore()
+    func testBackupRoundTrip() async throws {
+        let store = try makeStore()
         let householdId = UUID()
         var customTask = HouseholdTask(
             id: UUID(), name: "Sort the costume closet", description: "",
@@ -150,7 +157,7 @@ final class StorageTests: XCTestCase {
     }
 
     func testImportRejectsDuplicateTaskIDs() async throws {
-        let store = TaskStore()
+        let store = try makeStore()
         let householdId = UUID()
         let task = HouseholdTask(
             id: UUID(), name: "Duplicate", description: "",
@@ -193,5 +200,42 @@ final class StorageTests: XCTestCase {
         )
 
         XCTAssertFalse(importedDuplicateCompletions)
+    }
+}
+
+/// DataStore uses a few shared preferences in addition to its injected file
+/// store. Restore only keys touched by these tests; never replace a whole domain.
+enum StorageTestPreferences {
+    static func preserve(in test: XCTestCase) throws {
+        try preserve([
+            PrefKey.householdSharingEnabled,
+            PrefKey.householdsLayoutMigratedV2,
+            PrefKey.defaultHouseholdId
+        ], suiteName: nil, in: test)
+        try preserve([
+            "widget_dueTasks", "widget_streak", "widget_level", "widget_levelTitle",
+            "widget_xpProgress", "widget_totalXP", "widget_todayCompleted", "widget_nextTask"
+        ], suiteName: SharedDefaults.suiteName, in: test)
+    }
+
+    private static func preserve(_ keys: [String], suiteName: String?, in test: XCTestCase) throws {
+        let defaults: UserDefaults?
+        if let suiteName { defaults = UserDefaults(suiteName: suiteName) }
+        else { defaults = .standard }
+        guard let defaults else { return }
+        let values = Dictionary(uniqueKeysWithValues: keys.compactMap { key in
+            defaults.object(forKey: key).map { (key, $0) }
+        })
+        // Capture Sendable bytes in XCTest's teardown closure, not a mutable
+        // dictionary of Any or a shared UserDefaults instance.
+        let snapshot = try PropertyListSerialization.data(fromPropertyList: values, format: .binary, options: 0)
+        test.addTeardownBlock {
+            let defaults: UserDefaults?
+            if let suiteName { defaults = UserDefaults(suiteName: suiteName) }
+            else { defaults = .standard }
+            guard let defaults else { return }
+            let saved = try PropertyListSerialization.propertyList(from: snapshot, format: nil) as? [String: Any] ?? [:]
+            for key in keys { defaults.set(saved[key], forKey: key) }
+        }
     }
 }

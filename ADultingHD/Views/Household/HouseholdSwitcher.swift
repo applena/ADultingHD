@@ -48,6 +48,7 @@ struct HouseholdSwitcher: View {
                 Text(dataStore.activeHousehold.name)
                     .font(.subheadline.weight(.semibold))
                     .lineLimit(1)
+                    .truncationMode(.tail)
                 Image(systemName: "chevron.down")
                     .font(.caption2)
             }
@@ -57,7 +58,11 @@ struct HouseholdSwitcher: View {
             .background(Color.secondary.opacity(0.15), in: Capsule())
         }
         .menuStyle(.borderlessButton)
-        .fixedSize()
+        .frame(maxWidth: 260)
+        .fixedSize(horizontal: false, vertical: true)
+        .accessibilityLabel("Switch household")
+        .accessibilityValue(dataStore.activeHousehold.name)
+        .accessibilityIdentifier("household-switcher")
         .sheet(isPresented: $showCreateSheet) {
             CreateHouseholdSheet(isPresented: $showCreateSheet)
         }
