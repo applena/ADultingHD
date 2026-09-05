@@ -13,6 +13,7 @@ enum IncomingHouseholdShareError: LocalizedError {
     case missingPendingShare
     case sharingUnavailable
     case mergeSourceUnavailable
+    case mergeDestinationUnavailable
     case invitationBusy
 
     var errorDescription: String? {
@@ -23,6 +24,8 @@ enum IncomingHouseholdShareError: LocalizedError {
             "Household sharing is not available in this build."
         case .mergeSourceUnavailable:
             "That home is no longer available to merge. Choose another home or add the invited home separately."
+        case .mergeDestinationUnavailable:
+            "That shared home is no longer available. Choose a household you have joined."
         case .invitationBusy:
             "This invitation is already being processed."
         }
@@ -1940,8 +1943,50 @@ final class DataStore {
     }
 
     var invitationMergeSources: [Household] {
-        householdIndex.households.filter {
-            $0.ownerIsCurrentUser && $0.id != pendingHouseholdInvitation?.existingHouseholdID
+        if invitedOwnedHousehold != nil { return [] }
+        return householdMergeSources(excluding: pendingHouseholdInvitation?.existingHouseholdID)
+    }
+
+    /// Hide only the live, empty onboarding bootstrap. If iCloud restores
+    /// chores into it, it becomes an eligible source without losing those chores.
+    var onboardingMergeSources: [Household] {
+        householdMergeSources(excluding: pristineOnboardingBootstrapID)
+    }
+
+    private var invitedOwnedHousehold: Household? {
+        guard let id = pendingHouseholdInvitation?.existingHouseholdID else { return nil }
+        return householdIndex.households.first { $0.id == id && $0.ownerIsCurrentUser }
+    }
+
+    private func withHouseholdJoin(_ operation: @MainActor () async throws -> Void) async throws {
+        guard !isJoiningHousehold else { throw IncomingHouseholdShareError.invitationBusy }
+        isJoiningHousehold = true
+        defer { isJoiningHousehold = false }
+        try await operation()
+    }
+
+    func householdMergeSources(excluding destinationID: UUID? = nil) -> [Household] {
+        householdIndex.households.filter { $0.ownerIsCurrentUser && $0.id != destinationID }
+    }
+
+    /// Joining and bringing existing chores are separate choices. This reuses
+    /// the invitation transaction so a later merge has the same retry guarantees.
+    func mergeChores(from sourceID: UUID, into destinationID: UUID) async throws {
+        try await withHouseholdJoin {
+            guard let destination = householdIndex.households.first(where: { $0.id == destinationID }),
+                  !destination.ownerIsCurrentUser,
+                  let owner = destination.ownerUserRecordName,
+                  let share = destination.shareRecordName else {
+                throw IncomingHouseholdShareError.mergeDestinationUnavailable
+            }
+            let info = HouseholdShareInfo(
+                shareRecordName: share, zoneName: destination.zoneName,
+                ownerUserRecordName: owner, title: destination.name, inviterName: destination.inviterName
+            )
+            try await registerJoinedHousehold(
+                info: info, accept: { info }, commit: .preserveHouseholds,
+                mergeFrom: sourceID, existingHouseholdID: destinationID
+            )
         }
     }
 
@@ -1956,22 +2001,20 @@ final class DataStore {
     }
 
     func acceptPendingHouseholdInvitation(id: String, mergeFrom sourceID: UUID? = nil) async throws {
-        guard !isJoiningHousehold else { throw IncomingHouseholdShareError.invitationBusy }
-        guard let invitation = pendingHouseholdInvitation, invitation.id == id else {
-            throw IncomingHouseholdShareError.missingPendingShare
+        try await withHouseholdJoin {
+            guard let invitation = pendingHouseholdInvitation, invitation.id == id else {
+                throw IncomingHouseholdShareError.missingPendingShare
+            }
+            if let existing = invitedOwnedHousehold {
+                await switchHousehold(to: existing.id)
+            } else {
+                try await registerJoinedHousehold(
+                    info: invitation.info, accept: invitation.accept,
+                    commit: .preserveHouseholds, mergeFrom: sourceID
+                )
+            }
+            if pendingHouseholdInvitation?.id == id { advanceHouseholdInvitationQueue() }
         }
-        isJoiningHousehold = true
-        defer { isJoiningHousehold = false }
-        if let existingID = invitation.existingHouseholdID,
-           let existing = householdIndex.households.first(where: { $0.id == existingID }), existing.ownerIsCurrentUser {
-            await switchHousehold(to: existingID)
-        } else {
-            try await registerJoinedHousehold(
-                info: invitation.info, accept: invitation.accept,
-                commit: .preserveHouseholds, mergeFrom: sourceID
-            )
-        }
-        if pendingHouseholdInvitation?.id == id { advanceHouseholdInvitationQueue() }
     }
 
     /// Stages an incoming household without calling `CKContainer.accept`, so
@@ -1991,24 +2034,28 @@ final class DataStore {
 
     /// Commit the staged first-launch invite after the recipient supplies the
     /// display name household members will see.
-    func acceptPendingOnboardingShare(id: String, displayName: String) async throws {
-        guard let pendingOnboardingShare, pendingOnboardingShare.id == id else {
-            throw IncomingHouseholdShareError.missingPendingShare
-        }
-        let bootstrapHousehold = await replaceableOnboardingBootstrap(
-            withID: pendingOnboardingShare.bootstrapHouseholdID
-        )
-        if let bootstrapHousehold {
-            try await registerJoinedHousehold(
-                from: pendingOnboardingShare.metadata,
-                commit: .replaceBootstrap(bootstrapHousehold.id)
-            )
-        } else {
-            try await registerJoinedHousehold(from: pendingOnboardingShare.metadata)
-        }
-        await renameActiveProfile(to: displayName)
-        if self.pendingOnboardingShare?.id == pendingOnboardingShare.id {
-            self.pendingOnboardingShare = nil
+    func acceptPendingOnboardingShare(id: String, displayName: String, mergeFrom sourceID: UUID? = nil) async throws {
+        try await withHouseholdJoin {
+            guard let pendingOnboardingShare, pendingOnboardingShare.id == id else {
+                throw IncomingHouseholdShareError.missingPendingShare
+            }
+            let bootstrapHousehold = sourceID == nil ? await replaceableOnboardingBootstrap(
+                withID: pendingOnboardingShare.bootstrapHouseholdID
+            ) : nil
+            if let bootstrapHousehold {
+                try await registerJoinedHousehold(
+                    from: pendingOnboardingShare.metadata,
+                    commit: .replaceBootstrap(bootstrapHousehold.id)
+                )
+            } else {
+                try await registerJoinedHousehold(
+                    from: pendingOnboardingShare.metadata, commit: .preserveHouseholds, mergeFrom: sourceID
+                )
+            }
+            await renameActiveProfile(to: displayName)
+            if self.pendingOnboardingShare?.id == pendingOnboardingShare.id {
+                self.pendingOnboardingShare = nil
+            }
         }
     }
 
@@ -2073,7 +2120,8 @@ final class DataStore {
 
     private func registerJoinedHousehold(
         from metadata: CKShare.Metadata,
-        commit: JoinedHouseholdCommit
+        commit: JoinedHouseholdCommit,
+        mergeFrom sourceID: UUID? = nil
     ) async throws {
         guard metadata.containerIdentifier == CloudConfig.containerID else {
             throw IncomingHouseholdShareError.sharingUnavailable
@@ -2081,7 +2129,7 @@ final class DataStore {
         try await registerJoinedHousehold(
             info: ckSync.shareInfo(from: metadata),
             accept: { [ckSync] in try await ckSync.acceptShare(from: metadata) },
-            commit: commit
+            commit: commit, mergeFrom: sourceID
         )
     }
 
@@ -2096,17 +2144,22 @@ final class DataStore {
         info: HouseholdShareInfo,
         accept: @MainActor () async throws -> HouseholdShareInfo,
         commit: JoinedHouseholdCommit,
-        mergeFrom sourceID: UUID? = nil
+        mergeFrom sourceID: UUID? = nil,
+        existingHouseholdID: UUID? = nil
     ) async throws {
         guard Features.cloudKitSharing else { throw IncomingHouseholdShareError.sharingUnavailable }
         try await invitationClient.prepare()
         // Serialize from source selection through commit, including network
         // suspension. A concurrent switch/edit cannot redirect a merge.
         try await householdWorkspaceStore.withSerializedAccess {
+            let currentJoined = householdForShare(info)
+            if let existingHouseholdID, currentJoined?.id != existingHouseholdID {
+                throw IncomingHouseholdShareError.mergeDestinationUnavailable
+            }
             let source: Household?
             if let sourceID {
                 guard let candidate = householdIndex.households.first(where: { $0.id == sourceID }),
-                      candidate.ownerIsCurrentUser, candidate.id != householdForShare(info)?.id else {
+                      candidate.ownerIsCurrentUser, candidate.id != currentJoined?.id else {
                     throw IncomingHouseholdShareError.mergeSourceUnavailable
                 }
                 source = candidate

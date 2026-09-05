@@ -57,6 +57,32 @@ final class HouseholdInvitationUITests: XCTestCase {
         }
     }
 
+    func testRecipientCanBringChoresAfterJoiningWithoutAnotherInvite() {
+        launch()
+        accept()
+        assertActiveHousehold("Maple Home")
+        app.buttons["household-switcher"].tap()
+        let bringChores = app.buttons["household-merge-chores"]
+        XCTAssertTrue(bringChores.waitForExistence(timeout: 3))
+        bringChores.tap()
+        let picker = app.descendants(matching: .any)
+            .matching(identifier: "household-chore-source").firstMatch
+        XCTAssertTrue(picker.waitForExistence(timeout: 3))
+        picker.tap()
+        app.buttons["Demo House"].tap()
+        capture("Household_Merge_After_Joining")
+        let merge = app.buttons["household-merge-submit"]
+        XCTAssertTrue(merge.isEnabled)
+        merge.tap()
+        let success = app.descendants(matching: .any)
+            .matching(identifier: "household-merge-success").firstMatch
+        XCTAssertTrue(success.waitForExistence(timeout: 8))
+        capture("Household_Merge_Complete")
+        app.buttons["Done"].tap()
+        assertActiveHousehold("Maple Home")
+        assertOriginalHouseholdRemains()
+    }
+
     func testFailedJoinKeepsInvitationAndCanRetry() {
         launch(extraArguments: ["-household-invitation-fail-once"])
         accept()

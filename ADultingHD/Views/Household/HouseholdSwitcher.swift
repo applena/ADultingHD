@@ -9,6 +9,7 @@ struct HouseholdSwitcher: View {
     @Environment(StoreManager.self) private var storeManager
     @State private var showCreateSheet = false
     @State private var showProUpgrade = false
+    @State private var mergeDestination: Household?
 
     var body: some View {
         Menu {
@@ -27,6 +28,17 @@ struct HouseholdSwitcher: View {
             }
 
             Divider()
+
+            if Features.cloudKitSharing, !dataStore.activeHousehold.ownerIsCurrentUser,
+               !dataStore.householdMergeSources(excluding: dataStore.activeHouseholdId).isEmpty {
+                Button {
+                    mergeDestination = dataStore.activeHousehold
+                } label: {
+                    Label("Bring chores into this home…", systemImage: "arrow.triangle.merge")
+                }
+                .disabled(dataStore.isJoiningHousehold)
+                .accessibilityIdentifier("household-merge-chores")
+            }
 
             Button {
                 if storeManager.isPro {
@@ -63,6 +75,9 @@ struct HouseholdSwitcher: View {
         .accessibilityLabel("Switch household")
         .accessibilityValue(dataStore.activeHousehold.name)
         .accessibilityIdentifier("household-switcher")
+        .sheet(item: $mergeDestination) { destination in
+            HouseholdChoreMergeView(destination: destination)
+        }
         .sheet(isPresented: $showCreateSheet) {
             CreateHouseholdSheet(isPresented: $showCreateSheet)
         }

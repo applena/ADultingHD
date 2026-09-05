@@ -23,9 +23,10 @@ struct HouseholdInvitationView: View {
                 VStack(alignment: .leading, spacing: Theme.sectionSpacing) {
                     header
                     if isExistingHousehold {
-                        Text("This household is already in your list. Open it to see its chores and members.")
+                        Text("This household is already in your list. Open it, or bring shared chores from another home you own.")
                             .foregroundStyle(.secondary)
-                    } else {
+                    }
+                    if !isExistingHousehold || !mergeSources.isEmpty {
                         choices
                     }
                     if let errorMessage {
@@ -79,7 +80,7 @@ struct HouseholdInvitationView: View {
             Text("How would you like to join?")
                 .font(.headline)
             choice(
-                title: "Add this household",
+                title: isExistingHousehold ? "Open this household" : "Add this household",
                 detail: "Keep your households separate. Switch between them whenever you need.",
                 selected: !wantsMerge,
                 identifier: "household-invitation-add"
@@ -96,20 +97,11 @@ struct HouseholdInvitationView: View {
                     if mergeSourceID == nil { mergeSourceID = mergeSources.first?.id }
                 }
                 if wantsMerge {
-                    VStack(alignment: .leading, spacing: 12) {
-                        Picker("Bring chores from", selection: $mergeSourceID) {
-                            Text("Choose a household").tag(UUID?.none)
-                            ForEach(mergeSources) { household in
-                                Text(household.name).tag(UUID?.some(household.id))
-                            }
-                        }
-                        .pickerStyle(.menu)
-                        .accessibilityIdentifier("household-invitation-merge-source")
-                        Text("Personal tasks stay private in their original household. Your original household stays in your list as a backup. Its members are not added to the invited household. Supply stock is saved on your devices and is not shared with other members.")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
+                    HouseholdChoreSourcePicker(
+                        sources: mergeSources, selection: $mergeSourceID,
+                        emptyTitle: "Choose a household",
+                        accessibilityID: "household-invitation-merge-source"
+                    )
                     .card()
                 }
             }
@@ -171,7 +163,7 @@ struct HouseholdInvitationView: View {
 
     private var acceptTitle: String {
         if errorMessage != nil { return "Try again" }
-        if isExistingHousehold { return "Open household" }
+        if isExistingHousehold && !wantsMerge { return "Open household" }
         return wantsMerge ? "Join and merge chores" : "Join household"
     }
 

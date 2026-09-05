@@ -213,6 +213,79 @@ final class HouseholdInvitationTests: XCTestCase {
         XCTAssertEqual(f.data.listHouseholds().count, 2)
     }
 
+    func testOnboardingOffersRestoredChoresButNotAnEmptyBootstrap() async throws {
+        let f = try await fixture()
+        await f.data.renameHousehold(f.sourceID, to: "My Household")
+        XCTAssertTrue(f.data.onboardingMergeSources.isEmpty)
+        await f.data.addCustomTask(task("Clean bathroom"))
+        XCTAssertEqual(f.data.onboardingMergeSources.map(\.id), [f.sourceID])
+    }
+
+    func testBringChoresAfterJoiningPreservesSourceAndDoesNotReacceptShare() async throws {
+        let f = try await fixture()
+        let bathroom = task("Clean bathroom")
+        var personal = task("Private reminder")
+        personal.isPersonal = true
+        await f.data.addCustomTask(bathroom)
+        await f.data.addCustomTask(personal)
+        let destinationTask = task("Vacuum")
+        f.cloud.payload = CloudKitPayload(tasks: [destinationTask], completions: [], profiles: [],
+                                         inviterName: "Alex", personalTaskIDs: [])
+        let invitationID = try stage(f)
+        try await f.data.acceptPendingHouseholdInvitation(id: invitationID)
+        let destinationID = f.data.activeHouseholdId
+        XCTAssertEqual(f.data.tasks.map(\.id), [destinationTask.id])
+
+        try await f.data.mergeChores(from: f.sourceID, into: destinationID)
+        XCTAssertEqual(Set(f.data.tasks.map(\.id)), [destinationTask.id, bathroom.id])
+        XCTAssertEqual(f.cloud.uploads.last?.map(\.id), [bathroom.id])
+        XCTAssertEqual(f.cloud.acceptCount, 1)
+        let savedSource = await f.storage.loadTasks(for: f.sourceID)
+        XCTAssertEqual(Set(savedSource.map(\.id)), [bathroom.id, personal.id])
+
+        try await f.data.mergeChores(from: f.sourceID, into: destinationID)
+        XCTAssertEqual(f.data.tasks.count, 2)
+        XCTAssertEqual(f.cloud.uploads.last?.count, 0)
+        XCTAssertEqual(f.cloud.acceptCount, 1)
+        await f.data.load()
+        XCTAssertEqual(f.data.activeHouseholdId, destinationID)
+        XCTAssertEqual(Set(f.data.tasks.map(\.id)), [destinationTask.id, bathroom.id])
+    }
+
+    func testLaterMergeFailureKeepsBothHomesAndCanBeRetried() async throws {
+        let f = try await fixture()
+        let bathroom = task("Clean bathroom")
+        await f.data.addCustomTask(bathroom)
+        let invitationID = try stage(f)
+        try await f.data.acceptPendingHouseholdInvitation(id: invitationID)
+        let destinationID = f.data.activeHouseholdId
+        f.cloud.failingUpload = true
+        do {
+            try await f.data.mergeChores(from: f.sourceID, into: destinationID)
+            XCTFail("Upload failure must not report a completed merge")
+        } catch Failure.upload { }
+        XCTAssertTrue(f.data.tasks.isEmpty)
+        XCTAssertEqual(f.data.listHouseholds().count, 2)
+        XCTAssertFalse(f.data.isJoiningHousehold)
+        let savedSource = await f.storage.loadTasks(for: f.sourceID)
+        XCTAssertEqual(savedSource.map(\.id), [bathroom.id])
+        f.cloud.failingUpload = false
+        try await f.data.mergeChores(from: f.sourceID, into: destinationID)
+        XCTAssertEqual(f.data.tasks.map(\.id), [bathroom.id])
+    }
+
+    func testLaterMergeRejectsMissingAndOwnedDestinations() async throws {
+        let f = try await fixture()
+        for destinationID in [UUID(), f.sourceID] {
+            do {
+                try await f.data.mergeChores(from: f.sourceID, into: destinationID)
+                XCTFail("Must merge into an existing joined home")
+            } catch IncomingHouseholdShareError.mergeDestinationUnavailable { }
+        }
+        XCTAssertEqual(f.cloud.prepareCount, 0)
+        XCTAssertTrue(f.cloud.uploads.isEmpty)
+    }
+
     func testMergePreservesDestinationEditsPrivateSourceAndProgressAndIsIdempotent() async throws {
         let f = try await fixture()
         let duplicateID = UUID()

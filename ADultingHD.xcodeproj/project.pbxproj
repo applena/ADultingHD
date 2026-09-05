@@ -15,6 +15,7 @@
 		07448A1933AC0DB53D4862E6 /* Features.swift in Sources */ = {isa = PBXBuildFile; fileRef = 06D3081EF4BDDB578BF04645 /* Features.swift */; };
 		08AA7BF41F5C829B9CD76EE5 /* CloudKitSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC0D49B9607490BDBDF8E190 /* CloudKitSync.swift */; };
 		08B24DF878A7259865426EFB /* ProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6FBFA6567C2B1A40A60A5E2 /* ProfileView.swift */; };
+		0A12EDA019C0559BAC7B18D0 /* HouseholdChoreMergeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8DB6954276DBFFFE94072D57 /* HouseholdChoreMergeView.swift */; };
 		0A1DFB68D9B5E5EF8D71D9B7 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 595B8FFDEAA880BB683CE951 /* Theme.swift */; };
 		0C4892190E1675E2621AC90E /* ModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12E42443B93064A0049A2DE8 /* ModelTests.swift */; };
 		0EBCCB3952C73766A7550BB1 /* MailComposer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0948809977CA170CA42D9648 /* MailComposer.swift */; };
@@ -108,6 +109,7 @@
 		9D361A1FB6B532CDC9A8FA64 /* SharedDefaults.swift in Sources */ = {isa = PBXBuildFile; fileRef = 120568C8B5D9789897289150 /* SharedDefaults.swift */; };
 		9F85CA4BB8D941A50064BBDD /* Household.swift in Sources */ = {isa = PBXBuildFile; fileRef = D11A106E8C2F206C19D308D2 /* Household.swift */; };
 		A17CF5F7981CF125B77C1A8D /* StarterChorePickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82FE4E812DE36CF39A3A8EE9 /* StarterChorePickerView.swift */; };
+		A59981FC55714FEC7CF6DF8F /* HouseholdChoreMergeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8DB6954276DBFFFE94072D57 /* HouseholdChoreMergeView.swift */; };
 		A749CF0FE2A205BA72AC5B7D /* AddTaskView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC09792564158736721A229E /* AddTaskView.swift */; };
 		A75462A9581CB3FF7A71AF25 /* HouseholdWorkspaceStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C780BE00E1AEC497667BE4AC /* HouseholdWorkspaceStore.swift */; };
 		A78B723C3B169F7807F6EDD6 /* CloudKitRecordTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84C447DACC7370EA8A6AF043 /* CloudKitRecordTests.swift */; };
@@ -226,6 +228,7 @@
 		84C447DACC7370EA8A6AF043 /* CloudKitRecordTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitRecordTests.swift; sourceTree = "<group>"; };
 		854942DD593A8ECA221E1EBA /* FeedbackManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedbackManager.swift; sourceTree = "<group>"; };
 		86BDCF942FA8CA833432A794 /* HouseholdInvitationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HouseholdInvitationTests.swift; sourceTree = "<group>"; };
+		8DB6954276DBFFFE94072D57 /* HouseholdChoreMergeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HouseholdChoreMergeView.swift; sourceTree = "<group>"; };
 		8E4E23E901E5476ADB2336D1 /* AvatarModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AvatarModels.swift; sourceTree = "<group>"; };
 		8EE3AD45631FE25F14C022B1 /* StatsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatsView.swift; sourceTree = "<group>"; };
 		94BE46FE41B7C1EA8E502F61 /* Products.storekit */ = {isa = PBXFileReference; path = Products.storekit; sourceTree = "<group>"; };
@@ -538,6 +541,7 @@
 			children = (
 				50B7A549DD9609592F8E379E /* CloudShareSheet.swift */,
 				3727978FB1D9851E994C4EA1 /* CreateHouseholdSheet.swift */,
+				8DB6954276DBFFFE94072D57 /* HouseholdChoreMergeView.swift */,
 				5BC7CD3CAC5DCCF5D6FAFA30 /* HouseholdInvitationView.swift */,
 				7D2415835B6B9246CBCB2B51 /* HouseholdListView.swift */,
 				0393A2B006DEC68B74588B38 /* HouseholdSwitcher.swift */,
@@ -792,6 +796,7 @@
 				99326F6EA98B4E457423CD2C /* HomeLocation.swift in Sources */,
 				56E9EE81F78562E8E417DF86 /* HomeOnboardingTourView.swift in Sources */,
 				35007C115034710A7F9A0B67 /* Household.swift in Sources */,
+				0A12EDA019C0559BAC7B18D0 /* HouseholdChoreMergeView.swift in Sources */,
 				188215EC4A865FA88333EDE4 /* HouseholdInvitationClient.swift in Sources */,
 				3531332DB9C0125F117F6770 /* HouseholdInvitationPreview.swift in Sources */,
 				F85C79A9AC57D032D675DF9D /* HouseholdInvitationView.swift in Sources */,
@@ -852,6 +857,7 @@
 				441E9BE6721263C344D2EED4 /* HomeLocation.swift in Sources */,
 				346364882A9BEDB4FA5DBB26 /* HomeOnboardingTourView.swift in Sources */,
 				9F85CA4BB8D941A50064BBDD /* Household.swift in Sources */,
+				A59981FC55714FEC7CF6DF8F /* HouseholdChoreMergeView.swift in Sources */,
 				2ED94386960DE6C57C319028 /* HouseholdInvitationClient.swift in Sources */,
 				FEAD89B126FEDE6B4FE3D1B8 /* HouseholdInvitationPreview.swift in Sources */,
 				EF27C646B029D8B3FAE6AF89 /* HouseholdInvitationView.swift in Sources */,

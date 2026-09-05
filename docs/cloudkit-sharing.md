@@ -14,7 +14,8 @@ Messages/Mail/AirDrop. Every recipient reviews the invited household before
 joining. Existing users see a dedicated invitation page with **Add this
 household** and **Merge chores into this household** choices. A first-time
 recipient sees the household and inviter, enters a display name, and can
-either accept or create a separate household without accepting the share.
+choose an owned home to bring shared chores from before joining, or create a
+separate household without accepting the share.
 
 Adding keeps all existing homes separate. Merging copies missing shared
 chores from a selected owned home, retaining destination edits and clearing
@@ -23,6 +24,12 @@ supplies remain private. The original home stays available as a backup;
 membership and completion history are not copied, and XP is not duplicated.
 Supply stock is copied only for shared chore supplies and remains local to
 this Apple ID, because stock has no CloudKit record contract yet.
+
+After joining, recipients can use the household switcher → **Bring chores into
+this home…** to merge shared chores from an owned home. This is available
+without Pro and without another invitation. Reopening an invitation also
+allows merging into a previously joined home. A successful merge is confirmed
+on screen; a failed upload keeps both homes intact and can be retried.
 
 A join finishes only after the invited snapshot has loaded and the local
 workspace/index have been written successfully. Failed acceptance, loading,
@@ -230,6 +237,12 @@ missing field on the following attempt.
 | `MemberProfile` | `name` String; `avatar` String; `totalXP` Int64; `coins` Int64; `currentStreak` Int64; `longestStreak` Int64; `totalTasksCompleted` Int64; `joinDate` Date/Time; `lastActiveDate` Date/Time; `unlockedAchievements` String List; `avatarState` Bytes |
 | `HouseholdRoot` | `title` String |
 | `PersonalTaskTombstone` | `taskId` String; the UUID-only marker also remains encoded in CloudKit's system record ID and parent relationship |
+
+`HouseholdTask`, `MemberProfile`, `PersonalTaskTombstone`, and `TaskCompletion`
+each require a **QUERYABLE** index on system `recordName` (`___recordID`) in
+Production. The full-record queries used during joining require these indexes;
+missing one causes “Type is not marked indexable.” These four indexes were
+verified deployed on September 5, 2026.
 
 The system-created `cloudkit.share` record type must also exist in both
 environments. Deploy all pending record types, fields, indexes, and security

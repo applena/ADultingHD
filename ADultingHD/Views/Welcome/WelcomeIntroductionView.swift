@@ -129,6 +129,7 @@ struct WelcomeIntroductionView: View {
     @State private var didConfigureFlow = false
     @State private var isSaving = false
     @State private var joinError: String?
+    @State private var mergeSourceID: UUID?
     @State private var hasSentInvite = false
     @State private var invitePresentationWasInvalidated = false
     @State private var sharePresentation = HouseholdSharePresentation()
@@ -188,6 +189,7 @@ struct WelcomeIntroductionView: View {
         }
         .onAppear(perform: prepareDefaults)
         .onChange(of: dataStore.pendingOnboardingShare?.id) { _, shareID in
+            mergeSourceID = nil
             if shareID != nil {
                 updateFlow { $0.start(routeFromStore) }
             }
@@ -399,6 +401,12 @@ struct WelcomeIntroductionView: View {
                 }
             }
         case .joinHousehold:
+            if flow.route.pendingInviteID != nil {
+                HouseholdChoreSourcePicker(
+                    sources: dataStore.onboardingMergeSources, selection: $mergeSourceID
+                )
+                .disabled(isBusy)
+            }
             if let joinError {
                 Label(joinError, systemImage: "exclamationmark.triangle.fill")
                     .font(.caption)
@@ -502,7 +510,7 @@ struct WelcomeIntroductionView: View {
         switch flow.current {
         case .joinHousehold:
             WelcomeActionBar(
-                title: "Join \(joiningHouseholdName)",
+                title: mergeSourceID == nil ? "Join \(joiningHouseholdName)" : "Join and merge chores",
                 action: handlePrimaryAction,
                 isDisabled: primaryButtonDisabled,
                 showsProgress: isSaving,
@@ -695,12 +703,15 @@ struct WelcomeIntroductionView: View {
         guard flow.route.isJoining, !isSaving else { return }
         let name = playerName.trimmingCharacters(in: .whitespacesAndNewlines)
         let pendingInviteID = flow.route.pendingInviteID
+        let sourceID = mergeSourceID
         isSaving = true
         joinError = nil
         Task { @MainActor in
             do {
                 if let pendingInviteID {
-                    try await dataStore.acceptPendingOnboardingShare(id: pendingInviteID, displayName: name)
+                    try await dataStore.acceptPendingOnboardingShare(
+                        id: pendingInviteID, displayName: name, mergeFrom: sourceID
+                    )
                     guard flow.route.pendingInviteID == pendingInviteID else {
                         isSaving = false
                         return
