@@ -508,7 +508,7 @@ EOF
     fi
     if ! echo "$APP_ENTITLEMENTS" | /usr/bin/python3 -c '
 import plistlib, sys
-entitlements = plistlib.load(sys.stdin.buffer)
+entitlements = plistlib.loads(sys.stdin.buffer.read())
 valid = (
     "CloudKit" in entitlements.get("com.apple.developer.icloud-services", [])
     and "iCloud.net.shadowpuppet.ADultingHD" in entitlements.get("com.apple.developer.icloud-container-identifiers", [])
