@@ -99,6 +99,7 @@ struct HouseholdView: View {
 
     private func activityColor(_ activity: HouseholdActivity) -> Color {
         switch activity.event {
+        case .joinedHousehold: Theme.successGreen
         case .completedTask: Theme.successGreen
         case .leveledUp: Theme.levelPurple
         case .achievementUnlocked: Theme.xpGold

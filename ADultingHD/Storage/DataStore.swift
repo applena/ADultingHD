@@ -323,6 +323,7 @@ final class DataStore {
 
         // Snapshot household state before reload for change detection on subsequent loads
         let wasLoaded = isLoaded
+        let previousHouseholdID = activeHouseholdId
         let preProfiles = wasLoaded ? householdProfiles : []
         let preCompletionIDs = wasLoaded ? Set(completions.map(\.id)) : []
         let preRank = wasLoaded ? leaderboard.firstIndex(where: { $0.id == profile.id }).map { $0 + 1 } : nil
@@ -391,7 +392,7 @@ final class DataStore {
         isLoaded = true
         logger.info("DataStore loaded: \(self.tasks.count) tasks, level \(self.profile.level), household '\(self.activeHousehold.name, privacy: .private)'")
 
-        if wasLoaded {
+        if wasLoaded && previousHouseholdID == activeHouseholdId {
             detectHouseholdChanges(preProfiles: preProfiles, preCompletionIDs: preCompletionIDs, preRank: preRank)
         }
 
@@ -1657,6 +1658,7 @@ final class DataStore {
     private func detectHouseholdChanges(preProfiles: [UserProfile], preCompletionIDs: Set<UUID>, preRank: Int?) {
         guard householdProfiles.count > 1 else { return }
 
+        let knownMemberIDs = Set(preProfiles.map(\.id))
         let preXP = Dictionary(uniqueKeysWithValues: preProfiles.map { ($0.id, $0.totalXP) })
         let preLevels = Dictionary(uniqueKeysWithValues: preProfiles.map { ($0.id, $0.level) })
         let preAchievs = Dictionary(uniqueKeysWithValues: preProfiles.map { ($0.id, Set($0.unlockedAchievements)) })
@@ -1664,6 +1666,14 @@ final class DataStore {
         var newActivities: [HouseholdActivity] = []
 
         for member in householdProfiles where member.id != profile.id {
+            if !knownMemberIDs.contains(member.id) {
+                newActivities.append(HouseholdActivity(
+                    profileId: member.id, profileName: member.name,
+                    avatarState: member.avatarState,
+                    event: .joinedHousehold, timestamp: Date()
+                ))
+                continue
+            }
             let prevXP = preXP[member.id] ?? 0
             guard prevXP > 0 else { continue }  // skip members not seen before (avoid false level-up on add)
 

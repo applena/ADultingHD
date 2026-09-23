@@ -55,4 +55,22 @@ final class HouseholdMergeTests: XCTestCase {
         XCTAssertTrue(result.addedTasks.isEmpty)
         XCTAssertEqual(result.supplyStock, ["Soap": .low])
     }
+
+    func testMergeSkipsSameChoreWithDifferentIDButKeepsDifferentRooms() {
+        var existing = task("Wash dishes", supplies: ["Soap"])
+        existing.room = "Kitchen"
+        var duplicate = task("  WASH DISHES  ", supplies: ["Soap"])
+        duplicate.room = "kitchen"
+        var otherRoom = task("Wash dishes", supplies: [])
+        otherRoom.room = "Outdoor"
+
+        let result = HouseholdMerge(
+            sourceTasks: [duplicate, otherRoom], sourceStock: [:],
+            destinationTasks: [existing], destinationStock: [:], destinationMemberIDs: []
+        )
+
+        XCTAssertEqual(result.tasks.map(\.id), [existing.id, otherRoom.id])
+        XCTAssertEqual(result.addedTasks.map(\.id), [otherRoom.id])
+        XCTAssertEqual(TaskDuplicates.groups(in: [existing, duplicate, otherRoom]).count, 1)
+    }
 }

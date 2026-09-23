@@ -21,6 +21,8 @@ struct TaskListView: View {
     @State private var searchText = ""
     @State private var showAddCustom = false
     @State private var showProUpgrade = false
+    @State private var showDuplicateReview = false
+    @State private var duplicateToDelete: HouseholdTask?
 
     init(initialTab: TaskTab = .myTasks, initialRoom: String? = nil) {
         _selectedTab = State(initialValue: initialTab)
@@ -100,6 +102,9 @@ struct TaskListView: View {
         .sheet(isPresented: $showProUpgrade) {
             ProUpgradeView()
         }
+        .sheet(isPresented: $showDuplicateReview) {
+            duplicateReview
+        }
     }
 
     private var taskHeader: some View {
@@ -148,6 +153,16 @@ struct TaskListView: View {
             roomFilter
             assigneeFilterRow
 
+            if !TaskDuplicates.groups(in: dataStore.tasks).isEmpty {
+                Section {
+                    Button {
+                        showDuplicateReview = true
+                    } label: {
+                        Label("Review possible duplicate chores", systemImage: "square.on.square")
+                    }
+                }
+            }
+
             if filteredTasks.isEmpty {
                 ContentUnavailableView {
                     Label("No Tasks Yet", systemImage: "checklist")
@@ -166,6 +181,53 @@ struct TaskListView: View {
         .listStyle(.inset)
         #endif
         .scrollContentBackground(.hidden)
+    }
+
+    private var duplicateReview: some View {
+        NavigationStack {
+            List {
+                ForEach(Array(TaskDuplicates.groups(in: dataStore.tasks).enumerated()), id: \.offset) { entry in
+                    Section(entry.element[0].name) {
+                        ForEach(entry.element) { task in
+                            HStack {
+                                VStack(alignment: .leading) {
+                                    Text(task.name)
+                                    Text("\(task.room ?? "Around the house") · \(task.frequency.rawValue)")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                                Button("Remove", role: .destructive) {
+                                    duplicateToDelete = task
+                                }
+                                .buttonStyle(.borderless)
+                            }
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Possible duplicates")
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { showDuplicateReview = false }
+                }
+            }
+            .confirmationDialog(
+                "Remove duplicate chore?",
+                isPresented: Binding(
+                    get: { duplicateToDelete != nil },
+                    set: { if !$0 { duplicateToDelete = nil } }
+                ),
+                presenting: duplicateToDelete
+            ) { task in
+                Button("Remove \(task.name)", role: .destructive) {
+                    Task { await dataStore.deleteTask(task) }
+                    duplicateToDelete = nil
+                }
+            } message: { _ in
+                Text("This removes this copy from the household. Past completions remain in your history.")
+            }
+        }
     }
 
     // MARK: - All Tasks Catalog

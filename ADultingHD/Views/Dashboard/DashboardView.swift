@@ -101,6 +101,7 @@ struct DashboardView: View {
     private var iOSLayout: some View {
         VStack(alignment: .leading, spacing: 14) {
             homeHeader
+            householdMembersIndicator
             progressCard
             questFilterRow
             homeQuestList
@@ -117,6 +118,7 @@ struct DashboardView: View {
     private var macOSLayout: some View {
         VStack(alignment: .leading, spacing: 14) {
             homeHeader
+            householdMembersIndicator
             progressCard
             questFilterRow
             homeQuestList
@@ -143,6 +145,25 @@ struct DashboardView: View {
                 .foregroundStyle(Theme.cream.opacity(0.68))
         }
         .accessibilityIdentifier("home-root-header")
+    }
+
+    @ViewBuilder
+    private var householdMembersIndicator: some View {
+        if let newestJoin = dataStore.householdActivityFeed.first(where: {
+            if case .joinedHousehold = $0.event { return true }
+            return false
+        }) {
+            Label(newestJoin.displayTitle, systemImage: "person.crop.circle.badge.checkmark")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(Theme.cream)
+                .padding(12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Theme.successGreen.opacity(0.25), in: RoundedRectangle(cornerRadius: 12))
+        } else if dataStore.householdProfiles.count > 1 {
+            Label("\(dataStore.householdProfiles.count) people in this household", systemImage: "person.2.fill")
+                .font(.subheadline)
+                .foregroundStyle(Theme.cream.opacity(0.78))
+        }
     }
 
     private var todayTaskTotal: Int {

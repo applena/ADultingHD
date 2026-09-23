@@ -717,6 +717,7 @@ struct TaskCompletion: Codable, Identifiable {
 // MARK: - Household Activity Feed
 
 enum HouseholdActivityEvent {
+    case joinedHousehold
     case completedTask(name: String, xp: Int)
     case leveledUp(level: Int)
     case achievementUnlocked(name: String)
@@ -733,6 +734,8 @@ struct HouseholdActivity: Identifiable {
 
     var displayTitle: String {
         switch event {
+        case .joinedHousehold:
+            return "\(profileName) joined the household"
         case .completedTask(let name, let xp):
             return "\(profileName) completed '\(name)' +\(xp) XP"
         case .leveledUp(let level):
@@ -746,6 +749,7 @@ struct HouseholdActivity: Identifiable {
 
     var systemImage: String {
         switch event {
+        case .joinedHousehold: "person.crop.circle.badge.checkmark"
         case .completedTask: "checkmark.circle.fill"
         case .leveledUp: "arrow.up.circle.fill"
         case .achievementUnlocked: "star.fill"
@@ -755,6 +759,7 @@ struct HouseholdActivity: Identifiable {
 
     var notificationTitle: String {
         switch event {
+        case .joinedHousehold: return "\(profileName) joined your household!"
         case .completedTask: return "\(profileName) is adulting!"
         case .leveledUp: return "\(profileName) leveled up!"
         case .achievementUnlocked: return "\(profileName) unlocked an achievement!"
@@ -764,6 +769,7 @@ struct HouseholdActivity: Identifiable {
 
     var notificationBody: String {
         switch event {
+        case .joinedHousehold: return "You can now share chores together."
         case .completedTask(let name, let xp): return "Completed '\(name)' for +\(xp) XP"
         case .leveledUp(let level): return "Now Level \(level) on the household leaderboard"
         case .achievementUnlocked(let name): return name
