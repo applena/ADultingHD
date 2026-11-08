@@ -47,6 +47,25 @@ struct TaskListView: View {
                     .padding(.top)
                     .padding(.bottom, 8)
 
+                NavigationLink {
+                    SuppliesView()
+                } label: {
+                    HStack {
+                        Label("Supplies", systemImage: "basket.fill")
+                        Spacer()
+                        if dataStore.supplyAttentionCount > 0 {
+                            Text("\(dataStore.supplyAttentionCount) need attention")
+                                .font(.caption)
+                        }
+                        Image(systemName: "chevron.right")
+                            .font(.caption.weight(.semibold))
+                    }
+                    .padding(.horizontal)
+                    .padding(.vertical, 8)
+                }
+                .accessibilityIdentifier("tasks-supplies-link")
+                .accessibilityValue("\(dataStore.lowSupplyCount) low, \(dataStore.outOfStockSupplyCount) out of stock")
+
                 Picker("View", selection: $selectedTab) {
                     ForEach(TaskTab.allCases, id: \.self) { tab in
                         Text(tab.rawValue).tag(tab)

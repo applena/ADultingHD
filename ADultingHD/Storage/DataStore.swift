@@ -265,10 +265,17 @@ final class DataStore {
         householdProfiles.sorted { $0.totalXP > $1.totalXP }
     }
 
-    /// Each household member's XP earned so far this calendar week, highest
-    /// first — see `WeeklyLeaderboard.entries`.
+    /// Shared completion history belonging to the active household only.
+    var householdContributions: [TaskCompletion] {
+        Self.completionsForSharing(
+            completions, householdID: activeHouseholdId,
+            privateTaskIDs: privateTaskIDsForCompletionSync()
+        )
+    }
+
+    /// Current-week task XP, scoped to shared household contributions.
     var weeklyLeaderboard: [WeeklyXPEntry] {
-        WeeklyLeaderboard.entries(members: householdProfiles, completions: completions)
+        WeeklyLeaderboard.entries(members: householdProfiles, completions: householdContributions)
     }
 
     /// This week's "superstar" (highest weekly XP), or `nil` when there's no

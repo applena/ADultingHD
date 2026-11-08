@@ -39,10 +39,10 @@ final class ScreenshotTests: XCTestCase {
         sleep(1)
         capture("03_Schedule")
 
-        // 4. Supplies and shopping-list status
-        navigateTo("Supplies")
+        // 4. Household leaderboard
+        navigateTo("Leaderboard")
         sleep(1)
-        capture("04_Supplies")
+        capture("04_Leaderboard")
 
         // 5. Profile (achievements, avatar, leaderboard)
         navigateTo("Profile")
@@ -63,7 +63,7 @@ final class ScreenshotTests: XCTestCase {
             (name: "Home", header: "home-root-header"),
             (name: "Tasks", header: "tasks-root-header"),
             (name: "Schedule", header: "schedule-root-header"),
-            (name: "Supplies", header: "supplies-root-header"),
+            (name: "Leaderboard", header: "leaderboard-root-header"),
             (name: "Profile", header: "profile-root-header"),
         ]
 
@@ -113,7 +113,10 @@ final class ScreenshotTests: XCTestCase {
     }
 
     func testSuppliesNavigationAndShoppingList() throws {
-        navigateTo("Supplies")
+        navigateTo("Tasks")
+        let suppliesLink = app.buttons["tasks-supplies-link"]
+        XCTAssertTrue(suppliesLink.waitForExistence(timeout: 5))
+        suppliesLink.tap()
 
         let header = app.descendants(matching: .any)
             .matching(identifier: "supplies-root-header")
@@ -141,7 +144,7 @@ final class ScreenshotTests: XCTestCase {
         for _ in 0..<6 where !statsLink.isHittable {
             profileScroll.swipeUp()
         }
-        XCTAssertTrue(statsLink.isHittable, "Detailed Stats should remain reachable after Supplies takes the fourth tab")
+        XCTAssertTrue(statsLink.isHittable, "Detailed Stats should remain reachable after Leaderboard takes the fourth tab")
         statsLink.tap()
 
         let statsHeader = app.descendants(matching: .any)

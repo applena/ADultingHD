@@ -3,15 +3,72 @@ import SwiftUI
 struct HouseholdView: View {
     @Environment(DataStore.self) private var dataStore
 
+    @State private var metric: ContributionMetric = .tasks
+    @State private var period: ContributionPeriod = .week
+
     var body: some View {
-        List {
+        TimelineView(.periodic(from: .now, by: 60)) { context in
+            leaderboard(at: context.date)
+        }
+        .navigationTitle("Leaderboard")
+        .rootTabNavigation("Leaderboard")
+    }
+
+    private func leaderboard(at date: Date) -> some View {
+        let contributions = dataStore.householdContributions
+        let entries = WeeklyLeaderboard.entries(
+            members: dataStore.householdProfiles, completions: contributions,
+            referenceDate: date, period: period, metric: metric
+        )
+        let champions = WeeklyLeaderboard.previousWeekChampions(
+            members: dataStore.householdProfiles, completions: contributions, referenceDate: date
+        )
+        return List {
+            Section {
+                Picker("Time period", selection: $period) {
+                    ForEach(ContributionPeriod.allCases) { Text($0.rawValue).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .accessibilityIdentifier("leaderboard-root-header")
+                Picker("Rank by", selection: $metric) {
+                    ForEach(ContributionMetric.allCases) { Text($0.rawValue).tag($0) }
+                }
+                .pickerStyle(.segmented)
+            } footer: {
+                Text("Shared household tasks only. XP includes task and streak XP, excluding personal tasks and consistency bonuses.")
+            }
+
+            Section {
+                Label("Weekly Champion", systemImage: "crown.fill")
+                    .font(.headline)
+                    .foregroundStyle(Theme.xpGold)
+                if champions.isEmpty {
+                    Text("The top XP contributor at the end of each week earns a crown to wear here all next week. Tied leaders share the crown.")
+                } else {
+                    ForEach(champions) { champion in
+                        Label(champion.profile.name, systemImage: "crown.fill")
+                            .foregroundStyle(Theme.xpGold)
+                        Text("\(champion.taskCount) tasks · \(champion.weeklyXP) XP last week")
+                            .font(.caption)
+                    }
+                    Text("Last week’s top contributors hold the crown this week. Ties share the reward.")
+                }
+            }
+
             // Leaderboard
             Section("Leaderboard") {
-                ForEach(Array(dataStore.leaderboard.enumerated()), id: \.element.id) { index, member in
+                if entries.allSatisfy({ $0.taskCount == 0 }) {
+                    Text("No shared tasks completed in this period yet. Every contribution counts.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                ForEach(entries) { entry in
+                    let member = entry.profile
+                    let rank = WeeklyLeaderboard.rank(of: entry, among: entries, metric: metric)
                     HStack(spacing: 12) {
-                        Text("\(index + 1)")
+                        Text("\(rank)")
                             .font(.headline)
-                            .foregroundStyle(index == 0 ? Theme.xpGold : .secondary)
+                            .foregroundStyle(rank == 1 ? Theme.xpGold : .secondary)
                             .frame(width: 24)
 
                         CompactAvatarView(
@@ -24,6 +81,11 @@ struct HouseholdView: View {
                             HStack {
                                 Text(member.name)
                                     .font(.subheadline.weight(.medium))
+                                if champions.contains(where: { $0.id == member.id }) {
+                                    Image(systemName: "crown.fill")
+                                        .foregroundStyle(Theme.xpGold)
+                                        .accessibilityLabel("Weekly Champion")
+                                }
                                 if member.id == dataStore.profile.id {
                                     Text("YOU")
                                         .font(.caption2.bold())
@@ -41,10 +103,10 @@ struct HouseholdView: View {
                         Spacer()
 
                         VStack(alignment: .trailing) {
-                            Text("\(member.totalXP)")
+                            Text(metric == .tasks ? "\(entry.taskCount) tasks" : "\(entry.weeklyXP) XP")
                                 .font(.subheadline.bold())
                                 .foregroundStyle(Theme.xpGold)
-                            Text("XP")
+                            Text(metric == .tasks ? "\(entry.weeklyXP) XP" : "\(entry.taskCount) tasks")
                                 .font(.caption2)
                                 .foregroundStyle(.secondary)
                         }
@@ -94,7 +156,7 @@ struct HouseholdView: View {
                 }
             }
         }
-        .navigationTitle("Household")
+        .rootTabScrollClearance()
     }
 
     private func activityColor(_ activity: HouseholdActivity) -> Color {

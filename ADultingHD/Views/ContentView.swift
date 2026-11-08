@@ -82,7 +82,7 @@ struct MacContentView: View {
         case home = "Home"
         case tasks = "Tasks"
         case schedule = "Schedule"
-        case supplies = "Supplies"
+        case leaderboard = "Leaderboard"
         case stats = "Stats"
         case profile = "Profile"
         case settings = "Settings"
@@ -94,7 +94,7 @@ struct MacContentView: View {
             case .home: "house.fill"
             case .tasks: "checklist"
             case .schedule: "calendar"
-            case .supplies: "bag.fill"
+            case .leaderboard: "trophy.fill"
             case .stats: "chart.bar.fill"
             case .profile: "person.crop.circle.fill"
             case .settings: "gear"
@@ -122,7 +122,7 @@ struct MacContentView: View {
                 case .home: DashboardView()
                 case .tasks: TaskListView()
                 case .schedule: ScheduleView()
-                case .supplies: SuppliesView()
+                case .leaderboard: HouseholdView()
                 case .stats: StatsView()
                 case .profile: ProfileView()
                 case .settings: SettingsView()
@@ -138,12 +138,6 @@ struct MacContentView: View {
 
 #if os(iOS)
 struct IOSContentView: View {
-    @Environment(DataStore.self) private var dataStore
-
-    private var supplyAccessibilityValue: String {
-        "\(dataStore.lowSupplyCount) low, \(dataStore.outOfStockSupplyCount) out of stock"
-    }
-
     var body: some View {
         TabView {
             NavigationStack { DashboardView() }
@@ -155,13 +149,8 @@ struct IOSContentView: View {
             NavigationStack { ScheduleView() }
                 .tabItem { Label("Schedule", systemImage: "calendar") }
 
-            NavigationStack { SuppliesView() }
-                .tabItem {
-                    Label("Supplies", systemImage: "basket.fill")
-                        .accessibilityLabel("Supplies")
-                        .accessibilityValue(Text(supplyAccessibilityValue))
-                }
-                .badge(dataStore.supplyAttentionCount)
+            NavigationStack { HouseholdView() }
+                .tabItem { Label("Leaderboard", systemImage: "trophy.fill") }
 
             NavigationStack { ProfileView() }
                 .tabItem { Label("Profile", systemImage: "person.crop.circle.fill") }

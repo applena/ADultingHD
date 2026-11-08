@@ -541,4 +541,84 @@ final class ModelTests: XCTestCase {
         let entries = WeeklyLeaderboard.entries(members: [alice, bob], completions: completions)
         XCTAssertEqual(WeeklyLeaderboard.superstar(among: entries)?.profile.name, "Alice")
     }
+    func testContributionSortingAndTiedRanks() {
+        let alice = UserProfile()
+        let bob = UserProfile()
+        let records = [
+            makeCompletion(profileId: alice.id, xp: 10),
+            makeCompletion(profileId: alice.id, xp: 10),
+            makeCompletion(profileId: bob.id, xp: 100)
+        ]
+        let byTasks = WeeklyLeaderboard.entries(members: [alice, bob], completions: records, metric: .tasks)
+        let byXP = WeeklyLeaderboard.entries(members: [alice, bob], completions: records, metric: .xp)
+        XCTAssertEqual(byTasks.first?.id, alice.id)
+        XCTAssertEqual(byTasks.first?.taskCount, 2)
+        XCTAssertEqual(byXP.first?.id, bob.id)
+        let tied = WeeklyLeaderboard.entries(members: [alice, bob], completions: [])
+        XCTAssertEqual(tied.map { WeeklyLeaderboard.rank(of: $0, among: tied, metric: .tasks) }, [1, 1])
+    }
+
+    func testContributionHistoryDeduplicatesAndExcludesFutureRecords() {
+        let member = UserProfile()
+        let old = makeCompletion(profileId: member.id, xp: 30, daysAgo: 30)
+        let future = makeCompletion(profileId: member.id, xp: 999, daysAgo: -1)
+        let entries = WeeklyLeaderboard.entries(
+            members: [member], completions: [old, old, future], period: .allTime
+        )
+        XCTAssertEqual(entries.first?.taskCount, 1)
+        XCTAssertEqual(entries.first?.weeklyXP, 30)
+    }
+
+    func testWeeklyCrownUsesCompletedWeekAndSharesTies() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        calendar.firstWeekday = 2
+        let now = calendar.date(from: DateComponents(year: 2026, month: 11, day: 11))!
+        let start = calendar.weekInterval(containing: now)!.start
+        let alice = UserProfile()
+        let bob = UserProfile()
+        func record(_ member: UserProfile, _ date: Date, _ xp: Int) -> TaskCompletion {
+            TaskCompletion(id: UUID(), taskId: UUID(), taskName: "Chore",
+                           completedAt: date, xpEarned: xp, streakBonus: 0,
+                           notes: nil, profileId: member.id)
+        }
+        let records = [
+            record(alice, start.addingTimeInterval(-60), 50),
+            record(bob, start.addingTimeInterval(-60), 50),
+            record(bob, start, 999)
+        ]
+        let winners = WeeklyLeaderboard.previousWeekChampions(
+            members: [alice, bob], completions: records, referenceDate: now, calendar: calendar
+        )
+        XCTAssertEqual(Set(winners.map(\.id)), Set([alice.id, bob.id]))
+        XCTAssertEqual(winners.map(\.weeklyXP), [50, 50])
+        XCTAssertTrue(WeeklyLeaderboard.previousWeekChampions(
+            members: [alice, bob], completions: records,
+            referenceDate: calendar.date(byAdding: .day, value: 14, to: now)!, calendar: calendar
+        ).isEmpty)
+        XCTAssertTrue(WeeklyLeaderboard.previousWeekChampions(
+            members: [alice], completions: records, referenceDate: now, calendar: calendar
+        ).isEmpty)
+    }
+
+    @MainActor
+    func testHouseholdContributionsExcludeOtherHomesAndPrivateTasks() {
+        let home = UUID(), other = UUID(), privateTask = UUID()
+        let member = UserProfile()
+        var shared = makeCompletion(profileId: member.id, xp: 10)
+        shared.householdId = home
+        var foreign = makeCompletion(profileId: member.id, xp: 100)
+        foreign.householdId = other
+        let personal = TaskCompletion(
+            id: UUID(), taskId: privateTask, taskName: "Private",
+            completedAt: Date(), xpEarned: 100, streakBonus: 0, notes: nil,
+            profileId: member.id, householdId: home
+        )
+        let legacy = makeCompletion(profileId: member.id, xp: 100)
+        let filtered = DataStore.completionsForSharing(
+            [shared, foreign, personal, legacy], householdID: home, privateTaskIDs: [privateTask]
+        )
+        XCTAssertEqual(filtered.map(\.id), [shared.id])
+    }
+
 }
