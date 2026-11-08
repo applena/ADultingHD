@@ -608,13 +608,17 @@ EOF
 # production values that the development file leaves out.
 MACOS_ENTITLEMENTS="$BUILD_DIR/entitlements_macos_production.plist"
 cp ADultingHD/App/ADultingHD.entitlements "$MACOS_ENTITLEMENTS"
-plutil -remove aps-environment "$MACOS_ENTITLEMENTS"
-plutil -insert com.apple.developer.aps-environment -string production "$MACOS_ENTITLEMENTS"
-plutil -insert com.apple.application-identifier -string "$TEAM_ID.$BUNDLE_ID" "$MACOS_ENTITLEMENTS"
-plutil -insert com.apple.developer.team-identifier -string "$TEAM_ID" "$MACOS_ENTITLEMENTS"
-plutil -insert com.apple.developer.icloud-container-environment -string Production "$MACOS_ENTITLEMENTS"
-plutil -insert com.apple.developer.ubiquity-container-identifiers -array "$MACOS_ENTITLEMENTS"
-plutil -insert com.apple.developer.ubiquity-container-identifiers -string "$CLOUD_CONTAINER" -append "$MACOS_ENTITLEMENTS"
+# PlistBuddy, not plutil: plutil treats the dots in these key names as nested
+# key paths.
+/usr/libexec/PlistBuddy \
+    -c "Delete :aps-environment" \
+    -c "Add :com.apple.developer.aps-environment string production" \
+    -c "Add :com.apple.application-identifier string $TEAM_ID.$BUNDLE_ID" \
+    -c "Add :com.apple.developer.team-identifier string $TEAM_ID" \
+    -c "Add :com.apple.developer.icloud-container-environment string Production" \
+    -c "Add :com.apple.developer.ubiquity-container-identifiers array" \
+    -c "Add :com.apple.developer.ubiquity-container-identifiers:0 string $CLOUD_CONTAINER" \
+    "$MACOS_ENTITLEMENTS"
 
 if $BUILD_IOS; then
     build_platform "iOS" "ADultingHD_iOS" "ios" "$IOS_ENTITLEMENTS"
