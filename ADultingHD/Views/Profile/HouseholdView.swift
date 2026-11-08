@@ -10,7 +10,8 @@ struct HouseholdView: View {
         TimelineView(.periodic(from: .now, by: 60)) { context in
             leaderboard(at: context.date)
         }
-        .navigationTitle("Household")
+        .navigationTitle("Leaderboard")
+        .rootTabNavigation("Leaderboard")
     }
 
     private func leaderboard(at date: Date) -> some View {
@@ -28,6 +29,7 @@ struct HouseholdView: View {
                     ForEach(ContributionPeriod.allCases) { Text($0.rawValue).tag($0) }
                 }
                 .pickerStyle(.segmented)
+                .accessibilityIdentifier("leaderboard-root-header")
                 Picker("Rank by", selection: $metric) {
                     ForEach(ContributionMetric.allCases) { Text($0.rawValue).tag($0) }
                 }
@@ -154,6 +156,7 @@ struct HouseholdView: View {
                 }
             }
         }
+        .rootTabScrollClearance()
     }
 
     private func activityColor(_ activity: HouseholdActivity) -> Color {
