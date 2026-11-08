@@ -229,7 +229,7 @@ struct ScreenBackground: View {
 }
 
 struct LandingHeader: View {
-    let eyebrow: String
+    let eyebrow: String?
     let title: String
     let subtitle: String
     let icon: String
@@ -247,10 +247,12 @@ struct LandingHeader: View {
             .frame(width: 56, height: 56)
 
             VStack(alignment: .leading, spacing: 5) {
-                Text(eyebrow.uppercased())
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(color)
-                    .lineLimit(1)
+                if let eyebrow {
+                    Text(eyebrow.uppercased())
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(color)
+                        .lineLimit(1)
+                }
                 Text(title)
                     .font(.system(.title2, design: .rounded).weight(.bold))
                     .fixedSize(horizontal: false, vertical: true)
