@@ -1,47 +1,89 @@
 import Foundation
 
-/// One household member's XP earned within a given week, used to power the
-/// "Superstar of the Week" leaderboard (`DataStore.weeklyLeaderboard` /
-/// `DataStore.weeklySuperstar`, surfaced in `StatsView` and `DashboardView`).
+enum ContributionMetric: String, CaseIterable, Identifiable {
+    case tasks = "Tasks"
+    case xp = "XP"
+    var id: String { rawValue }
+
+    func score(_ entry: WeeklyXPEntry) -> Int {
+        self == .tasks ? entry.taskCount : entry.weeklyXP
+    }
+}
+
+enum ContributionPeriod: String, CaseIterable, Identifiable {
+    case week = "This week"
+    case allTime = "All time"
+    var id: String { rawValue }
+}
+
+/// Contributions from the selected period, rather than lifetime profile totals.
 struct WeeklyXPEntry: Identifiable {
     let profile: UserProfile
     let weeklyXP: Int
-
+    var taskCount: Int = 0
     var id: UUID { profile.id }
 }
 
-/// Pure aggregation of household members' XP earned within a calendar
-/// week — no I/O, no mutation. Mirrors `DataStore`'s existing all-time
-/// `leaderboard`, scoped to the current week.
 enum WeeklyLeaderboard {
-    /// Each member's `totalXP` earned within the week (see
-    /// `Calendar.weekInterval(containing:)`) containing `referenceDate`,
-    /// sorted highest XP first. Completions with no `profileId` (legacy data
-    /// predating per-member attribution) aren't counted toward any member.
     static func entries(
         members: [UserProfile],
         completions: [TaskCompletion],
         referenceDate: Date = Date(),
-        calendar: Calendar = .current
+        calendar: Calendar = .current,
+        period: ContributionPeriod = .week,
+        metric: ContributionMetric = .xp
     ) -> [WeeklyXPEntry] {
-        let weekInterval = calendar.weekInterval(containing: referenceDate)
-        var xpByProfile: [UUID: Int] = [:]
+        let interval = calendar.weekInterval(containing: referenceDate)
+        var xp: [UUID: Int] = [:]
+        var counts: [UUID: Int] = [:]
+        var seen = Set<UUID>()
         for completion in completions {
-            guard let profileId = completion.profileId,
-                  let weekInterval, weekInterval.contains(completion.completedAt) else { continue }
-            xpByProfile[profileId, default: 0] += completion.totalXP
+            guard let profileID = completion.profileId,
+                  completion.completedAt <= referenceDate,
+                  seen.insert(completion.id).inserted else { continue }
+            if period == .week {
+                guard let interval,
+                      completion.completedAt >= interval.start,
+                      completion.completedAt < interval.end else { continue }
+            }
+            xp[profileID, default: 0] += completion.totalXP
+            counts[profileID, default: 0] += 1
         }
-        return members
-            .map { WeeklyXPEntry(profile: $0, weeklyXP: xpByProfile[$0.id] ?? 0) }
-            .sorted { $0.weeklyXP > $1.weeklyXP }
+        return members.map {
+            WeeklyXPEntry(profile: $0, weeklyXP: xp[$0.id] ?? 0, taskCount: counts[$0.id] ?? 0)
+        }.sorted {
+            let left = metric.score($0), right = metric.score($1)
+            if left != right { return left > right }
+            if $0.profile.name != $1.profile.name { return $0.profile.name < $1.profile.name }
+            return $0.id.uuidString < $1.id.uuidString
+        }
     }
 
-    /// The sole top-scoring member for the week, or `nil` when there's no
-    /// clear "superstar" to call out: a solo household (nothing to compare
-    /// against), no XP earned by anyone yet this week, or a tie for first.
+    static func rank(of entry: WeeklyXPEntry, among entries: [WeeklyXPEntry], metric: ContributionMetric) -> Int {
+        1 + entries.filter { metric.score($0) > metric.score(entry) }.count
+    }
+
     static func superstar(among entries: [WeeklyXPEntry]) -> WeeklyXPEntry? {
-        guard entries.count > 1, let top = entries.first, top.weeklyXP > 0 else { return nil }
-        guard entries[1].weeklyXP != top.weeklyXP else { return nil }
-        return top
+        let leaders = champions(among: entries)
+        return leaders.count == 1 ? leaders.first : nil
+    }
+
+    /// Tied positive leaders share the reward; an empty or solo week earns none.
+    static func champions(among entries: [WeeklyXPEntry]) -> [WeeklyXPEntry] {
+        guard entries.count > 1, let best = entries.map(\.weeklyXP).max(), best > 0 else { return [] }
+        return entries.filter { $0.weeklyXP == best }
+    }
+
+    /// A crown for the last completed calendar week, derived from synced records.
+    /// No bonus XP is minted, so refreshes and multiple devices cannot double-award it.
+    static func previousWeekChampions(
+        members: [UserProfile], completions: [TaskCompletion],
+        referenceDate: Date = Date(), calendar: Calendar = .current
+    ) -> [WeeklyXPEntry] {
+        guard let current = calendar.weekInterval(containing: referenceDate) else { return [] }
+        return champions(among: entries(
+            members: members, completions: completions,
+            referenceDate: current.start.addingTimeInterval(-0.001), calendar: calendar
+        ))
     }
 }

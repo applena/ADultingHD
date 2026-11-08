@@ -98,6 +98,12 @@ struct StatsView: View {
             let entries = dataStore.weeklyLeaderboard
             let superstar = WeeklyLeaderboard.superstar(among: entries)
             VStack(alignment: .leading, spacing: 10) {
+                NavigationLink {
+                    HouseholdView()
+                } label: {
+                    Label("Household leaderboard", systemImage: "list.number")
+                }
+
                 Label("Superstar of the Week", systemImage: "crown.fill")
                     .font(.headline)
                     .foregroundStyle(Theme.xpGold)

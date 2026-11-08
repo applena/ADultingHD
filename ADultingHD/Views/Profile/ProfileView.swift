@@ -215,10 +215,11 @@ struct ProfileView: View {
             HouseholdView()
         } label: {
             VStack(alignment: .leading, spacing: 8) {
-                Label("Household", systemImage: "person.3.fill")
+                Label("Household leaderboard", systemImage: "person.3.fill")
                     .font(.headline)
 
-                ForEach(dataStore.leaderboard.prefix(3)) { member in
+                ForEach(dataStore.weeklyLeaderboard.prefix(3)) { entry in
+                    let member = entry.profile
                     HStack {
                         CompactAvatarView(
                             avatarState: member.avatarState,
@@ -228,7 +229,7 @@ struct ProfileView: View {
                         Text(member.name)
                             .font(.subheadline)
                         Spacer()
-                        Text("\(member.totalXP) XP")
+                        Text("\(entry.taskCount) tasks · \(entry.weeklyXP) XP")
                             .font(.caption.bold())
                             .foregroundStyle(Theme.xpGold)
                     }
