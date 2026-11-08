@@ -5,6 +5,11 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      export_only:
+        description: "Archive, sign, and verify without uploading (always on for branches other than main)"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -95,12 +100,18 @@ jobs:
 
   testflight:
     runs-on: macos-26
-    name: Deploy iOS to TestFlight
+    name: Deploy iOS and macOS to TestFlight
     needs: test
-    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
-    timeout-minutes: 75
+    # Pushes to main upload. A manual run on any other branch is export-only
+    # (deploy.sh refuses to upload from anywhere but main), which validates
+    # signing for both platforms without touching TestFlight.
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch'
+    timeout-minutes: 90
+    env:
+      BRANCH: ${{ github.ref_name }}
+      EXPORT_ONLY: ${{ github.ref != 'refs/heads/main' || inputs.export_only }}
     concurrency:
-      group: adultinghd-testflight
+      group: adultinghd-testflight-${{ github.ref_name }}
       cancel-in-progress: false
 
     steps:
@@ -108,22 +119,22 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Require the current main commit
+      - name: Require the current branch commit
         id: current_head
         env:
           EVENT_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
-          git fetch --quiet origin main
-          remote_sha=$(git rev-parse origin/main)
+          git fetch --quiet origin "$BRANCH"
+          remote_sha=$(git rev-parse "origin/$BRANCH")
 
           if [ "$EVENT_SHA" != "$remote_sha" ]; then
-            echo "Skipping superseded commit $EVENT_SHA; current main is $remote_sha."
+            echo "Skipping superseded commit $EVENT_SHA; current $BRANCH is $remote_sha."
             echo "deploy=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
-          git checkout -B main "$EVENT_SHA"
+          git checkout -B "$BRANCH" "$EVENT_SHA"
           echo "deploy=true" >> "$GITHUB_OUTPUT"
 
       - name: Setup Xcode
@@ -184,6 +195,6 @@ jobs:
             printf 'APPSTORE_API_PRIVATE_KEY_PATH=%s\n' "$key_path"
           } > .env
 
-      - name: Deploy current main to TestFlight
+      - name: Deploy iOS and macOS to TestFlight
         if: steps.current_head.outputs.deploy == 'true'
-        run: ./deploy.sh --ios --skip-tests --no-bump
+        run: ./deploy.sh --all --skip-tests --no-bump ${{ env.EXPORT_ONLY == 'true' && '--export-only' || '' }}

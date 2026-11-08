@@ -2,9 +2,10 @@
 set -euo pipefail
 
 # ADultingHD - Local TestFlight Deploy
-# Usage: ./deploy.sh [--skip-tests] [--no-bump] [--macos] [--ios] [--all]
+# Usage: ./deploy.sh [--skip-tests] [--no-bump] [--export-only] [--macos] [--ios] [--all]
 # Default (no platform flag): iOS only
 # --no-bump: use the next App Store Connect build number without changing Git
+# --export-only: archive, sign, and verify, but do not upload (implies --no-bump)
 # --macos: macOS only
 # --all: both iOS and macOS
 
@@ -29,6 +30,11 @@ verify_deploy_checkout() {
     fi
 
     CURRENT_BRANCH=$(git symbolic-ref --quiet --short HEAD || true)
+    # Only DEPLOY_BRANCH may upload; an export-only run uploads nothing, so it
+    # may validate signing from any branch.
+    if $EXPORT_ONLY && [ -n "$CURRENT_BRANCH" ]; then
+        DEPLOY_BRANCH="$CURRENT_BRANCH"
+    fi
     if [ "$CURRENT_BRANCH" != "$DEPLOY_BRANCH" ]; then
         echo "❌ TestFlight deploys must run from '$DEPLOY_BRANCH' (current: '${CURRENT_BRANCH:-detached HEAD}')."
         exit 1
@@ -58,8 +64,6 @@ verify_deploy_checkout() {
 
     echo "✅ Deploy source: $SOURCE_SHA ($DEPLOY_REMOTE/$DEPLOY_BRANCH)"
 }
-
-verify_deploy_checkout
 
 verify_delivery_processing() {
     local platform="$1"
@@ -123,12 +127,14 @@ TEST_DERIVED_DATA="$BUILD_DIR/test"
 # Parse flags
 SKIP_TESTS=false
 NO_BUMP=false
+EXPORT_ONLY=false
 BUILD_IOS=false
 BUILD_MACOS=false
 for arg in "$@"; do
     case "$arg" in
         --skip-tests) SKIP_TESTS=true ;;
         --no-bump) NO_BUMP=true ;;
+        --export-only) EXPORT_ONLY=true; NO_BUMP=true ;;
         --macos) BUILD_MACOS=true ;;
         --ios) BUILD_IOS=true ;;
         --all) BUILD_IOS=true; BUILD_MACOS=true ;;
@@ -142,6 +148,8 @@ done
 if ! $BUILD_IOS && ! $BUILD_MACOS; then
     BUILD_IOS=true
 fi
+
+verify_deploy_checkout
 
 # Query App Store Connect for the highest uploaded build number. CI uses this
 # as the source of truth so serialized main-branch deploys never reuse a build
@@ -304,115 +312,272 @@ fi
 
 rm -rf "$BUILD_DIR"
 
-# --- iOS Build & Upload ---
-if $BUILD_IOS; then
-    SCHEME_IOS="ADultingHD_iOS"
-    ARCHIVE_IOS="$BUILD_DIR/ADultingHD_iOS.xcarchive"
-    EXPORT_IOS="$BUILD_DIR/export_ios"
+mkdir -p "$BUILD_DIR"
 
-    echo "📦 Archiving iOS..."
-    # CODE_SIGNING_ALLOWED=NO keeps the archive unsigned because the
-    # App Store Connect API key used below for export only has Upload scope,
-    # not Admin/Profile-Management scope. An upload-scope key cannot auto-
-    # register new capabilities via `-allowProvisioningUpdates` during archive,
-    # so any capability mismatch (App Groups, Push, iCloud) fails the archive
-    # outright.
-    #
-    # The archive stays unsigned here; the next step seeds it with the real
-    # production entitlements using a local identity when available, or an
-    # ad-hoc signature on an ephemeral CI runner. `-exportArchive` below then
-    # re-signs it with the Distribution authority via the authenticated App
-    # Store Connect API key. Skipping the seed step leaves the export with only
-    # a minimal entitlements dict (team-id + application-identifier +
-    # beta-reports-active + get-task-allow), which makes
-    # CKContainer(identifier:) trap at runtime. See
-    # docs/cloudkit-sharing.md#deploysh-re-sign-dance-ios for the full story
-    # and prerequisites.
+# --- Shared signing pipeline ---
+#
+# Both platforms follow the same path, because the App Store Connect API key
+# only has Upload scope, not Admin/Profile-Management scope, and CI runners
+# have no signing certificates:
+#
+#   1. Archive unsigned (CODE_SIGNING_ALLOWED=NO). An upload-scope key cannot
+#      auto-register capabilities via `-allowProvisioningUpdates` during
+#      archive, so any capability mismatch (App Groups, Push, iCloud) would
+#      fail a signed archive outright.
+#   2. Seed the archived app with the concrete production entitlements, using
+#      a local identity when available or an ad-hoc signature otherwise. The
+#      seed signature never reaches TestFlight. Skipping it leaves the export
+#      with only a minimal entitlements dict, which makes
+#      CKContainer(identifier:) trap at runtime.
+#   3. `-exportArchive` re-signs with the Apple Distribution authority via
+#      cloud-managed signing and the authenticated API key.
+#   4. Verify the exported app's authority, team, and seeded entitlements.
+#
+# Every platform is built and verified before anything is uploaded, so a
+# signing failure on one platform never leaves a half-shipped build.
+#
+# See docs/cloudkit-sharing.md#deploysh-re-sign-dance-ios for the full story.
+
+BUNDLE_ID="net.shadowpuppet.ADultingHD"
+CLOUD_CONTAINER="iCloud.$BUNDLE_ID"
+APP_GROUP="group.$BUNDLE_ID"
+
+# Note: every `grep` below is deliberately followed by `|| true`. With
+# `set -euo pipefail`, a `grep` that finds no match exits 1 and, inside a
+# pipeline feeding a variable assignment, would abort the script instead of
+# falling through to the next identity type or the ad-hoc fallback.
+SEED_IDENTITY="${DEPLOY_SEED_SIGN_IDENTITY:-}"
+if [ -z "$SEED_IDENTITY" ]; then
+    CODESIGN_IDENTITIES=$(security find-identity -v -p codesigning 2>/dev/null || true)
+    SEED_IDENTITY=$(echo "$CODESIGN_IDENTITIES" | grep "Apple Development" | head -1 | sed -E 's/^.*"(.*)"$/\1/' || true)
+    if [ -z "$SEED_IDENTITY" ]; then
+        SEED_IDENTITY=$(echo "$CODESIGN_IDENTITIES" | grep "Apple Distribution" | head -1 | sed -E 's/^.*"(.*)"$/\1/' || true)
+    fi
+fi
+if [ -z "$SEED_IDENTITY" ]; then
+    SEED_IDENTITY="-"
+    echo "🔏 No local codesigning identity found; using an ad-hoc seed signature"
+else
+    echo "🔏 Using local seed identity: $SEED_IDENTITY"
+fi
+
+cat > "$BUILD_DIR/exportOptions.plist" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>method</key><string>app-store-connect</string>
+  <key>teamID</key><string>$TEAM_ID</string>
+  <key>signingStyle</key><string>automatic</string>
+</dict>
+</plist>
+EOF
+
+# build_platform <label> <scheme> <sdk-platform> <entitlements-plist>
+#
+# Archives, seeds, exports, and verifies one platform. Sets EXPORTED_FILE to
+# the .ipa/.pkg that upload_build should send.
+build_platform() {
+    local label="$1" scheme="$2" sdk="$3" entitlements="$4"
+    local archive="$BUILD_DIR/$scheme.xcarchive"
+    local export_dir="$BUILD_DIR/export_$sdk"
+    local verify_dir="$BUILD_DIR/verify_$sdk"
+
+    echo "📦 Archiving $label..."
     xcodebuild archive \
         -project "$PROJECT" \
-        -scheme "$SCHEME_IOS" \
+        -scheme "$scheme" \
         -configuration Release \
-        -destination 'generic/platform=iOS' \
-        -archivePath "$ARCHIVE_IOS" \
+        -destination "generic/platform=$label" \
+        -archivePath "$archive" \
         CURRENT_PROJECT_VERSION="$NEW_BUILD" \
         CODE_SIGNING_ALLOWED=NO \
         CLOUDKIT_SIGNING_EXPECTED=YES \
         CODE_SIGN_IDENTITY="" \
         CODE_SIGNING_REQUIRED=NO \
         -quiet
-    echo "✅ iOS archive complete"
+    echo "✅ $label archive complete"
 
-    ARCHIVE_APP="$ARCHIVE_IOS/Products/Applications/ADultingHD.app"
-    if [ ! -d "$ARCHIVE_APP" ]; then
-        echo "❌ Archived app bundle not found at $ARCHIVE_APP"
+    local app
+    app=$(find_app "$archive/Products/Applications")
+    local archived_build
+    archived_build=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$(app_info_plist "$app")")
+    if [ "$archived_build" != "$NEW_BUILD" ]; then
+        echo "❌ Archived $label build number is $archived_build; expected $NEW_BUILD"
         exit 1
     fi
+    echo "✅ $label archive contains build $archived_build from source $SOURCE_SHA"
 
-    ARCHIVED_BUILD=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$ARCHIVE_APP/Info.plist")
-    if [ "$ARCHIVED_BUILD" != "$NEW_BUILD" ]; then
-        echo "❌ Archived iOS build number is $ARCHIVED_BUILD; expected $NEW_BUILD"
+    # This must happen BEFORE -exportArchive: an archive that never had these
+    # entitlements embedded gets exported with only the minimal dict.
+    echo "🔏 Seeding $label archive with production entitlements"
+    codesign --force --sign "$SEED_IDENTITY" \
+        --entitlements "$entitlements" \
+        --preserve-metadata=identifier,flags,runtime \
+        "$app"
+
+    echo "📤 Exporting $label..."
+    xcodebuild -exportArchive \
+        -archivePath "$archive" \
+        -exportOptionsPlist "$BUILD_DIR/exportOptions.plist" \
+        -exportPath "$export_dir" \
+        -allowProvisioningUpdates \
+        -authenticationKeyPath "$KEY_PATH" \
+        -authenticationKeyID "$APPSTORE_API_KEY_ID" \
+        -authenticationKeyIssuerID "$APPSTORE_ISSUER_ID" \
+        -quiet
+
+    EXPORTED_FILE=$(find "$export_dir" -maxdepth 1 \( -name "*.ipa" -o -name "*.pkg" \) | head -1)
+    if [ -z "$EXPORTED_FILE" ]; then
+        echo "❌ $label export produced no .ipa or .pkg"
+        ls -la "$export_dir/"
         exit 1
     fi
-    echo "✅ iOS archive contains build $ARCHIVED_BUILD from source $SOURCE_SHA"
+    echo "✅ $label exported: $(basename "$EXPORTED_FILE")"
 
-    # Seed the unsigned archive with the production entitlement set. This
-    # must happen BEFORE -exportArchive — an archive that never had these
-    # entitlements embedded gets exported with only the minimal dict
-    # described above.
-    #
-    # Signing here uses whichever local codesigning identity is available
-    # (set DEPLOY_SEED_SIGN_IDENTITY in .env to force a specific one), falling
-    # back to an ad-hoc signature when the keychain has none. The seed signature
-    # never reaches TestFlight — it only makes the archive carry concrete,
-    # non-wildcarded entitlement values for `-exportArchive` to re-sign for
-    # distribution. No certificate or private key is required on the runner.
-    # Note: every `grep` below is deliberately followed by `|| true`. With
-    # `set -euo pipefail`, a `grep` that finds no match exits 1 and — because
-    # it sits inside a pipeline feeding a variable assignment — that would
-    # otherwise abort the whole script right here instead of falling through
-    # to the next identity type or the ad-hoc fallback below.
-    SEED_IDENTITY="${DEPLOY_SEED_SIGN_IDENTITY:-}"
-    if [ -z "$SEED_IDENTITY" ]; then
-        CODESIGN_IDENTITIES=$(security find-identity -v -p codesigning 2>/dev/null || true)
-        SEED_IDENTITY=$(echo "$CODESIGN_IDENTITIES" | grep "Apple Development" | head -1 | sed -E 's/^.*"(.*)"$/\1/' || true)
-        if [ -z "$SEED_IDENTITY" ]; then
-            SEED_IDENTITY=$(echo "$CODESIGN_IDENTITIES" | grep "Apple Distribution" | head -1 | sed -E 's/^.*"(.*)"$/\1/' || true)
-        fi
+    rm -rf "$verify_dir"
+    case "$EXPORTED_FILE" in
+        *.ipa) mkdir -p "$verify_dir" && (cd "$verify_dir" && unzip -q "$EXPORTED_FILE") ;;
+        *.pkg) pkgutil --expand-full "$EXPORTED_FILE" "$verify_dir" ;;
+    esac
+    local exported_app
+    exported_app=$(find_app "$verify_dir")
+    verify_signed_app "$label" "$exported_app" "$entitlements"
+    rm -rf "$verify_dir"
+}
+
+find_app() {
+    local app
+    app=$(find "$1" -type d -name "*.app" -prune | head -1)
+    if [ -z "$app" ]; then
+        echo "❌ No app bundle found in $1" >&2
+        exit 1
     fi
-    if [ -z "$SEED_IDENTITY" ]; then
-        SEED_IDENTITY="-"
-        echo "🔏 No local codesigning identity found; using an ad-hoc seed signature"
+    echo "$app"
+}
+
+app_info_plist() {
+    if [ -f "$1/Contents/Info.plist" ]; then
+        echo "$1/Contents/Info.plist"
     else
-        echo "🔏 Using local seed identity: $SEED_IDENTITY"
+        echo "$1/Info.plist"
     fi
-    echo "🔏 Seeding archive with production entitlements"
+}
 
-    # Production iOS entitlements. Must match what the App ID actually
-    # grants, minus any wildcards/development-only keys that App Store
-    # Connect validation rejects (`icloud-services = *`,
-    # `ubiquity-kvstore-identifier = TEAMID.*`,
-    # `icloud-container-development-container-identifiers`).
-    SEED_ENTITLEMENTS="$BUILD_DIR/entitlements_ios_production.plist"
-    cat > "$SEED_ENTITLEMENTS" <<EOF
+# verify_signed_app <label> <app-bundle> <seed-entitlements-plist>
+#
+# The exported app must be signed by the Apple Distribution authority for our
+# team and carry every seeded production entitlement. A minimally-entitled or
+# wrongly-signed binary sails through TestFlight processing but traps at
+# runtime on CKContainer(identifier:).
+verify_signed_app() {
+    local label="$1" app="$2" seed="$3"
+    echo "🔍 Verifying exported $label signature and entitlements..."
+
+    local codesign_info
+    codesign_info=$(codesign -dvvv "$app" 2>&1)
+    if ! echo "$codesign_info" | grep -q "Authority=Apple Distribution: "; then
+        echo "❌ Exported $label app is not signed by an Apple Distribution authority — aborting"
+        exit 1
+    fi
+    if ! echo "$codesign_info" | grep -q "TeamIdentifier=$TEAM_ID"; then
+        echo "❌ Exported $label app TeamIdentifier does not match expected $TEAM_ID — aborting"
+        exit 1
+    fi
+    if [ "$(/usr/libexec/PlistBuddy -c 'Print :CloudKitSigningExpected' "$(app_info_plist "$app")")" != "YES" ]; then
+        echo "❌ Exported $label app disables CloudKit at runtime — aborting"
+        exit 1
+    fi
+
+    # Every seeded key must survive export with its seeded value. The keychain
+    # access group wildcard is the one key export legitimately rewrites, so it
+    # only has to be present.
+    if ! codesign -d --entitlements :- "$app" 2>/dev/null | SEED="$seed" /usr/bin/python3 -c '
+import os, plistlib, sys
+exported = plistlib.loads(sys.stdin.buffer.read())
+with open(os.environ["SEED"], "rb") as f:
+    seeded = plistlib.load(f)
+problems = []
+for key, value in seeded.items():
+    if key not in exported:
+        problems.append(f"missing {key}")
+    elif key != "keychain-access-groups" and exported[key] != value:
+        problems.append(f"{key} is {exported[key]!r}, expected {value!r}")
+for problem in problems:
+    print("   " + problem)
+sys.exit(1 if problems else 0)
+'; then
+        echo "❌ Exported $label app does not carry the seeded production entitlements — aborting"
+        exit 1
+    fi
+    echo "✅ $label verified: Apple Distribution authority, team $TEAM_ID, full production entitlements"
+}
+
+# upload_build <label> <altool-type> <file>
+upload_build() {
+    local label="$1" type="$2" file="$3"
+    if $EXPORT_ONLY; then
+        echo "⏭️  --export-only: skipping $label upload"
+        return
+    fi
+
+    local log="$BUILD_DIR/${type}_upload.log"
+    echo "🚀 Uploading $label to TestFlight..."
+    set +e
+    xcrun altool --upload-app \
+        --file "$file" \
+        --type "$type" \
+        --apiKey "$APPSTORE_API_KEY_ID" \
+        --apiIssuer "$APPSTORE_ISSUER_ID" 2>&1 | tee "$log"
+    local status=${PIPESTATUS[0]}
+    set -e
+    # Definitive failure markers only — plain "ERROR: " false-positives on
+    # altool's normal multipart retry events ("WILL RETRY PART N. Checksums
+    # do not match." / "The network connection was lost."). The four patterns
+    # below are Apple's terminal failure banners only.
+    if [ "$status" -ne 0 ] || grep -qE "UPLOAD FAILED|Validation failed \(|ERROR ITMS-|product-errors" "$log"; then
+        echo "❌ $label upload failed — see errors above"
+        exit 1
+    fi
+    echo "✅ $label upload complete!"
+
+    local delivery_id
+    delivery_id=$(sed -nE 's/.*Delivery UUID:[[:space:]]*([[:alnum:]-]+).*/\1/p' "$log" | tail -1)
+    if [ -z "$delivery_id" ]; then
+        echo "❌ $label upload succeeded but no delivery UUID was returned"
+        exit 1
+    fi
+    # Waiting for Apple to process this delivery also spaces it from the next
+    # platform's upload, avoiding Apple CDN contention.
+    verify_delivery_processing "$label" "$delivery_id"
+}
+
+# Production iOS entitlements. Must match what the App ID actually grants,
+# minus any wildcards/development-only keys that App Store Connect validation
+# rejects (`icloud-services = *`, `ubiquity-kvstore-identifier = TEAMID.*`,
+# `icloud-container-development-container-identifiers`).
+IOS_ENTITLEMENTS="$BUILD_DIR/entitlements_ios_production.plist"
+cat > "$IOS_ENTITLEMENTS" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
     <key>application-identifier</key>
-    <string>$TEAM_ID.net.shadowpuppet.ADultingHD</string>
+    <string>$TEAM_ID.$BUNDLE_ID</string>
     <key>aps-environment</key>
     <string>production</string>
     <key>beta-reports-active</key>
     <true/>
     <key>com.apple.security.application-groups</key>
     <array>
-        <string>group.net.shadowpuppet.ADultingHD</string>
+        <string>$APP_GROUP</string>
     </array>
     <key>com.apple.developer.icloud-container-environment</key>
     <string>Production</string>
     <key>com.apple.developer.icloud-container-identifiers</key>
     <array>
-        <string>iCloud.net.shadowpuppet.ADultingHD</string>
+        <string>$CLOUD_CONTAINER</string>
     </array>
     <key>com.apple.developer.icloud-services</key>
     <array>
@@ -423,7 +588,7 @@ if $BUILD_IOS; then
     <string>$TEAM_ID</string>
     <key>com.apple.developer.ubiquity-container-identifiers</key>
     <array>
-        <string>iCloud.net.shadowpuppet.ADultingHD</string>
+        <string>$CLOUD_CONTAINER</string>
     </array>
     <key>get-task-allow</key>
     <false/>
@@ -436,221 +601,42 @@ if $BUILD_IOS; then
 </plist>
 EOF
 
-    codesign --force --sign "$SEED_IDENTITY" \
-        --entitlements "$SEED_ENTITLEMENTS" \
-        --preserve-metadata=identifier,flags,runtime \
-        "$ARCHIVE_APP"
-    if ! codesign -d --entitlements :- "$ARCHIVE_APP" 2>/dev/null \
-        | grep -q "com.apple.developer.icloud-container-identifiers"; then
-        echo "❌ Archive seeding did not embed CloudKit entitlements — aborting"
-        exit 1
-    fi
-    echo "✅ Archive seeded with production entitlements"
+# Production macOS entitlements start from the target's checked-in
+# entitlements (sandbox, file access, App Group, iCloud services), so a
+# capability added there reaches release builds. macOS then needs the
+# platform spellings of the push and app-identifier keys and the concrete
+# production values that the development file leaves out.
+MACOS_ENTITLEMENTS="$BUILD_DIR/entitlements_macos_production.plist"
+cp ADultingHD/App/ADultingHD.entitlements "$MACOS_ENTITLEMENTS"
+plutil -remove aps-environment "$MACOS_ENTITLEMENTS"
+plutil -insert com.apple.developer.aps-environment -string production "$MACOS_ENTITLEMENTS"
+plutil -insert com.apple.application-identifier -string "$TEAM_ID.$BUNDLE_ID" "$MACOS_ENTITLEMENTS"
+plutil -insert com.apple.developer.team-identifier -string "$TEAM_ID" "$MACOS_ENTITLEMENTS"
+plutil -insert com.apple.developer.icloud-container-environment -string Production "$MACOS_ENTITLEMENTS"
+plutil -insert com.apple.developer.ubiquity-container-identifiers -array "$MACOS_ENTITLEMENTS"
+plutil -insert com.apple.developer.ubiquity-container-identifiers -string "$CLOUD_CONTAINER" -append "$MACOS_ENTITLEMENTS"
 
-    cat > "$BUILD_DIR/exportOptions_ios.plist" <<EOF
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
-  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>method</key><string>app-store-connect</string>
-  <key>teamID</key><string>$TEAM_ID</string>
-  <key>signingStyle</key><string>automatic</string>
-</dict>
-</plist>
-EOF
-
-    echo "📤 Exporting iOS IPA..."
-    xcodebuild -exportArchive \
-        -archivePath "$ARCHIVE_IOS" \
-        -exportOptionsPlist "$BUILD_DIR/exportOptions_ios.plist" \
-        -exportPath "$EXPORT_IOS" \
-        -allowProvisioningUpdates \
-        -authenticationKeyPath "$KEY_PATH" \
-        -authenticationKeyID "$APPSTORE_API_KEY_ID" \
-        -authenticationKeyIssuerID "$APPSTORE_ISSUER_ID" \
-        -quiet
-    echo "✅ iOS IPA exported"
-
-    IPA_PATH="$EXPORT_IOS/ADultingHD.ipa"
-    if [ ! -f "$IPA_PATH" ]; then
-        echo "❌ iOS IPA not found at $IPA_PATH"
-        ls -la "$EXPORT_IOS/"
-        exit 1
-    fi
-
-    # Verify the exported IPA before upload: it must be signed by the Apple
-    # Distribution authority for our team, and it must carry the full
-    # production entitlement set. Abort rather than upload if either check
-    # fails — a minimally-entitled or wrongly-signed binary sails through
-    # TestFlight processing but traps at runtime on CKContainer(identifier:).
-    echo "🔍 Verifying exported IPA signature and entitlements..."
-    VERIFY_DIR="$BUILD_DIR/verify_ios"
-    rm -rf "$VERIFY_DIR" && mkdir -p "$VERIFY_DIR"
-    (cd "$VERIFY_DIR" && unzip -q "$IPA_PATH")
-    APP_BUNDLE="$VERIFY_DIR/Payload/ADultingHD.app"
-
-    CODESIGN_INFO=$(codesign -dvvv "$APP_BUNDLE" 2>&1)
-    if ! echo "$CODESIGN_INFO" | grep -q "Authority=Apple Distribution: "; then
-        echo "❌ Exported IPA is not signed by an Apple Distribution authority — aborting upload"
-        exit 1
-    fi
-    if ! echo "$CODESIGN_INFO" | grep -q "TeamIdentifier=$TEAM_ID"; then
-        echo "❌ Exported IPA TeamIdentifier does not match expected $TEAM_ID — aborting upload"
-        exit 1
-    fi
-
-    APP_ENTITLEMENTS=$(codesign -d --entitlements :- "$APP_BUNDLE" 2>/dev/null)
-    SIGNING_EXPECTED=$(/usr/libexec/PlistBuddy -c 'Print :CloudKitSigningExpected' "$APP_BUNDLE/Info.plist")
-    if [ "$SIGNING_EXPECTED" != "YES" ]; then
-        echo "❌ Exported IPA disables CloudKit at runtime — aborting upload"
-        exit 1
-    fi
-    if ! echo "$APP_ENTITLEMENTS" | /usr/bin/python3 -c '
-import plistlib, sys
-entitlements = plistlib.loads(sys.stdin.buffer.read())
-valid = (
-    "CloudKit" in entitlements.get("com.apple.developer.icloud-services", [])
-    and "iCloud.net.shadowpuppet.ADultingHD" in entitlements.get("com.apple.developer.icloud-container-identifiers", [])
-    and entitlements.get("aps-environment") == "production"
-)
-sys.exit(0 if valid else 1)
-'; then
-        echo "❌ Exported IPA lacks the required CloudKit container, service, or production push entitlement — aborting upload"
-        exit 1
-    fi
-    for key in \
-        "com.apple.developer.icloud-container-identifiers" \
-        "com.apple.developer.icloud-services" \
-        "com.apple.developer.ubiquity-container-identifiers" \
-        "aps-environment" \
-        "keychain-access-groups" \
-        "com.apple.security.application-groups"
-    do
-        if ! echo "$APP_ENTITLEMENTS" | grep -q "$key"; then
-            echo "❌ Exported IPA missing required entitlement: $key — aborting upload"
-            exit 1
-        fi
-    done
-    if ! echo "$APP_ENTITLEMENTS" | grep -A1 "get-task-allow" | grep -q "<false/>"; then
-        echo "❌ Exported IPA has get-task-allow != false (not a distribution build) — aborting upload"
-        exit 1
-    fi
-    rm -rf "$VERIFY_DIR"
-    echo "✅ IPA verified: Apple Distribution authority, team $TEAM_ID, full production entitlements"
-
-    echo "🚀 Uploading iOS to TestFlight..."
-    IOS_UPLOAD_LOG="$BUILD_DIR/ios_upload.log"
-    set +e
-    xcrun altool --upload-app \
-        --file "$IPA_PATH" \
-        --type ios \
-        --apiKey "$APPSTORE_API_KEY_ID" \
-        --apiIssuer "$APPSTORE_ISSUER_ID" 2>&1 | tee "$IOS_UPLOAD_LOG"
-    IOS_UPLOAD_STATUS=${PIPESTATUS[0]}
-    set -e
-    # Definitive failure markers only — plain "ERROR: " false-positives on
-    # altool's normal multipart retry events ("WILL RETRY PART N. Checksums
-    # do not match." / "The network connection was lost."). The four patterns
-    # below are Apple's terminal failure banners only.
-    if [ "$IOS_UPLOAD_STATUS" -ne 0 ] || grep -qE "UPLOAD FAILED|Validation failed \(|ERROR ITMS-|product-errors" "$IOS_UPLOAD_LOG"; then
-        echo "❌ iOS upload failed — see errors above"
-        exit 1
-    fi
-    echo "✅ iOS upload complete!"
-
-    IOS_DELIVERY_ID=$(sed -nE 's/.*Delivery UUID:[[:space:]]*([[:alnum:]-]+).*/\1/p' "$IOS_UPLOAD_LOG" | tail -1)
-    if [ -z "$IOS_DELIVERY_ID" ]; then
-        echo "❌ iOS upload succeeded but no delivery UUID was returned"
-        exit 1
-    fi
-    verify_delivery_processing "iOS" "$IOS_DELIVERY_ID"
-
-    if $BUILD_MACOS; then
-        echo "⏳ Waiting 60s before macOS upload to avoid Apple CDN contention..."
-        sleep 60
-    fi
+if $BUILD_IOS; then
+    build_platform "iOS" "ADultingHD_iOS" "ios" "$IOS_ENTITLEMENTS"
+    IOS_FILE="$EXPORTED_FILE"
 fi
-
-# --- macOS Build & Upload ---
 if $BUILD_MACOS; then
-    SCHEME_MACOS="ADultingHD_macOS"
-    ARCHIVE_MACOS="$BUILD_DIR/ADultingHD_macOS.xcarchive"
-    EXPORT_MACOS="$BUILD_DIR/export_macos"
-
-    echo "📦 Archiving macOS..."
-    xcodebuild archive \
-        -project "$PROJECT" \
-        -scheme "$SCHEME_MACOS" \
-        -configuration Release \
-        -destination 'generic/platform=macOS' \
-        -archivePath "$ARCHIVE_MACOS" \
-        CURRENT_PROJECT_VERSION="$NEW_BUILD" \
-        -allowProvisioningUpdates \
-        -authenticationKeyPath "$KEY_PATH" \
-        -authenticationKeyID "$APPSTORE_API_KEY_ID" \
-        -authenticationKeyIssuerID "$APPSTORE_ISSUER_ID" \
-        -quiet
-    echo "✅ macOS archive complete"
-
-    cat > "$BUILD_DIR/exportOptions_macos.plist" <<EOF
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
-  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>method</key><string>app-store-connect</string>
-  <key>teamID</key><string>$TEAM_ID</string>
-  <key>signingStyle</key><string>automatic</string>
-</dict>
-</plist>
-EOF
-
-    echo "📤 Exporting macOS pkg..."
-    xcodebuild -exportArchive \
-        -archivePath "$ARCHIVE_MACOS" \
-        -exportOptionsPlist "$BUILD_DIR/exportOptions_macos.plist" \
-        -exportPath "$EXPORT_MACOS" \
-        -allowProvisioningUpdates \
-        -authenticationKeyPath "$KEY_PATH" \
-        -authenticationKeyID "$APPSTORE_API_KEY_ID" \
-        -authenticationKeyIssuerID "$APPSTORE_ISSUER_ID" \
-        -quiet
-    echo "✅ macOS pkg exported"
-
-    PKG_PATH=$(find "$EXPORT_MACOS" -name "*.pkg" | head -1)
-    if [ -z "$PKG_PATH" ]; then
-        echo "❌ macOS package not found in $EXPORT_MACOS"
-        ls -la "$EXPORT_MACOS/"
-        exit 1
-    fi
-
-    echo "🚀 Uploading macOS to TestFlight..."
-    MACOS_UPLOAD_LOG="$BUILD_DIR/macos_upload.log"
-    set +e
-    xcrun altool --upload-app \
-        --file "$PKG_PATH" \
-        --type macos \
-        --apiKey "$APPSTORE_API_KEY_ID" \
-        --apiIssuer "$APPSTORE_ISSUER_ID" 2>&1 | tee "$MACOS_UPLOAD_LOG"
-    MACOS_UPLOAD_STATUS=${PIPESTATUS[0]}
-    set -e
-    # See iOS section above for why we don't grep plain "ERROR: ".
-    if [ "$MACOS_UPLOAD_STATUS" -ne 0 ] || grep -qE "UPLOAD FAILED|Validation failed \(|ERROR ITMS-|product-errors" "$MACOS_UPLOAD_LOG"; then
-        echo "❌ macOS upload failed — see errors above"
-        exit 1
-    fi
-    echo "✅ macOS upload complete!"
-
-    MACOS_DELIVERY_ID=$(sed -nE 's/.*Delivery UUID:[[:space:]]*([[:alnum:]-]+).*/\1/p' "$MACOS_UPLOAD_LOG" | tail -1)
-    if [ -z "$MACOS_DELIVERY_ID" ]; then
-        echo "❌ macOS upload succeeded but no delivery UUID was returned"
-        exit 1
-    fi
-    verify_delivery_processing "macOS" "$MACOS_DELIVERY_ID"
+    build_platform "macOS" "ADultingHD_macOS" "macos" "$MACOS_ENTITLEMENTS"
+    MACOS_FILE="$EXPORTED_FILE"
 fi
 
-echo "✅ Build $NEW_BUILD submitted to TestFlight."
+if $BUILD_IOS; then
+    upload_build "iOS" "ios" "$IOS_FILE"
+fi
+if $BUILD_MACOS; then
+    upload_build "macOS" "macos" "$MACOS_FILE"
+fi
+
+if $EXPORT_ONLY; then
+    echo "✅ Build $NEW_BUILD exported and verified (not uploaded)."
+else
+    echo "✅ Build $NEW_BUILD submitted to TestFlight."
+fi
 
 if ! $NO_BUMP; then
     git add project.yml "$PROJECT/project.pbxproj"
