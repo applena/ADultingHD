@@ -345,6 +345,54 @@ final class DataStoreTests: XCTestCase {
         XCTAssertEqual(dataStore.tasks.first?.defaultAssigneeId, dataStore.profile.id)
     }
 
+    func testJoinedMemberCanChangeScopeAndPersonalCompletionStaysOffLeaderboard() async throws {
+        try StorageTestPreferences.preserve(in: self)
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        addTeardownBlock { try? FileManager.default.removeItem(at: root) }
+        let storage = TaskStore(directory: root)
+        let profile = UserProfile()
+        let home = Household.newJoined(
+            name: "Shared home", members: [profile, UserProfile()],
+            zoneName: "scope-test", ownerUserRecordName: "owner"
+        )
+        let original = makeTask()
+        await storage.saveProfile(profile)
+        await storage.saveTasks([original], for: home.id)
+        try await storage.saveHouseholdIndexReliably(HouseholdIndex(
+            households: [home], activeHouseholdId: home.id,
+            schemaVersion: HouseholdIndex.currentSchemaVersion
+        ))
+        let dataStore = DataStore(store: storage)
+        await dataStore.load()
+        XCTAssertFalse(dataStore.activeHousehold.ownerIsCurrentUser)
+
+        var edited = try XCTUnwrap(dataStore.tasks.first)
+        edited.isPersonal = true
+        edited.defaultAssigneeId = UUID()
+        await dataStore.updateTask(edited)
+        let personal = try XCTUnwrap(dataStore.tasks.first)
+        XCTAssertTrue(personal.isPersonal)
+        XCTAssertEqual(personal.defaultAssigneeId, profile.id)
+
+        await dataStore.completeTask(personal)
+        XCTAssertTrue(dataStore.completions.contains { $0.taskId == personal.id })
+        XCTAssertGreaterThan(dataStore.profile.totalXP, profile.totalXP)
+        XCTAssertTrue(dataStore.householdContributions.isEmpty)
+        XCTAssertTrue(dataStore.weeklyLeaderboard.allSatisfy { $0.taskCount == 0 && $0.weeklyXP == 0 })
+
+        let reloaded = DataStore(store: storage)
+        await reloaded.load()
+        XCTAssertTrue(reloaded.tasks.first?.isPersonal == true)
+        XCTAssertEqual(reloaded.tasks.first?.defaultAssigneeId, profile.id)
+        XCTAssertTrue(reloaded.householdContributions.isEmpty)
+
+        var householdTask = try XCTUnwrap(reloaded.tasks.first)
+        householdTask.isPersonal = false
+        await reloaded.updateTask(householdTask)
+        XCTAssertFalse(reloaded.tasks.first?.isPersonal == true)
+        XCTAssertFalse(reloaded.activeHousehold.personalTaskIDs.contains(personal.id))
+    }
+
     func testPersonalTaskOwnershipSurvivesTaskDeletion() async throws {
         let dataStore = DataStore()
         await dataStore.createHousehold(name: "Personal task test")

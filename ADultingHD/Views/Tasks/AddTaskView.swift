@@ -127,20 +127,20 @@ private struct TaskFormView: View {
                     }
                 }
 
-                Section("Task Scope") {
-                    if canChangePersonalScope {
-                        Toggle(isOn: $isPersonal) {
-                            Label("Personal task", systemImage: "person.fill")
-                        }
-                    } else {
-                        Label("Personal task", systemImage: "person.fill")
-                            .foregroundStyle(.secondary)
-                        Text("Only the household owner can make a shared task personal.")
+                Section("Scope") {
+                    Picker("Scope", selection: $isPersonal) {
+                        Text("Household").tag(false)
+                        Text("Personal").tag(true)
+                    }
+                    .pickerStyle(.segmented)
+                    .accessibilityIdentifier("task-form-scope")
+                    if isPersonal {
+                        Label("Assigned to you", systemImage: "person.fill")
+                        Text("Only in your task list. Personal tasks earn personal XP but do not contribute to the household leaderboard.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
-                    }
-                    if isPersonal {
-                        Text("Only you can complete this task. It won't be shared with household members.")
+                    } else {
+                        Text("Shared with your household. Completions contribute to the household leaderboard.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -250,11 +250,6 @@ private struct TaskFormView: View {
         }
     }
 
-    private var canChangePersonalScope: Bool {
-        guard let existingTask else { return true }
-        return existingTask.isPersonal || dataStore.activeHousehold.ownerIsCurrentUser
-    }
-
     private var roomNameIsReserved: Bool {
         room.trimmingCharacters(in: .whitespacesAndNewlines)
             .caseInsensitiveCompare("No Room") == .orderedSame
@@ -287,7 +282,7 @@ private struct TaskFormView: View {
         task.estimatedMinutes = estimatedMinutes
         task.difficulty = difficulty
         task.supplies = supplies
-        let scopeIsPersonal = canChangePersonalScope ? isPersonal : (existingTask?.isPersonal ?? false)
+        let scopeIsPersonal = isPersonal
         task.isPersonal = scopeIsPersonal
         task.defaultAssigneeId = scopeIsPersonal ? dataStore.profile.id : assigneeId
         task.checklist = checklist.compactMap { item in
