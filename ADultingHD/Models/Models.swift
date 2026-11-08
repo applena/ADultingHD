@@ -565,6 +565,7 @@ struct HouseholdTask: Codable, Identifiable, Hashable {
         case .all: return true
         case .mine: return isPersonal || defaultAssigneeId == currentProfileId
         case .unassigned: return !isPersonal && defaultAssigneeId == nil
+        case .member(let id): return isPersonal ? id == currentProfileId : defaultAssigneeId == id
         }
     }
 }
@@ -666,15 +667,12 @@ extension HouseholdTask {
     }
 }
 
-/// "Mine" / "Unassigned" / "All" filter chip options for `TaskListView`,
-/// shown only in households with more than one member (see
-/// `DataStore.householdProfiles`).
-enum AssigneeFilter: String, CaseIterable, Identifiable {
-    case all = "All"
-    case mine = "Mine"
-    case unassigned = "Unassigned"
-
-    var id: String { rawValue }
+/// Assignment filters for the household task list.
+enum AssigneeFilter: Hashable {
+    case all
+    case mine
+    case unassigned
+    case member(UUID)
 }
 
 // MARK: - Task Completion

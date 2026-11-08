@@ -7,8 +7,8 @@ enum TaskNavDestination: Hashable {
 }
 
 enum TaskTab: String, CaseIterable {
-    case myTasks = "My Tasks"
-    case allTasks = "All Tasks"
+    case myTasks = "Household Tasks"
+    case allTasks = "Task Catalog"
 }
 
 struct TaskListView: View {
@@ -34,7 +34,7 @@ struct TaskListView: View {
     }
 
     private var searchPrompt: String {
-        selectedTab == .myTasks ? "Search my tasks..." : "Search all tasks..."
+        selectedTab == .myTasks ? "Search household tasks..." : "Search task catalog..."
     }
 
     var body: some View {
@@ -131,14 +131,7 @@ struct TaskListView: View {
                 return HouseholdTask.roomIdentity(task.room) == HouseholdTask.roomIdentity(selectedRoom)
             }
         }
-        // Only apply the assignee filter while its chip row is visible — if a
-        // household shrinks back to one member (a share is revoked or a
-        // member leaves) while "Mine"/"Unassigned" was selected, the row
-        // disappears along with any way to reset it; silently continuing to
-        // filter would leave the list looking incomplete with no visible cause.
-        if dataStore.hasMultipleAssignees {
-            result = result.filter { $0.matches(assigneeFilter, currentProfileId: dataStore.profile.id) }
-        }
+        result = result.filter { $0.matches(assigneeFilter, currentProfileId: dataStore.profile.id) }
         if !searchText.isEmpty {
             result = result.filter {
                 $0.name.localizedCaseInsensitiveContains(searchText) ||
@@ -165,9 +158,17 @@ struct TaskListView: View {
 
             if filteredTasks.isEmpty {
                 ContentUnavailableView {
-                    Label("No Tasks Yet", systemImage: "checklist")
+                    Label(dataStore.tasks.isEmpty ? "No Tasks Yet" : "No Matching Tasks", systemImage: "checklist")
                 } description: {
-                    Text("Browse the catalog to add a focused starter set, then come back here to manage what is active.")
+                    Text(dataStore.tasks.isEmpty ? "Browse the catalog to add tasks to your household." : "Try another assignee, room, or search.")
+                } actions: {
+                    if !dataStore.tasks.isEmpty {
+                        Button("Clear Filters") {
+                            assigneeFilter = .all
+                            selectedRoom = nil
+                            searchText = ""
+                        }
+                    }
                 }
             }
 
@@ -373,26 +374,18 @@ struct TaskListView: View {
         .listRowBackground(Color.clear)
     }
 
-    /// "Mine" / "Unassigned" / "All" chip row, shown only once a household
-    /// has more than one member — solo households have only one possible
-    /// assignee, so the filter would be a no-op.
-    @ViewBuilder
     private var assigneeFilterRow: some View {
-        if dataStore.hasMultipleAssignees {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    ForEach(AssigneeFilter.allCases) { filter in
-                        FilterChip(label: filter.rawValue, isSelected: assigneeFilter == filter) {
-                            assigneeFilter = filter
-                        }
-                    }
-                }
-                .padding(.vertical, 4)
+        Picker("Assignee", selection: $assigneeFilter) {
+            Text("All").tag(AssigneeFilter.all)
+            Text("Mine").tag(AssigneeFilter.mine)
+            ForEach(dataStore.householdProfiles.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }) { member in
+                Text(member.name).tag(AssigneeFilter.member(member.id))
             }
-            .listRowInsets(EdgeInsets())
-            .listRowBackground(Color.clear)
+            Text("Unassigned").tag(AssigneeFilter.unassigned)
         }
+        .pickerStyle(.menu)
     }
+
 }
 
 // MARK: - Task Row
@@ -400,6 +393,11 @@ struct TaskListView: View {
 struct TaskRow: View {
     @Environment(DataStore.self) private var dataStore
     let task: HouseholdTask
+
+    private var assigneeName: String {
+        if task.isPersonal || task.defaultAssigneeId == dataStore.profile.id { return dataStore.profile.name }
+        return dataStore.householdProfiles.first { $0.id == task.defaultAssigneeId }?.name ?? "Unassigned"
+    }
 
     var body: some View {
         let status = task.dueStatus()
@@ -458,6 +456,9 @@ struct TaskRow: View {
                                     .foregroundStyle(Theme.overdueRed)
                             }
                         }
+                        Label(assigneeName, systemImage: "person")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
 
                     Spacer(minLength: 4)

@@ -149,8 +149,9 @@ struct TaskDetailView: View {
     }
 
     private func assigneeDisplay(for task: HouseholdTask) -> String {
-        guard let id = task.defaultAssigneeId else { return "Anyone" }
-        return dataStore.householdProfiles.first { $0.id == id }?.name ?? "Anyone"
+        guard let id = task.defaultAssigneeId else { return "Unassigned" }
+        if id == dataStore.profile.id { return dataStore.profile.name }
+        return dataStore.householdProfiles.first { $0.id == id }?.name ?? "Unassigned"
     }
 
     private func detailsCard(_ task: HouseholdTask) -> some View {
@@ -179,11 +180,14 @@ struct TaskDetailView: View {
                 DetailItem(label: "Last Done", value: "Never", icon: "calendar.badge.clock")
             }
 
-            if !task.isPersonal && dataStore.hasMultipleAssignees {
-                Button { showAssigneePicker = true } label: {
-                    DetailItem(label: "Assignee", value: assigneeDisplay(for: task), icon: "person.crop.circle")
+            if !task.isPersonal {
+                VStack(alignment: .leading, spacing: 8) {
+                    DetailItem(label: "Assignees", value: assigneeDisplay(for: task), icon: "person.crop.circle")
+                    ViewThatFits(in: .horizontal) {
+                        HStack { assignmentButtons(task) }
+                        VStack(alignment: .leading) { assignmentButtons(task) }
+                    }
                 }
-                .buttonStyle(.plain)
             }
         }
         .card()
@@ -193,6 +197,22 @@ struct TaskDetailView: View {
         .sheet(isPresented: $showAssigneePicker) {
             AssigneePickerSheet(task: task)
         }
+    }
+
+    @ViewBuilder
+    private func assignmentButtons(_ task: HouseholdTask) -> some View {
+        Button("Claim") {
+            Task {
+                var updated = currentTask
+                updated.defaultAssigneeId = dataStore.profile.id
+                await dataStore.updateTask(updated)
+            }
+        }
+        .buttonStyle(.borderedProminent)
+        .disabled(task.defaultAssigneeId == dataStore.profile.id)
+
+        Button("Assign") { showAssigneePicker = true }
+            .buttonStyle(.bordered)
     }
 
     // MARK: - Checklist

@@ -124,6 +124,26 @@ final class ModelTests: XCTestCase {
         XCTAssertFalse(task.matches(.unassigned, currentProfileId: me))
     }
 
+    func testNamedMemberFilterMatchesAssignmentAndPersonalOwnership() {
+        let me = UUID()
+        let other = UUID()
+        var task = HouseholdTask(
+            id: UUID(), name: "Test", description: "", category: .kitchen,
+            frequency: .weekly, estimatedMinutes: 10, difficulty: .easy, supplies: [], isActive: true
+        )
+        XCTAssertFalse(task.matches(.member(other), currentProfileId: me))
+        task.defaultAssigneeId = other
+        XCTAssertTrue(task.matches(.member(other), currentProfileId: me))
+        XCTAssertFalse(task.matches(.member(me), currentProfileId: me))
+        task.defaultAssigneeId = me
+        XCTAssertTrue(task.matches(.member(me), currentProfileId: me))
+        XCTAssertFalse(task.matches(.member(other), currentProfileId: me))
+        task.isPersonal = true
+        task.defaultAssigneeId = nil
+        XCTAssertTrue(task.matches(.member(me), currentProfileId: me))
+        XCTAssertFalse(task.matches(.member(other), currentProfileId: me))
+    }
+
     func testPersonalTaskIsMineAndNeverUnassigned() {
         let me = UUID()
         var task = HouseholdTask(
