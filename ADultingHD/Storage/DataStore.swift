@@ -870,13 +870,6 @@ final class DataStore {
         if let idx = tasks.firstIndex(where: { $0.id == task.id }) {
             let previousIsPersonal = tasks[idx].isPersonal
             var updated = normalizePersonalAssignment(task)
-            if updated.isPersonal,
-               !previousIsPersonal,
-               !activeHousehold.ownerIsCurrentUser {
-                // A participant may edit a shared task, but only the owner can
-                // remove that task from the household for everyone.
-                updated.isPersonal = false
-            }
             if tasks[idx].recurrenceRule != updated.recurrenceRule {
                 // Editing the recurrence rule of a task that's never been
                 // completed gives it a fresh start instead of re-anchoring to

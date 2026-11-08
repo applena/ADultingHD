@@ -112,6 +112,29 @@ final class ScreenshotTests: XCTestCase {
         }
     }
 
+    func testTaskScopeCanBeChangedFromTaskDetails() throws {
+        navigateTo("Tasks")
+        let search = app.textFields["Search household tasks..."]
+        XCTAssertTrue(search.waitForExistence(timeout: 5))
+        search.tap()
+        search.typeText("Do dishes")
+        let task = app.staticTexts["Do dishes"].firstMatch
+        XCTAssertTrue(task.waitForExistence(timeout: 5))
+        task.tap()
+
+        let scope = app.buttons["task-scope-menu"]
+        for _ in 0..<4 where !scope.isHittable { app.swipeUp() }
+        XCTAssertTrue(scope.waitForExistence(timeout: 3))
+        scope.tap()
+        app.buttons["Personal"].firstMatch.tap()
+        XCTAssertTrue(app.staticTexts["You"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Personal task · Not counted on the household leaderboard"].exists)
+
+        scope.tap()
+        app.buttons["Household"].firstMatch.tap()
+        XCTAssertTrue(app.staticTexts["Assignees"].waitForExistence(timeout: 5))
+    }
+
     func testSuppliesNavigationAndShoppingList() throws {
         navigateTo("Tasks")
         let suppliesLink = app.buttons["tasks-supplies-link"]

@@ -7,6 +7,7 @@ struct TaskDetailView: View {
     @State private var showComplete = false
     @State private var showFrequencyPicker = false
     @State private var showAssigneePicker = false
+    @State private var isUpdatingScope = false
     @State private var showEditSheet = false
     @State private var showDeleteConfirm = false
 
@@ -154,6 +155,17 @@ struct TaskDetailView: View {
         return dataStore.householdProfiles.first { $0.id == id }?.name ?? "Unassigned"
     }
 
+    private func updateScope(isPersonal: Bool) {
+        guard !isUpdatingScope, currentTask.isPersonal != isPersonal else { return }
+        var updated = currentTask
+        updated.isPersonal = isPersonal
+        isUpdatingScope = true
+        Task {
+            await dataStore.updateTask(updated)
+            isUpdatingScope = false
+        }
+    }
+
     private func detailsCard(_ task: HouseholdTask) -> some View {
         LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
             Button { showFrequencyPicker = true } label: {
@@ -168,11 +180,28 @@ struct TaskDetailView: View {
             DetailItem(label: "Difficulty", value: task.difficulty.label, icon: task.difficulty.icon)
             DetailItem(label: "Room", value: task.roomDisplayName, icon: task.category.icon)
             DetailItem(label: "Est. Time", value: "\(task.estimatedMinutes) min", icon: "clock")
-            DetailItem(
-                label: "Scope",
-                value: task.isPersonal ? "Personal" : "Household",
-                icon: task.isPersonal ? "person.fill" : "person.3"
-            )
+            Menu {
+                Button {
+                    updateScope(isPersonal: false)
+                } label: {
+                    Label("Household", systemImage: task.isPersonal ? "person.3" : "checkmark")
+                }
+                Button {
+                    updateScope(isPersonal: true)
+                } label: {
+                    Label("Personal", systemImage: task.isPersonal ? "checkmark" : "person.fill")
+                }
+            } label: {
+                DetailItem(
+                    label: "Scope",
+                    value: task.isPersonal ? "Personal" : "Household",
+                    icon: task.isPersonal ? "person.fill" : "person.3"
+                )
+            }
+            .disabled(isUpdatingScope)
+            .accessibilityIdentifier("task-scope-menu")
+            .accessibilityHint("Choose Household or Personal. Personal tasks are assigned to you and excluded from the household leaderboard.")
+
 
             if let days = task.daysSinceLastCompleted {
                 DetailItem(label: "Last Done", value: "\(days)d ago", icon: "calendar.badge.clock")
@@ -180,7 +209,12 @@ struct TaskDetailView: View {
                 DetailItem(label: "Last Done", value: "Never", icon: "calendar.badge.clock")
             }
 
-            if !task.isPersonal {
+            if task.isPersonal {
+                DetailItem(label: "Assigned to", value: "You", icon: "person.fill")
+                Text("Personal task · Not counted on the household leaderboard")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
                 VStack(alignment: .leading, spacing: 8) {
                     DetailItem(label: "Assignees", value: assigneeDisplay(for: task), icon: "person.crop.circle")
                     ViewThatFits(in: .horizontal) {
