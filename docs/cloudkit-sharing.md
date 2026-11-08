@@ -268,6 +268,11 @@ so xcodegen writes them consistently):
 
 ## deploy.sh re-sign dance (iOS) {#deploysh-re-sign-dance-ios}
 
+macOS follows the same unsigned-archive → seed → authenticated export →
+verify path (`build_platform` in `deploy.sh`), using the macOS spellings
+`com.apple.application-identifier` and `com.apple.developer.aps-environment`.
+Both platforms are exported and verified before either is uploaded.
+
 ### Why it exists
 
 Our App Store Connect API key has Upload-only scope. That means
@@ -316,32 +321,23 @@ instead of re-signing the exported IPA after:
    App Store Connect API key. Because the archive now carries concrete
    entitlement values instead of nothing, the Distribution-signed export
    carries them through too.
-5. `deploy.sh` unzips the **exported IPA** and verifies, before upload:
+5. `deploy.sh` unpacks the **exported IPA or pkg** and verifies, before upload:
    - `codesign -dvvv` shows `Authority=Apple Distribution: …` and
      `TeamIdentifier=$TEAM_ID` (the export step, not the seed step,
      determines the final signing authority)
-   - `codesign -d --entitlements :-` includes the CloudKit container,
-     CloudKit/CloudDocuments services, ubiquity container, `aps-
-     environment`, `keychain-access-groups`, and
-     `com.apple.security.application-groups` (the widget's shared
-     container) keys, and `get-task-allow` is `false`
+   - `codesign -d --entitlements :-` carries every key from the seed
+     plist with its seeded value (only the `keychain-access-groups`
+     wildcard may be rewritten by export)
    - Any failed check `exit 1`s before the upload step runs
 
-**If you ever change the capabilities in `ADultingHD.entitlements`, also
-update the production entitlements heredoc AND the verification key list in
-`deploy.sh`.** Otherwise the new capability will be silently stripped from
-TestFlight builds, or a stale check will pass without actually covering it.
-This hand-maintained duplication (the same keys live in
-`ADultingHD/App/ADultingHD.entitlements`, `project.yml`, and now two spots
-in `deploy.sh`) is a known tradeoff, not an oversight: App Store Connect
-validation rejects the wildcard/dev-only values Apple's own provisioning
-profile grants (see the cheat sheet below), so the script can't just read
-the checked-in `.entitlements` file verbatim — it has to override specific
-keys with production-safe literal values. A follow-up that derives the
-verification key list (not the seed values, which must stay overridden)
-from `ADultingHD/App/ADultingHD.entitlements` via `PlistBuddy`/`plutil`
-would close that gap; deferred out of this change to keep the signing-path
-fix isolated and reviewable on its own.
+The macOS seed plist is derived from `ADultingHD/App/ADultingHD.entitlements`
+with `plutil` overrides for the production values, so a capability added there
+reaches macOS release builds. **The iOS seed is still a heredoc in
+`deploy.sh`: if you change the iOS capabilities, update it too.** It stays
+literal because the shared entitlements file carries macOS-only sandbox keys
+and App Store Connect validation rejects the wildcard/dev-only values Apple's
+own provisioning profile grants (see the cheat sheet below). Verification
+always checks against whichever seed was used, so it cannot drift from it.
 
 ### Prerequisites
 
