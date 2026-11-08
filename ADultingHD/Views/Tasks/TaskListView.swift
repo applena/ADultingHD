@@ -110,7 +110,7 @@ struct TaskListView: View {
     private var taskHeader: some View {
         let isCatalog = selectedTab == .allTasks
         return LandingHeader(
-            eyebrow: isCatalog ? "Task catalog" : dataStore.activeHousehold.name,
+            eyebrow: isCatalog ? "Task catalog" : nil,
             title: isCatalog ? "Add work that matches your home" : "Your quest log",
             subtitle: isCatalog
                 ? "\(taskCatalog.count) ready-made tasks plus custom chores when the catalog is not specific enough."

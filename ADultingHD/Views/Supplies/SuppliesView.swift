@@ -49,7 +49,7 @@ struct SuppliesView: View {
         List {
             Section {
                 LandingHeader(
-                    eyebrow: dataStore.activeHousehold.name,
+                    eyebrow: nil,
                     title: "Keep the quest kit stocked",
                     subtitle: "\(allEntries.count) supplies across \(dataStore.activeTasks.count) active tasks.",
                     icon: "basket.fill",
