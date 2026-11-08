@@ -134,10 +134,6 @@ struct DashboardView: View {
 
     private var homeHeader: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(dataStore.activeHousehold.name.uppercased())
-                .font(.caption.weight(.bold))
-                .tracking(1.2)
-                .foregroundStyle(Theme.hearthGold)
             Text(greeting)
                 .font(.system(.largeTitle, design: .rounded).weight(.bold))
             Text(subtitle)
@@ -277,7 +273,7 @@ struct DashboardView: View {
         let hasDueTasks = !dataStore.dueTasks.isEmpty
         let hasOverdueTasks = !dataStore.overdueTasks.isEmpty
         return LandingHeader(
-            eyebrow: dataStore.activeHousehold.name,
+            eyebrow: nil,
             title: greeting,
             subtitle: subtitle,
             icon: hasDueTasks ? "clock.badge.exclamationmark.fill" : "checkmark.seal.fill",
