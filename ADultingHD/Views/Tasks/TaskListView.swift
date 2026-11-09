@@ -7,8 +7,8 @@ enum TaskNavDestination: Hashable {
 }
 
 enum TaskTab: String, CaseIterable {
-    case myTasks = "Household Tasks"
-    case allTasks = "Task Catalog"
+    case myTasks = "Tasks"
+    case allTasks = "Add Task"
 }
 
 struct TaskListView: View {
@@ -34,7 +34,7 @@ struct TaskListView: View {
     }
 
     private var searchPrompt: String {
-        selectedTab == .myTasks ? "Search household tasks..." : "Search task catalog..."
+        selectedTab == .myTasks ? "Search tasks..." : "Search tasks to add..."
     }
 
     var body: some View {
@@ -129,7 +129,7 @@ struct TaskListView: View {
     private var taskHeader: some View {
         let isCatalog = selectedTab == .allTasks
         return LandingHeader(
-            eyebrow: isCatalog ? "Task catalog" : nil,
+            eyebrow: isCatalog ? "Add Task" : nil,
             title: isCatalog ? "Add work that matches your home" : "Your quest log",
             subtitle: isCatalog
                 ? "\(taskCatalog.count) ready-made tasks plus custom chores when the catalog is not specific enough."
